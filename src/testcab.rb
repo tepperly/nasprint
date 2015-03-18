@@ -14,6 +14,8 @@ opts.each { |opt,arg|
     $overwritefile = true
   when '--checkonly'
     $makeoutput = false
+  when '--help'
+    print "testcab.rb [--overwrite] [--checkonly] [--help] filenames"
   end
 }
 
