@@ -6,6 +6,7 @@ $overwritefile = false
 $makeoutput = true
 opts = GetoptLong.new(
                       [ '--overwrite', '-O', GetoptLong::NO_ARGUMENT],
+                      [ '--help', '-h', GetoptLong::NO_ARGUMENT],
                       [ '--checkonly', '-C', GetoptLong::NO_ARGUMENT]
                       )
 opts.each { |opt,arg|
