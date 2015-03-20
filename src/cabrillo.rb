@@ -34,6 +34,7 @@ class Exchange
     @name = nil
     @serial = nil
     @qth = nil
+    @origqth = nil
   end
 
   def to_s
@@ -44,8 +45,8 @@ class Exchange
     end
   end
 
-  attr_reader :callsign, :serial, :qth, :name, :leadingZero
-  attr_writer :callsign, :qth, :name, :leadingZero
+  attr_reader :callsign, :serial, :qth, :name, :leadingZero, :origqth
+  attr_writer :callsign, :qth, :name, :leadingZero, :origqth
 
   def serial=(value)
     if value.instance_of?(String)
@@ -214,11 +215,7 @@ class Cabrillo
       return  MULTIPLIER_ALIASES[tmp]
     else
       $stderr.write("Unknown multiplier: '" + str + "'\n")
-      if tmp =~ /[^a-z0-9]/i
-        return "XXXX"
-      else
-        return tmp
-      end
+      return nil
     end
   end
 
@@ -465,14 +462,16 @@ class Cabrillo
     when /\Asoapbox:\s*(.*)/i
       trans(1, 1)
       @soapbox << $1.strip
-    when /\Aqso: +(\d+) +([a-z]{2}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?) +(\d+) +([a-z]+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?) +(\d+) +([a-z]+) +([a-z0-9]+)( +(\d+) *| *)(\{.*\})?$/i
+    when /\Aqso: +(\d+) +([a-z]{2,3}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?) +(\d+) +([a-z]+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?) +(\d+) +([a-z]+) +([a-z0-9]+)( +(\d+) *| *)(\{.*\})?$/i
       qso = startQSO($1, $2, $3, $4, $5)
       qso.sentExch.serial = $8
       qso.sentExch.name = $9
+      qso.sentExch.origqth = $10.upcase.strip
       qso.sentExch.qth = normalizeMult($10)
       qso.recdExch.callsign = $11.upcase
       qso.recdExch.serial = $14
       qso.recdExch.name = $15
+      qso.recdExch.origqth = $16.upcase.strip
       qso.recdExch.qth = normalizeMult($16)
       if ($18)
         qso.transceiver = $18.strip.to_i
@@ -786,7 +785,7 @@ NAME: #{@name}
       str.gsub!(/NON-ASSIS?TED/,"")
     end
     str.gsub!(/POWER/," ")
-    str.split(/[-! \t]+/).each { |tok|
+    str.split(/[-! \t\m]+/).each { |tok|
       case tok
       when "SINGLE"
         @logCat.numop = :single
@@ -821,7 +820,7 @@ NAME: #{@name}
       when "MEDIUM", "HP"
         @logCat.power = :high
       when /OP|CLUB|50|OVER/
-      when /10M|15M|20M|40M/
+      when /10M|15M|20M|40M|80M/
         @band = tok
       when /PHONE/
         @mode = "SSB"

@@ -50,17 +50,41 @@ class ContestDatabase
     @db.query("create table if not exists Multiplier (id integer primary key auto_increment, abbrev char(2) not null unique, entityID integer, ismultiplier bool);")
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii") { |row|
       begin
-        entity = row[2].to_i
-        if entity > 0
-          @db.query("insert into Multiplier (abbrev, entityID, ismultiplier) values (\"#{@db.escape(row[1].strip.upcase)}\", #{entity}, TRUE);")
-        else
-          # DX gets a null for entityID and ismultiplier
-          @db.query("insert into Multiplier (abbrev) values (\"#{@db.escape(row[1].strip.upcase)}\");")
+        if row[0] == row[1]
+          entity = row[2].to_i
+          if entity > 0
+            @db.query("insert into Multiplier (abbrev, entityID, ismultiplier) values (\"#{@db.escape(row[1].strip.upcase)}\", #{entity}, TRUE);")
+          else
+            # DX gets a null for entityID and ismultiplier
+            @db.query("insert into Multiplier (abbrev) values (\"#{@db.escape(row[1].strip.upcase)}\");")
+          end
         end
       rescue Mysql2::Error => e
         if e.error_number != 1062 # ignore duplicate entry
           raise e
         end
+      end
+    }
+    @db.query("create table if not exists MultiplierAlias (id integer primary key auto_increment, abbrev varchar(32) not null unique, multiplierID integer not null, entityID integer not null);")
+    CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii") { |row|
+      if row[0] != row[1]
+        begin
+          res = @db.query("select id, entityID from Multiplier where abbrev = '#{@db.escape(row[1].strip.upcase)}' limit 1")
+          if row[3]
+            entityID = row[3].to_i
+          else
+            entityID = nil
+          end
+          res.each(:as => :array) { |mult|
+            if entityID and (entityID <= 0)
+              entityID = mult[2].to_i
+            end
+            @db.query("insert into MultiplierAlias (abbrev, multiplierID, entityID) values ('#{@db.escape(mult[0])}', #{mult[1].to_i}, #{entityID});")
+          }
+        rescue Mysql2::Error => e
+          if e.error_number != 1062 # ignore duplicate
+            raise e
+          end
       end
     }
   end
