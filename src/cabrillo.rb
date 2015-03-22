@@ -39,9 +39,9 @@ class Exchange
 
   def to_s
     if @leadingZero
-      "%-13s %-11s %04d %-11s" % [callsign.to_s, name.to_s, serial.to_i, qth.to_s]
+      "%-13s %04d %-11s %-11s" % [callsign.to_s, serial.to_i, name.to_s, qth.to_s]
     else
-      "%-13s %-11s %4d %-11s" % [callsign.to_s, name.to_s, serial.to_i, qth.to_s]
+      "%-13s %4d %-11s %-11s" % [callsign.to_s, serial.to_i, name.to_s, qth.to_s]
     end
   end
 
@@ -63,6 +63,7 @@ UNPRINTABLE=/[\000\001\002\003\004\005\006\007\010\013\016\017\020\022\023\024\0
 class QSO
 
   def initialize
+    @origmode = nil
     @mode = nil
     @freq = nil
     @datetime = nil
@@ -71,10 +72,12 @@ class QSO
     @transceiver = nil
   end
 
-  attr_reader :mode, :freq, :datetime, :sentExch, :recdExch, :transceiver
+  attr_reader :mode, :freq, :datetime, :sentExch, :recdExch, :transceiver,
+              :origmode
 
   attr_writer :freq, :datetime, :transceiver
   def mode=(str)
+    @origmode = str.strip.upcase
     case str
     when /[uls]sb?|phone|ph/i
       @mode = "PH"
@@ -198,7 +201,7 @@ class Cabrillo
     parse
   end
 
-  attr_reader :cleanparse
+  attr_reader :cleanparse, :logcall, :qsos
 
   def trans(oldstate, newstate)
     if @parsestate <= oldstate
@@ -445,6 +448,9 @@ class Cabrillo
     when /\Aoperators:\s*(.*)/i
       trans(1, 1)
       @operators = $1.strip
+    when /x-ssbsprint-email:\s*(.*)/i
+      @dbCat.email = $1.strip
+      @x_lines << line          # save
     when /\Aofftime:\s*(.*)/i
       trans(1, 1)
       @offtimes << $1.strip
@@ -468,6 +474,9 @@ class Cabrillo
       qso.sentExch.name = $9
       qso.sentExch.origqth = $10.upcase.strip
       qso.sentExch.qth = normalizeMult($10)
+      if qso.sentExch.qth and not @logCat.sentQTH
+        @logCat.sentQTH = qso.sentExch.qth
+      end
       qso.recdExch.callsign = $11.upcase
       qso.recdExch.serial = $14
       qso.recdExch.name = $15
@@ -535,7 +544,7 @@ class Cabrillo
     if @logCat.sentQTH and MULTIPLIER_ALIASES[@logCat.sentQTH]
       return MULTIPLIER_ALIASES[@logCat.sentQTH]
     end
-    "XXXX"
+    nil
   end
 
   def reviewQTH(sym, default="XXXX")
@@ -671,7 +680,7 @@ CATEGORY-ASSISTED: #{logAssisted}
 CATEGORY-OPERATOR: #{logOperator}
 CATEGORY-POWER: #{logPower}
 CATEGORY-TRANSMITTER: #{logNumTrans}
-CONTEST: CA-QSO-PARTY
+CONTEST: NA-SPRINT-SSB
 NAME: #{@name}
 ")
     if @band
