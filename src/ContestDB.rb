@@ -8,6 +8,7 @@ require 'csv'
 
 class ContestDatabase
   CHARS_PER_CALL = 16
+  CHARS_PER_NAME = 24
 
   def initialize(db)
     @db = db
@@ -21,6 +22,7 @@ class ContestDatabase
   def createDB
     createContestTable
     createEntityTable
+    createHomophoneTable
     createMultiplierTable
     createLogTable
     createQSOTable
@@ -28,6 +30,23 @@ class ContestDatabase
 
   def createContestTable
     @db.query("create table if not exists Contest (id integer primary key auto_increment, name varchar(64) not null, year smallint not null, unique index contind (name, year));")
+  end
+
+  def createHomophoneTable
+    @db.query("create table if not exists Homophone (id integer primary key auto_increment, name1 varchar(#{CHARS_PER_NAME}), name2 varchar(#{CHARS_PER_NAME}), index n1ind (name1), index n2ind (name2));")
+    CSV.foreach(File.dirname(__FILE__) + "/homophones.csv", "r:ascii") { |row|
+      row.each { |i|
+        row.each { |j|
+          begin
+            @db.query("insert into Homophone (name1, name2) values (\"#{@db.escape(i)}\", \"#{@db.escape(j)}\");")
+          rescue Mysql2::Error => e
+            if e.error_number != 1062 # ignore duplicate entry
+              raise e
+            end
+          end
+        }
+      }
+    }
   end
 
   def createEntityTable
@@ -101,11 +120,12 @@ class ContestDatabase
   end
 
   def createQSOTable
-    @db.query("create table if not exists Exchange (id integer primary key auto_increment, callsign varchar(#{CHARS_PER_CALL}), callID integer, serial integer, name varchar(24), location varchar(8), multiplierID integer, entityID integer, index calltxtind (callsign), index callidind (callID), index serialind (serial), index locind (location), index multind (multiplierID), index nameind (name));")
+    @db.query("create table if not exists Exchange (id integer primary key auto_increment, callsign varchar(#{CHARS_PER_CALL}), callID integer, serial integer, name varchar(#{CHARS_PER_NAME}), location varchar(8), multiplierID integer, entityID integer, index calltxtind (callsign), index callidind (callID), index serialind (serial), index locind (location), index multind (multiplierID), index nameind (name));")
     @db.query("create table if not exists QSO (id integer primary key auto_increment, logID integer not null, frequency integer, band enum('20m', '40m', '80m', 'unknown') default 'unknown', mode char(6), fixedMode enum('PH', 'CW', 'FM', 'RY'), time datetime, sentID integer not null, recvdID integer not null, transmitterNum integer, matchID integer, matchType enum('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL') not null default 'None');")
   end
 
   def addOrLookupCall(callsign, contestIDVar=nil)
+    callsign = callsign.upcase
     if not contestIDVar
       contestIDVar = @contestID
     end
@@ -140,6 +160,14 @@ class ContestDatabase
     end
   end
 
+  def capOrNull(str)
+    if str
+      return "\"" + @db.escape(str.upcase) + "\""
+    else
+      return "NULL"
+    end
+  end
+
   def numOrNull(num)
     if num
       return num.to_i.to_s
@@ -153,12 +181,12 @@ class ContestDatabase
   end
 
   def addLog(contID, callsign, callID, email, opclass, multID, entID)
-    @db.query("insert into Log (contestID, callsign, callID, email, opclass, multiplierID, entityID) values (#{contID.to_i}, #{strOrNull(callsign)}, #{callID.to_i}, #{strOrNull(email)}, #{strOrNull(opclass)}, #{multID.to_i}, #{numOrNull(entID)});")
+    @db.query("insert into Log (contestID, callsign, callID, email, opclass, multiplierID, entityID) values (#{contID.to_i}, #{capOrNull(callsign)}, #{callID.to_i}, #{strOrNull(email)}, #{strOrNull(opclass)}, #{multID.to_i}, #{numOrNull(entID)});")
     return @db.last_id
   end
 
   def lookupMultiplier(str)
-    res = @db.query("select id, entityID from Multiplier where abbrev = #{strOrNull(str)} limit 1;")
+    res = @db.query("select id, entityID from Multiplier where abbrev = #{capOrNull(str)} limit 1;")
     res.each(:as => :array) { |row|
       return row[0].to_i, (row[1].nil? ? nil : row[1].to_i)
     }
@@ -171,7 +199,7 @@ class ContestDatabase
 
   def addExchange(callsign, callID, serial, name, location, multID,
                   entityID)
-    @db.query("insert into Exchange (callsign, callID, serial, name, location, multiplierID, entityID) values (#{strOrNull(callsign)}, #{callID.to_i}, #{numOrNull(serial)}, #{strOrNull(name)}, #{strOrNull(location)}, #{numOrNull(multID)}, #{numOrNull(entityID)});")
+    @db.query("insert into Exchange (callsign, callID, serial, name, location, multiplierID, entityID) values (#{capOrNull(callsign)}, #{callID.to_i}, #{numOrNull(serial)}, #{capOrNull(name)}, #{capOrNull(location)}, #{numOrNull(multID)}, #{numOrNull(entityID)});")
     return @db.last_id
   end
 
@@ -185,6 +213,6 @@ class ContestDatabase
 
   def insertQSO(logID, frequency, band, roughMode, mode, datetime,
                 sentID, recvdID, transNum)
-    @db.query("insert into QSO (logID, frequency, band, mode, fixedMode, time, sentID, recvdID, transmitterNum) values (#{numOrNull(logID)}, #{numOrNull(frequency)}, #{strOrNull(band)}, #{strOrNull(roughMode)}, #{strOrNull(mode)}, #{dateOrNull(datetime)}, #{numOrNull(sentID)}, #{numOrNull(recvdID)}, #{numOrNull(transNum)});")
+    @db.query("insert into QSO (logID, frequency, band, mode, fixedMode, time, sentID, recvdID, transmitterNum) values (#{numOrNull(logID)}, #{numOrNull(frequency)}, #{strOrNull(band)}, #{capOrNull(roughMode)}, #{strOrNull(mode)}, #{dateOrNull(datetime)}, #{numOrNull(sentID)}, #{numOrNull(recvdID)}, #{numOrNull(transNum)});")
   end
 end
