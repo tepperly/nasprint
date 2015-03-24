@@ -106,4 +106,5 @@ end while;
 
 #calculate jaro-winkler metric
 return jaro+(prefixlen*0.1*(1-jaro));
-END
+END$$
+delimiter ;
