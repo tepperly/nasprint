@@ -436,9 +436,9 @@ class Cabrillo
     when /\Aaddress-city:\s*(.*)/i
       trans(1, 1)
       @city = $1.strip
-    when /\Aaddress-state-province:\s*(.*)/i
+    when /\A(address-)?state-province:\s*(.*)/i
       trans(1, 1)
-      @state = $1.strip
+      @state = $2.strip
     when /\Aaddress-postalcode:\s*(.*)/i
       trans(1, 1)
       @postcode = $1.strip
