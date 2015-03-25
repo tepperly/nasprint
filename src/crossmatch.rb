@@ -69,13 +69,16 @@ class CrossMatch
   end
  
   def linkQSOs(matches, match1, match2)
+    count = 0
     matches.each(:as => :array) { |row|
       chk = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.id = #{row[0].to_i} and q2.id = #{row[1].to_i} and q1.matchID is null and q2.matchID is null and q1.matchType = 'None' and q2.matchType = 'None' limit 1;")
       chk.each { |chkrow|
         @db.query("update QSO set matchID = #{row[1].to_i}, matchType = '#{match1}' where id = #{row[0].to_i} and matchID is null and matchType = 'None' limit 1;")
         @db.query("update QSO set matchID = #{row[0].to_i}, matchType = '#{match2}' where id = #{row[1].to_i} and matchID is null and matchType = 'None' limit 1;")
+        count = count + 2
       }
     }
+    count
   end
 
   def perfectMatch
@@ -90,7 +93,7 @@ class CrossMatch
                     exchangeMatch("r2", "s1") + " and q1.id < q2.id" +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timediff(q1.time, q2.time)) asc;"
-    linkQSOs(@db.query(queryStr), 'Full', 'Full')
+    num1 = linkQSOs(@db.query(queryStr), 'Full', 'Full')
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h1, Homophone as h2 where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
                     linkConstraints("q2", "s2", "r2") + " and " +
@@ -102,7 +105,8 @@ class CrossMatch
                     exchangeMatch("r2", "s1", "h2") + " and q1.id < q2.id" +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timediff(q1.time, q2.time)) asc;"
-    linkQSOs(@db.query(queryStr), 'Full', 'Full')
+    num2 = linkQSOs(@db.query(queryStr), 'Full', 'Full')
+    return num1, num2
   end
 
   def partialMatch
@@ -116,6 +120,6 @@ class CrossMatch
                     exchangeMatch("r1", "s2") +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timediff(q1.time, q2.time)) asc;"
-    linkQSOs(@db.query(queryStr), 'Full', 'Partial')
+    return linkQSOs(@db.query(queryStr), 'Full', 'Partial')
   end
 end
