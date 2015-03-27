@@ -38,11 +38,21 @@ begin
   if $restart
     cm.restartMatch
   end
-  num1, num2 = cm.perfectMatch
-  partial = cm.partialMatch
+  #  num1, num2 = cm.perfectMatch
+  num1 = 0
+  num2 = 0
   print "Perfect matches: #{num1}\n"
   print "Perfect matches with homophones: #{num2}\n"
-  print "Partial matches: #{partial}\n"
+  # num3, partial = cm.partialMatch
+  num3 = 0
+  partial = 0
+  print "Full matches partial: #{num3}\n"
+  print "Partial matches full: #{partial}\n"
+  #  p1, p2 = cm.basicMatch
+  p1 = 0
+  p2 = 0
+  cm.probMatch
+  print "Basic QSO matches: #{p1+p2}\n"
 rescue Mysql2::Error => e
   print e.to_s + "\n"
 end

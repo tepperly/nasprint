@@ -69,16 +69,18 @@ class CrossMatch
   end
  
   def linkQSOs(matches, match1, match2)
-    count = 0
+    count1 = 0
+    count2 = 0
     matches.each(:as => :array) { |row|
       chk = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.id = #{row[0].to_i} and q2.id = #{row[1].to_i} and q1.matchID is null and q2.matchID is null and q1.matchType = 'None' and q2.matchType = 'None' limit 1;")
       chk.each { |chkrow|
         @db.query("update QSO set matchID = #{row[1].to_i}, matchType = '#{match1}' where id = #{row[0].to_i} and matchID is null and matchType = 'None' limit 1;")
+        count1 = count1 + 1
         @db.query("update QSO set matchID = #{row[0].to_i}, matchType = '#{match2}' where id = #{row[1].to_i} and matchID is null and matchType = 'None' limit 1;")
-        count = count + 2
+        count2 = count2 + 1
       }
     }
-    count
+    return count1, count2
   end
 
   def perfectMatch
@@ -92,8 +94,9 @@ class CrossMatch
                     exchangeMatch("r1", "s2") + " and " +
                     exchangeMatch("r2", "s1") + " and q1.id < q2.id" +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
-      ", abs(timediff(q1.time, q2.time)) asc;"
-    num1 = linkQSOs(@db.query(queryStr), 'Full', 'Full')
+      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+    num1, num2 = linkQSOs(@db.query(queryStr), 'Full', 'Full')
+    num1 = num1 + num2
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h1, Homophone as h2 where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
                     linkConstraints("q2", "s2", "r2") + " and " +
@@ -104,8 +107,9 @@ class CrossMatch
                     exchangeMatch("r1", "s2", "h1") + " and " +
                     exchangeMatch("r2", "s1", "h2") + " and q1.id < q2.id" +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
-      ", abs(timediff(q1.time, q2.time)) asc;"
-    num2 = linkQSOs(@db.query(queryStr), 'Full', 'Full')
+      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+    num2, num3 = linkQSOs(@db.query(queryStr), 'Full', 'Full')
+    num2 = num2 + num3
     return num1, num2
   end
 
@@ -119,7 +123,79 @@ class CrossMatch
                     " and " + qsoMatch("q1", "q2") + " and " +
                     exchangeMatch("r1", "s2") +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
-      ", abs(timediff(q1.time, q2.time)) asc;"
+      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     return linkQSOs(@db.query(queryStr), 'Full', 'Partial')
+  end
+
+  def partialMatch
+    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2 where " +
+                    linkConstraints("q1", "s1", "r1") + " and " +
+                    linkConstraints("q2", "s2", "r2") + " and " +
+                    notMatched("q1") + " and " + notMatched("q2") + " and " +
+                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
+                    " and q1.logID != q2.logID " +
+                    " and " + qsoMatch("q1", "q2") + " and " +
+                    exchangeMatch("r1", "s2") +
+                    " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
+      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+    return linkQSOs(@db.query(queryStr), 'Full', 'Partial')
+  end
+
+  def basicMatch
+    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2 where " +
+                    linkConstraints("q1", "s1", "r1") + " and " +
+                    linkConstraints("q2", "s2", "r2") + " and " +
+                    notMatched("q1") + " and " + notMatched("q2") + " and " +
+                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
+                    " and q1.logID < q2.logID " +
+                    " and " + qsoMatch("q1", "q2") + " and " +
+                    " s1.callsign = r2.callsign and s2.callsign = r1.callsign " +
+                    " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
+      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+    return linkQSOs(@db.query(queryStr), 'Partial', 'Partial')
+  end
+
+  def hillFunc(quantity, fullrange, zerorange)
+    "(if(abs(#{quantity}) <= #{fullrange},1.0,if(abs(#{quantity}) >= #{zerorange},0.0,1.0-((abs(#{quantity})-#{fullrange})/(#{zerorange}-#{fullrange})))))"
+  end
+
+  def probFunc(q1,q2,s1,s2,r1,r2,cs1,cs2,cr1,cr2,mr1,mr2,ms1,ms2)
+    return hillFunc("timestampdiff(MINUTE,#{q1}.time,#{q2}.time)", 15, 60) +
+      "*jaro_winkler_similarity(#{cs1}.basecall, #{cr2}.basecall)*" +
+      "jaro_winkler_similarity(#{cs2}.basecall, #{cr1}.basecall)*" +
+      "jaro_winkler_similarity(#{s1}.name, #{r2}.name)*" +
+      "jaro_winkler_similarity(#{s2}.name, #{r1}.name)*" +
+      hillFunc("#{s1}.serial - #{r2}.serial", 1, 10) + "*" +
+      hillFunc("#{s2}.serial - #{r1}.serial", 1, 10) + "*" +
+      "jaro_winkler_similarity(#{ms1}.abbrev,#{mr2}.abbrev)*" +
+      "jaro_winkler_similarity(#{ms2}.abbrev,#{mr1}.abbrev)"
+  end
+
+  def linkCallsign(exch, call)
+    return "#{exch}.callID = #{call}.id"
+  end
+
+  def linkMultiplier(exch, mult)
+    return "#{exch}.multiplierID = #{mult}.id"
+  end
+
+  def probMatch
+    queryStr = "select q1.id, q2.id, " +
+      probFunc("q1","q2","s1","s2","r1","r2","cs1","cs2", "cr1", "cr2",
+               "ms1","ms2","mr1","mr2") +
+      " as probmatch from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Callsign as cr1, Callsign as cs1, Callsign as cr2, Callsign as cs2, Multiplier as ms1, Multiplier as ms2, Multiplier as mr1, Multiplier as mr2 where " +
+      linkConstraints("q1", "s1", "r1") + " and " +
+      linkConstraints("q2", "s2", "r2") + " and " +
+      linkCallsign("s1","cs1") + " and " + linkCallsign("r1", "cr1") + " and " +
+      linkCallsign("s2","cs2") + " and " + linkCallsign("r2", "cr2") + " and " +
+      linkMultiplier("s1","ms1") + " and " + linkMultiplier("r1", "mr1") + " and " +
+      linkMultiplier("s2","ms2") + " and " + linkMultiplier("r2", "mr2") + " and " +
+      notMatched("q1") + " and " + notMatched("q2") + " and " +
+      "q1.logID in " + logSet + " and q2.logID in " + logSet +
+      " and q1.logID < q2.logID and " +
+      probFunc("q1","q2","s1","s2","r1","r2","cs1","cs2", "cr1", "cr2",
+               "ms1","ms2","mr1","mr2") +
+      " >= 0.5 order by probmatch desc;"
+    print queryStr + "\n"
   end
 end
