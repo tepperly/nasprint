@@ -19,13 +19,35 @@ class ContestDatabase
   attr_writer :contestID
   attr_reader :contestID
 
+  def readTables
+    result = Array.new
+    res = @db.query("show tables;")
+    res.each(:as => :array) { |row|
+      result << row[0]
+    }
+    result.sort
+  end
+
   def createDB
-    createContestTable
-    createEntityTable
-    createHomophoneTable
-    createMultiplierTable
-    createLogTable
-    createQSOTable
+    tables = readTables
+    if not tables.include?("Contest")
+      createContestTable
+    end
+    if not tables.include?("Entity")
+      createEntityTable
+    end
+    if not tables.include?("Homophone")
+      createHomophoneTable
+    end
+    if not (tables.include?("Multiplier") and tables.include?("MultiplierAlias"))
+      createMultiplierTable
+    end
+    if not (tables.include?("Callsign") and tables.include?("Log"))
+      createLogTable
+    end
+    if not (tables.include?("Exchange") and tables.include?("QSO"))
+      createQSOTable
+    end
   end
 
   def createContestTable
