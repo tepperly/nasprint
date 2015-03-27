@@ -4,6 +4,107 @@
 # Validate and cross match QSOs
 #
 
+require 'jaro_winkler'
+
+class StringSpace
+  def initialize
+    @space = Hash.new
+  end
+  
+  def register(str)
+    if @space.has_key?(str)
+      return @space[str]
+    else
+      @space[str] = str
+    end
+    return str
+  end
+end
+
+def hillFunc(value, full, none)
+  value = value.abs
+  (value <= full) ? 1.0 : 
+    ((value >= none) ? 0 : (1.0 - ((value.to_f - full)/(none.to_f - full))))
+end
+
+class Exchange
+  @@stringspace = StringSpace.new
+
+  def initialize(basecall, callsign, serial, name, mult, location)
+    @basecall = @@stringspace.register(basecall)
+    @callsign = @@stringspace.register(callsign)
+    @serial = serial.to_i
+    @name = @@stringspace.register(name)
+    @mult = @@stringspace.register(mult)
+    @location = @@stringspace.register(location)
+  end
+
+  attr_reader :basecall, :callsign, :serial, :name, :mult, :location
+
+  def probablyMatch(exch)
+    [ JaroWinkler.distance(@basecall, exch.basecall),
+      JaroWinkler.distance(@callsign, exch.callsign) ].max *
+      JaroWinkler.distance(@name, exch.name) *
+      [ hillFunc(@serial-exch.serial, 1, 10),
+        JaroWinkler.distance(@serial.to_s,exch.serial.to_s) ].max *
+      [ JaroWinkler.distance(@mult, exch.mult),
+        JaroWinkler.distance(@location, exch.location) ].max
+  end
+
+  def to_s
+    "%6s %7s %4d %12s %2s %4s" % [@basecall, @callsign, @serial,
+                                  @name, @mult, @location]
+  end
+end
+
+class QSO
+  def initialize(id, logID, freq, band, mode, datetime, sent, recvd)
+    @id = id
+    @logID = logID
+    @freq = freq
+    @band = band
+    @mode = mode
+    @datetime = datetime
+    @sent = sent
+    @recvd = recvd
+  end
+
+  attr_reader :id, :logID, :freq, :band, :mode, :datetime, :sent, :recvd
+
+  def probablyMatch(qso)
+    (qso.logID == @logID) ? 0 :
+      (@sent.probablyMatch(qso.recvd) *
+       @recvd.probablyMatch(qso.sent) *
+       hillFunc(@datetime - qso.datetime, 15*60, 60*60))
+  end
+
+  def to_s(reversed = false)
+    ("%7d %5d %5d %4s %2s %s " % [@id, @logID, @freq, @band, @mode,
+                                  @datetime.strftime("%Y-%m-%d %H%M")]) +
+      (reversed ?  (@recvd.to_s + " " + @sent.to_s):
+       (@sent.to_s + " " + @recvd.to_s))
+  end
+end
+
+class Match
+  include Comparable
+  def initialize(q1, q2, metric)
+    @q1 = q1
+    @q2 = q2
+    @metric = metric
+  end
+
+  attr_reader :metric
+
+  def <=>(match)
+      @metric <=> match.metric
+  end
+
+  def to_s
+    "Metric: #{@metric}\n" + @q1.to_s + "\n" + @q2.to_s(true) + "\n"
+  end
+end
+
 class CrossMatch
   PERFECT_TIME_MATCH = 10
 
@@ -180,22 +281,38 @@ class CrossMatch
   end
 
   def probMatch
-    queryStr = "select q1.id, q2.id, " +
-      probFunc("q1","q2","s1","s2","r1","r2","cs1","cs2", "cr1", "cr2",
-               "ms1","ms2","mr1","mr2") +
-      " as probmatch from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Callsign as cr1, Callsign as cs1, Callsign as cr2, Callsign as cs2, Multiplier as ms1, Multiplier as ms2, Multiplier as mr1, Multiplier as mr2 where " +
-      linkConstraints("q1", "s1", "r1") + " and " +
-      linkConstraints("q2", "s2", "r2") + " and " +
-      linkCallsign("s1","cs1") + " and " + linkCallsign("r1", "cr1") + " and " +
-      linkCallsign("s2","cs2") + " and " + linkCallsign("r2", "cr2") + " and " +
-      linkMultiplier("s1","ms1") + " and " + linkMultiplier("r1", "mr1") + " and " +
-      linkMultiplier("s2","ms2") + " and " + linkMultiplier("r2", "mr2") + " and " +
-      notMatched("q1") + " and " + notMatched("q2") + " and " +
-      "q1.logID in " + logSet + " and q2.logID in " + logSet +
-      " and q1.logID < q2.logID and " +
-      probFunc("q1","q2","s1","s2","r1","r2","cs1","cs2", "cr1", "cr2",
-               "ms1","ms2","mr1","mr2") +
-      " >= 0.5 order by probmatch desc;"
-    print queryStr + "\n"
+    queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, s.callsign, s.serial, s.name, ms.abbrev, s.location, cr.basecall, r.callsign, r.serial, r.name, mr.abbrev, r.location " +
+      " from QSO as q, Exchange as s, Exchange as r, Callsign as cr, Callsign as cs, Multiplier as ms, Multiplier as mr where " +
+      linkConstraints("q", "s", "r") + " and " +
+      linkCallsign("s","cs") + " and " + linkCallsign("r", "cr") + " and " +
+      linkMultiplier("s","ms") + " and " + linkMultiplier("r", "mr") + " and " +
+      notMatched("q") + " and " +
+      "q.logID in " + logSet + " " +
+      "order by q.logID asc, q.time asc;"
+    res = @db.query(queryStr)
+    qsos = Array.new
+    res.each(:as => :array) { |row|
+      s = Exchange.new(row[6], row[7], row[8], row[9], row[10], row[11])
+      r = Exchange.new(row[12], row[13], row[14], row[15], row[16], row[17])
+      qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
+                    row[5], s, r)
+      qsos << qso
+    }
+    print "#{qsos.length} unmatched QSOs read in\n"
+    print "Starting probability-based cross match: #{Time.now.to_s}\n"
+    matches = Array.new
+    qsos.each { |q1|
+      qsos.each { |q2|
+        metric = q1.probablyMatch(q2)
+        if metric > 0
+          matches << Match.new(q1, q2, metric)
+        end
+      }
+    }
+    print "Done ranking potential matches: #{Time.now.to_s}\n"
+    matches.sort! { |a,b| b <=> a }
+    matches.each { |m|
+      print m.to_s + "\n"
+    }
   end
 end
