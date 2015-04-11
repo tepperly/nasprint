@@ -192,15 +192,13 @@ class CrossMatch
     if qsos.length != 2
       ids = [id1, id2]
       qsos.each { |q|
-        print "Deleting #{q.id} from [#{ids.join(',')}]\n"
         ids.delete(q.id)
-        print "Produced [#{ids.join(',')}]\n"
       }
       queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, s.callsign, s.serial, s.name, 'NULL', s.location, cr.basecall, r.callsign, r.serial, r.name, 'NULL', r.location " +
                     " from QSO as q, Exchange as s, Exchange as r, Callsign as cr, Callsign as cs where " +
                     linkConstraints("q", "s", "r") + " and " +
                     linkCallsign("s","cs") + " and " + linkCallsign("r", "cr") + " and " +
-                    " q.id in (#{id1}, #{id2});"
+                    " q.id in (#{ids.join(',')});"
       print "query #{queryStr}\n"
       qsos = qsosFromDB(@db.query(queryStr), qsos)
       print "Match of QSOs #{id1} #{id2} produced #{qsos.length} results\n"
@@ -257,6 +255,7 @@ class CrossMatch
                     exchangeMatch("r2", "s1", "h2") + " and q1.id < q2.id" +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+    print queryStr + "\n"
     num2, num3 = linkQSOs(@db.query(queryStr), 'Full', 'Full')
     num2 = num2 + num3
     return num1, num2
