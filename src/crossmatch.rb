@@ -42,13 +42,17 @@ class Exchange
   attr_reader :basecall, :callsign, :serial, :name, :mult, :location
 
   def probablyMatch(exch)
-    [ JaroWinkler.distance(@basecall, exch.basecall),
-      JaroWinkler.distance(@callsign, exch.callsign) ].max *
+    callProb(exch) *
       JaroWinkler.distance(@name, exch.name) *
       [ hillFunc(@serial-exch.serial, 1, 10),
         JaroWinkler.distance(@serial.to_s,exch.serial.to_s) ].max *
       [ JaroWinkler.distance(@mult, exch.mult),
         JaroWinkler.distance(@location, exch.location) ].max
+  end
+
+  def callProb(exch)
+    [ JaroWinkler.distance(@basecall, exch.basecall),
+      JaroWinkler.distance(@callsign, exch.callsign) ].max
   end
 
   def to_s
@@ -75,7 +79,13 @@ class QSO
     (qso.logID == @logID) ? 0 :
       (@sent.probablyMatch(qso.recvd) *
        @recvd.probablyMatch(qso.sent) *
+       ((@band == qso.band) ? 1.0 : 0.99) *
        hillFunc(@datetime - qso.datetime, 15*60, 60*60))
+  end
+
+  def callProbability(qso)
+    @sent.callProb(qso.recvd) *
+      @recvd.callProb(qso.sent)
   end
 
   def to_s(reversed = false)
@@ -88,20 +98,21 @@ end
 
 class Match
   include Comparable
-  def initialize(q1, q2, metric=0)
+  def initialize(q1, q2, metric=0, metric2=0)
     @q1 = q1
     @q2 = q2
     @metric = metric
+@metric2 = metric2
   end
 
-  attr_reader :metric
+  attr_reader :metric, :metric2
 
   def <=>(match)
       @metric <=> match.metric
   end
 
   def to_s
-    "Metric: #{@metric}\n" + @q1.to_s + "\n" + (@q2  ? @q2.to_s(true): "nil") + "\n"
+    "Metric: #{@metric} #{@metric2}\n" + @q1.to_s + "\n" + (@q2  ? @q2.to_s(true): "nil") + "\n"
   end
 end
 
@@ -199,18 +210,23 @@ class CrossMatch
                     linkConstraints("q", "s", "r") + " and " +
                     linkCallsign("s","cs") + " and " + linkCallsign("r", "cr") + " and " +
                     " q.id in (#{ids.join(',')});"
-      print "query #{queryStr}\n"
       qsos = qsosFromDB(@db.query(queryStr), qsos)
-      print "Match of QSOs #{id1} #{id2} produced #{qsos.length} results\n"
+      if qsos.length != 2
+        print "query #{queryStr}\n"
+        print "Match of QSOs #{id1} #{id2} produced #{qsos.length} results\n"
+        return nil
+      end
     end
-    m = Match.new(qsos[0], qsos[1])
+    m = Match.new(qsos[0], qsos[1], qsos[0].probablyMatch(qsos[1]), qsos[0].callProbability(qsos[1]))
     print m.to_s + "\n"
   end
  
-  def linkQSOs(matches, match1, match2)
+  def linkQSOs(matches, match1, match2, quiet=true)
     count1 = 0
     count2 = 0
-    print "linkQSOs #{match1} #{match2}\n"
+    if not quiet
+      print "linkQSOs #{match1} #{match2}\n"
+    end
     matches.each(:as => :array) { |row|
       chk = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.id = #{row[0].to_i} and q2.id = #{row[1].to_i} and q1.matchID is null and q2.matchID is null and q1.matchType = 'None' and q2.matchType = 'None' limit 1;")
       found = false
@@ -219,12 +235,16 @@ class CrossMatch
         @db.query("update QSO set matchID = #{row[1].to_i}, matchType = '#{match1}' where id = #{row[0].to_i} and matchID is null and matchType = 'None' limit 1;")
         count1 = count1 + 1
         @db.query("update QSO set matchID = #{row[0].to_i}, matchType = '#{match2}' where id = #{row[1].to_i} and matchID is null and matchType = 'None' limit 1;")
-        printDupeMatch(row[0].to_i, row[1].to_i)
+        if not quiet
+          printDupeMatch(row[0].to_i, row[1].to_i)
+        end
         count2 = count2 + 1
       }
       if not found
         @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (#{row[0].to_i}, #{row[1].to_i}) limit 2;")
-        printDupeMatch(row[0].to_i, row[1].to_i)
+        if not quiet
+          printDupeMatch(row[0].to_i, row[1].to_i)
+        end
       end
     }
     return count1, count2
@@ -239,11 +259,24 @@ class CrossMatch
                     " and q1.logID != q2.logID " +
                     " and " + qsoMatch("q1", "q2") + " and " +
                     exchangeMatch("r1", "s2") + " and " +
-                    exchangeMatch("r2", "s1") + " and q1.id < q2.id" +
+                    exchangeMatch("r2", "s1") + " and q1.id < q2.id " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    num1, num2 = linkQSOs(@db.query(queryStr), 'Full', 'Full')
+    num1, num2 = linkQSOs(@db.query(queryStr), 'Full', 'Full', true)
     num1 = num1 + num2
+    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h where " +
+                    linkConstraints("q1", "s1", "r1") + " and " +
+                    linkConstraints("q2", "s2", "r2") + " and " +
+                    notMatched("q1") + " and " + notMatched("q2") + " and " +
+                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
+                    " and q1.logID != q2.logID " +
+                    " and " + qsoMatch("q1", "q2") + " and " +
+                    exchangeMatch("r1", "s2", "h") + " and " +
+                    exchangeMatch("r2", "s1") +
+                    " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
+      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+    num2, num3 = linkQSOs(@db.query(queryStr), 'Full', 'Full', true)
+    num2 = num2 + num3
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h1, Homophone as h2 where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
                     linkConstraints("q2", "s2", "r2") + " and " +
@@ -252,12 +285,12 @@ class CrossMatch
                     " and q1.logID != q2.logID " +
                     " and " + qsoMatch("q1", "q2") + " and " +
                     exchangeMatch("r1", "s2", "h1") + " and " +
-                    exchangeMatch("r2", "s1", "h2") + " and q1.id < q2.id" +
+                    exchangeMatch("r2", "s1", "h2") + " and q1.id < q2.id " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print queryStr + "\n"
-    num2, num3 = linkQSOs(@db.query(queryStr), 'Full', 'Full')
-    num2 = num2 + num3
+    num3, num4 = linkQSOs(@db.query(queryStr), 'Full', 'Full', true)
+    num2 = num2 + num3 + num4
     return num1, num2
   end
 
@@ -273,7 +306,7 @@ class CrossMatch
                     " r2.callID = s1.callID " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    full1, partial1 = linkQSOs(@db.query(queryStr), 'Full', 'Partial')
+    full1, partial1 = linkQSOs(@db.query(queryStr), 'Full', 'Partial', false)
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
                     linkConstraints("q2", "s2", "r2") + " and " +
@@ -285,7 +318,7 @@ class CrossMatch
                     " r2.callID = s1.callID " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    full2, partial2 = linkQSOs(@db.query(queryStr), 'Full', 'Partial')
+    full2, partial2 = linkQSOs(@db.query(queryStr), 'Full', 'Partial', false)
     return full1 + full2, partial1 + partial2
   end
 
@@ -301,7 +334,7 @@ class CrossMatch
                     " (s2.callID = r1.callID or s2.callsign = r1.callsign) " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    return linkQSOs(@db.query(queryStr), 'Partial', 'Partial')
+    return linkQSOs(@db.query(queryStr), 'Partial', 'Partial', false)
   end
 
   def hillFunc(quantity, fullrange, zerorange)
@@ -357,7 +390,7 @@ class CrossMatch
           ids = [ q1.id, q2.id ].sort
           if not alreadyseen[ids]
             alreadyseen[ids] = true
-            matches << Match.new(q1, q2, metric)
+            matches << Match.new(q1, q2, metric, q1.callProbability(q2))
           end
         end
       }
