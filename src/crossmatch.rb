@@ -50,6 +50,12 @@ class Exchange
         JaroWinkler.distance(@location, exch.location) ].max
   end
 
+  def fullMatch?(exch)
+    @basecall == exch.basecall and 
+      ((@serial - exch.serial).abs <= 1) and
+      @mult == exch.mult
+  end
+
   def callProb(exch)
     [ JaroWinkler.distance(@basecall, exch.basecall),
       JaroWinkler.distance(@callsign, exch.callsign) ].max
@@ -88,6 +94,13 @@ class QSO
       @recvd.callProb(qso.sent)
   end
 
+  def fullMatch?(qso, time)
+    @band == qso.band and @mode == qso.mode and 
+      (qso.datetime >= (@datetime - 60*time) and
+       qso.datetime <= (@datetime + 60*time)) and
+      @recvd.fullMatch?(qso.sent)
+  end
+
   def to_s(reversed = false)
     ("%7d %5d %5d %-4s %-2s %s " % [@id, @logID, @freq, @band, @mode,
                                   @datetime.strftime("%Y-%m-%d %H%M")]) +
@@ -102,7 +115,7 @@ class Match
     @q1 = q1
     @q2 = q2
     @metric = metric
-@metric2 = metric2
+    @metric2 = metric2
   end
 
   attr_reader :metric, :metric2
@@ -113,6 +126,20 @@ class Match
 
   def to_s
     "Metric: #{@metric} #{@metric2}\n" + @q1.to_s + "\n" + (@q2  ? @q2.to_s(true): "nil") + "\n"
+  end
+
+  def record(db, time)
+    res = db.query("select count(*) from QSO where id in (#{@q1.id}, #{@q2.id}) and matchType = 'None' and matchID is NULL;")
+    res.each(:as => :array) { |row|
+      if row[0].to_i == 2
+        type1 = @q1.fullMatch?(@q2, time) ?  "Full" : "Partial"
+        type2 = @q2.fullMatch?(@q1, time) ? "Full" : "Partial"
+        db.query("update QSO set matchID = #{@q2.id}, matchType = '#{type1}' where id = #{@q1.id} and matchType = 'None' and matchID is NULL limit 1;")
+        db.query("update QSO set matchID = #{@q1.id}, matchType = '#{type2}' where id = #{@q2.id} and matchType = 'None' and matchID is NULL limit 1;")
+        return type1, type2
+      end
+    }
+    return nil
   end
 end
 
@@ -251,6 +278,7 @@ class CrossMatch
   end
 
   def perfectMatch
+    print "Staring perfect match test phase 1: #{Time.now.to_s}\n"
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2 where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
                     linkConstraints("q2", "s2", "r2") + " and " +
@@ -275,6 +303,7 @@ class CrossMatch
                     exchangeMatch("r2", "s1") +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+    print "Perfect match test phase 2: #{Time.now.to_s}\n"
     num2, num3 = linkQSOs(@db.query(queryStr), 'Full', 'Full', true)
     num2 = num2 + num3
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h1, Homophone as h2 where " +
@@ -288,9 +317,10 @@ class CrossMatch
                     exchangeMatch("r2", "s1", "h2") + " and q1.id < q2.id " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    print queryStr + "\n"
+    print "Perfect match test phase 2: #{Time.now.to_s}\n"
     num3, num4 = linkQSOs(@db.query(queryStr), 'Full', 'Full', true)
     num2 = num2 + num3 + num4
+    print "Ending perfect match test: #{Time.now.to_s}\n"
     return num1, num2
   end
 
@@ -306,6 +336,7 @@ class CrossMatch
                     " r2.callID = s1.callID " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+    print "Partial match test phase 1: #{Time.now.to_s}\n"
     full1, partial1 = linkQSOs(@db.query(queryStr), 'Full', 'Partial', false)
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
@@ -318,7 +349,9 @@ class CrossMatch
                     " r2.callID = s1.callID " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+    print "Partial match test phase 2: #{Time.now.to_s}\n"
     full2, partial2 = linkQSOs(@db.query(queryStr), 'Full', 'Partial', false)
+    print "Partial match end: #{Time.now.to_s}\n"
     return full1 + full2, partial1 + partial2
   end
 
@@ -400,6 +433,23 @@ class CrossMatch
     matches.sort! { |a,b| b <=> a }
     matches.each { |m|
       print m.to_s + "\n"
+      if m.metric >= 0.5 and m.metric2 >= 0.8
+        matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
+        if matchtypes
+          print matchtypes.join(" ") + "\n\n"
+        end
+      else
+        print "Is this a match (y/n): "
+        answer = STDIN.gets
+        if [ "Y", "YES" ].include?(answer.strip.upcase)
+          matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
+          if matchtypes
+            print matchtypes.join(" ") + "\n\n"
+          end
+        else
+          print "Not a match.\n"
+        end
+      end
     }
   end
 end
