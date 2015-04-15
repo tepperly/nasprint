@@ -317,7 +317,7 @@ class CrossMatch
                     exchangeMatch("r2", "s1", "h2") + " and q1.id < q2.id " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    print "Perfect match test phase 2: #{Time.now.to_s}\n"
+    print "Perfect match test phase 3: #{Time.now.to_s}\n"
     num3, num4 = linkQSOs(@db.query(queryStr), 'Full', 'Full', true)
     num2 = num2 + num3 + num4
     print "Ending perfect match test: #{Time.now.to_s}\n"

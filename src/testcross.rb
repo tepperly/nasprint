@@ -12,10 +12,12 @@ $year = nil
 $restart = false
 $qrzuser = nil
 $qrzpwd = nil
+$create = false
 
 opts = GetoptLong.new(
                       [ '--help', '-h', GetoptLong::NO_ARGUMENT],
                       [ '--year', '-y', GetoptLong::REQUIRED_ARGUMENT],
+                      [ '--new', '-N', GetoptLong::NO_ARGUMENT],
                       [ '--qrzuser', '-u', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--qrzpwd', '-p', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--restart', '-R', GetoptLong::NO_ARGUMENT],
@@ -25,6 +27,8 @@ opts.each { |opt,arg|
   case opt
   when '--help'
     print "Help\n"
+  when '--new'
+    $create = true
   when '--name'
     $name = arg
   when '--restart'
@@ -43,8 +47,7 @@ def checkCallsigns(db, cid, user, pwd)
   xmldb = readXMLDb()
   res = db.query("select id, basecall from Callsign where contestID = #{cid.to_i} and validcall is null;")
   res.each(:as => :array) { |row|
-    result = (xmldb.has_key?(row[1]) or lookupCall(qrz, xmldb, row[1]))
-    if result
+    if xmldb.has_key?(row[1]) or lookupCall(qrz, xmldb, row[1])
       db.query("update Callsign set validcall = 1 where id = #{row[0].to_i} limit 1;")
     else
       print "Callsign #{row[1]} is unknown to QRZ.\n"
@@ -55,7 +58,11 @@ end
 
 db = makeDB
 contestDB = ContestDatabase.new(db)
-contestID = contestDB.addOrLookupContest($name, $year)
+contestID = contestDB.addOrLookupContest($name, $year, $create)
+if not contestID
+  print "Unknown contest #{$name} #{$year}\n"
+  exit 2
+end
 cm = CrossMatch.new(db, contestID)
 
 begin

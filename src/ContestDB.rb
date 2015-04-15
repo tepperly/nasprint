@@ -162,14 +162,16 @@ class ContestDatabase
     nil
   end
 
-  def addOrLookupContest(name, year)
+  def addOrLookupContest(name, year, create=false)
     if name and year
       result = @db.query("select id from Contest where name=\"#{@db.escape(name)}\" and year = #{year.to_i} limit 1;")
       result.each(:as => :array) { |row|
         return row[0].to_i
       }
-      @db.query("insert into Contest (name, year) values (\"#{@db.escape(name)}\", \"#{year.to_i}\");")
-      return @db.last_id
+      if create
+        @db.query("insert into Contest (name, year) values (\"#{@db.escape(name)}\", \"#{year.to_i}\");")
+        return @db.last_id
+      end
     end
     nil
   end

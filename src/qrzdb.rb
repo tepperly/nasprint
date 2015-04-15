@@ -10,14 +10,18 @@ XML_NAMESPACE = {'qrz' => 'http://xmldata.qrz.com'}
 DELIM = /\s*,\s*/
 
 def addToDb(db, xml, filename)
+  found = false
   xml.xpath("//qrz:Callsign/qrz:call", XML_NAMESPACE).each { |match|
     db[match.text.strip.upcase] = filename
+    found = true
   }
   xml.xpath("//qrz:Callsign/qrz:aliases", XML_NAMESPACE).each { |match|
     match.text.strip.upcase.split(DELIM) { |call|
+      found = true
       db[call] = filename
     }
   }
+  return found
 end
 
 def readXMLDb(db = Hash.new)
@@ -41,10 +45,10 @@ def lookupCall(qrz, db, call)
     open("xml_db/#{call}.xml", "w:iso-8859-1") { |out|
       out.write(str)
     }
-    addToDb(db, xml, "xml_db/#{call}.xml")
-    true
+    return addToDb(db, xml, "xml_db/#{call}.xml")
   else
     print "Lookup failed: #{call}\n"
-    false
+    return false
   end
+  true
 end
