@@ -144,7 +144,8 @@ class Match
 end
 
 class CrossMatch
-  PERFECT_TIME_MATCH = 15
+  PERFECT_TIME_MATCH = 15       # in minutes
+  MAXIMUM_TIME_MATCH = 24*60    # one day in minutes
 
   def initialize(db, contestID)
     @db = db
@@ -277,7 +278,7 @@ class CrossMatch
     return count1, count2
   end
 
-  def perfectMatch
+  def perfectMatch(timediff = PERFECT_TIME_MATCH, matchType="Full")
     print "Staring perfect match test phase 1: #{Time.now.to_s}\n"
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2 where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
@@ -285,12 +286,12 @@ class CrossMatch
                     notMatched("q1") + " and " + notMatched("q2") + " and " +
                     "q1.logID in " + logSet + " and q2.logID in " + logSet +
                     " and q1.logID != q2.logID " +
-                    " and " + qsoMatch("q1", "q2") + " and " +
+                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
                     exchangeMatch("r1", "s2") + " and " +
                     exchangeMatch("r2", "s1") + " and q1.id < q2.id " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    num1, num2 = linkQSOs(@db.query(queryStr), 'Full', 'Full', true)
+    num1, num2 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
     num1 = num1 + num2
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
@@ -298,13 +299,13 @@ class CrossMatch
                     notMatched("q1") + " and " + notMatched("q2") + " and " +
                     "q1.logID in " + logSet + " and q2.logID in " + logSet +
                     " and q1.logID != q2.logID " +
-                    " and " + qsoMatch("q1", "q2") + " and " +
+                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
                     exchangeMatch("r1", "s2", "h") + " and " +
                     exchangeMatch("r2", "s1") +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Perfect match test phase 2: #{Time.now.to_s}\n"
-    num2, num3 = linkQSOs(@db.query(queryStr), 'Full', 'Full', true)
+    num2, num3 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
     num2 = num2 + num3
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h1, Homophone as h2 where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
@@ -312,57 +313,80 @@ class CrossMatch
                     notMatched("q1") + " and " + notMatched("q2") + " and " +
                     "q1.logID in " + logSet + " and q2.logID in " + logSet +
                     " and q1.logID != q2.logID " +
-                    " and " + qsoMatch("q1", "q2") + " and " +
+                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
                     exchangeMatch("r1", "s2", "h1") + " and " +
                     exchangeMatch("r2", "s1", "h2") + " and q1.id < q2.id " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Perfect match test phase 3: #{Time.now.to_s}\n"
-    num3, num4 = linkQSOs(@db.query(queryStr), 'Full', 'Full', true)
+    num3, num4 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
     num2 = num2 + num3 + num4
     print "Ending perfect match test: #{Time.now.to_s}\n"
     return num1, num2
   end
 
-  def partialMatch
+  def partialMatch(timediff = PERFECT_TIME_MATCH, fullType="Full",  partialType="Partial")
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2 where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
                     linkConstraints("q2", "s2", "r2") + " and " +
                     notMatched("q1") + " and " + notMatched("q2") + " and " +
                     "q1.logID in " + logSet + " and q2.logID in " + logSet +
                     " and q1.logID != q2.logID " +
-                    " and " + qsoMatch("q1", "q2") + " and " +
+                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
                     exchangeMatch("r1", "s2") + " and " +
                     " r2.callID = s1.callID " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Partial match test phase 1: #{Time.now.to_s}\n"
-    full1, partial1 = linkQSOs(@db.query(queryStr), 'Full', 'Partial', false)
+    full1, partial1 = linkQSOs(@db.query(queryStr), fullType, partialType, false)
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
                     linkConstraints("q2", "s2", "r2") + " and " +
                     notMatched("q1") + " and " + notMatched("q2") + " and " +
                     "q1.logID in " + logSet + " and q2.logID in " + logSet +
                     " and q1.logID != q2.logID " +
-                    " and " + qsoMatch("q1", "q2") + " and " +
+                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
                     exchangeMatch("r1", "s2", "h") + " and " +
                     " r2.callID = s1.callID " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Partial match test phase 2: #{Time.now.to_s}\n"
-    full2, partial2 = linkQSOs(@db.query(queryStr), 'Full', 'Partial', false)
+    full2, partial2 = linkQSOs(@db.query(queryStr), fullType, partialType, false)
     print "Partial match end: #{Time.now.to_s}\n"
     return full1 + full2, partial1 + partial2
   end
 
-  def basicMatch
+  def ignoreDups
+    count = 0
+    queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3, Exchange as e2, Exchange as e3 where q1.matchID is not null and q1.matchType in ('Parial', 'Full') and q1.logID in #{logSet} and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and q2.logID in #{logSet} and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and e2.id = q2.sentID and e3.id = q3.recvdID and e2.callID = e3.callID;"
+    res = @db.query(queryStr)
+    res.each(:as => :array) { |row|
+      @db.query("update QSO set matchType = 'Dupe' where id = #{row[0].to_i} and matchType = 'None' and matchID is null limit 1;")
+      count = count + @db.affected_rows
+    }
+    count
+  end
+  
+  def markNIL
+    count = 0
+    queryStr = "select q.id from QSO as q,Exchange as e,Callsign as c where q.matchID is null and q.matchType = 'None' and q.logID in #{logSet} and q.recvdID = e.id and e.callID = c.id and c.logrecvd;"
+    res = @db.query(queryStr)
+    res.each(:as => :array) { |row|
+      @db.query("update QSO set matchType = 'NIL' where id = #{row[0].to_i} and matchType = 'None' and matchID is null limit 1;")
+      count = count + @db.affected_rows
+    }
+    count
+  end
+
+
+  def basicMatch(timediff = PERFECT_TIME_MATCH)
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2 where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
                     linkConstraints("q2", "s2", "r2") + " and " +
                     notMatched("q1") + " and " + notMatched("q2") + " and " +
                     "q1.logID in " + logSet + " and q2.logID in " + logSet +
                     " and q1.logID < q2.logID " +
-                    " and " + qsoMatch("q1", "q2") + " and " +
+                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
                     " (s1.callsign = r2.callsign or s1.callID = r2.callID) and " +
                     " (s2.callID = r1.callID or s2.callsign = r1.callsign) " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +

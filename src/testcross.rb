@@ -6,6 +6,8 @@ require_relative 'ContestDB'
 require_relative 'crossmatch'
 require_relative 'fetch'
 require_relative 'qrzdb'
+require_relative 'calctimeadj'
+require_relative 'singletons'
 
 $name = nil
 $year = nil
@@ -78,9 +80,30 @@ begin
   num3, partial = cm.partialMatch
   print "Full matches partial: #{num3}\n"
   print "Partial matches full: #{partial}\n"
-  p1, p2 = cm.basicMatch
-  print "Basic QSO matches: #{p1+p2}\n"
-  cm.probMatch
+  num1, num2 = cm.perfectMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull')
+  print "Time shifted perfect matches: #{num1}\n"
+  print "Time shifted perfect matches with homophones: #{num2}\n"
+  num3, partial = cm.partialMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull', 'TimeShiftPartial')
+  print "Time shifted full matches partial: #{num3}\n"
+  print "Time shifted partial matches full: #{partial}\n"
+  p1, p2 = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
+  print "Basic QSO matches within 24 hours: #{p1+p2}\n"
+#   cm.probMatch
+  d1 = cm.ignoreDups
+  print "Duplicates of matches: #{d1}\n"
+  print "Calculating clock drift\n"
+  ct = CalcTimeAdj.new(db, contestID)
+  ct.buildVariables
+  ct.buildMatrix
+  timeviolation = ct.markOutOfContest
+  print "QSOs outside contest time period: #{timeviolation}\n"
+  ct = nil
+  nil1 = cm.markNIL
+  print "Not In Log penalties: #{nil1}\n"
+  singles = ResolveSingletons.new(db, contestID)
+  print "Resolving singletons\n"
+  singles.resolve
+  # 0.94 similarity is good for comparisons
 rescue Mysql2::Error => e
   print e.to_s + "\n"
   print e.backtrace.join("\n")

@@ -41,7 +41,7 @@ $addToDB = ($addToDB and $year and $name)
 if $addToDB
   db = makeDB
   contestDB = ContestDatabase.new(db)
-  contestID = contestDB.addOrLookupContest($name, $year)
+  contestID = contestDB.addOrLookupContest($name, $year, true)
   contestDB.contestID = contestID
 end
 
