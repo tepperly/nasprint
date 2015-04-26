@@ -8,6 +8,8 @@ require_relative 'fetch'
 require_relative 'qrzdb'
 require_relative 'calctimeadj'
 require_relative 'singletons'
+require_relative 'multiplier'
+require_relative 'report'
 
 $name = nil
 $year = nil
@@ -88,21 +90,30 @@ begin
   print "Time shifted partial matches full: #{partial}\n"
   p1, p2 = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
   print "Basic QSO matches within 24 hours: #{p1+p2}\n"
-#   cm.probMatch
-  d1 = cm.ignoreDups
-  print "Duplicates of matches: #{d1}\n"
+  cm.probMatch
   print "Calculating clock drift\n"
   ct = CalcTimeAdj.new(db, contestID)
   ct.buildVariables
   ct.buildMatrix
   timeviolation = ct.markOutOfContest
   print "QSOs outside contest time period: #{timeviolation}\n"
+  num1, num2 = cm.resolveShifted
+  print "Time shift resolved #{num1} full and #{num2} partial\n"
+  d1 = cm.ignoreDups
+  print "Duplicates of matches: #{d1}\n"
   ct = nil
   nil1 = cm.markNIL
   print "Not In Log penalties: #{nil1}\n"
   singles = ResolveSingletons.new(db, contestID)
   print "Resolving singletons\n"
   singles.resolve
+  num = singles.finalDupeCheck
+  print "#{num} Dupe QSOs identified during final check\n."
+  m = Multiplier.new(db, contestID)
+  m.resolveDX
+  m.checkByeMultipliers
+  r = Report.new(db, contestID)
+  r.makeReport
   # 0.94 similarity is good for comparisons
 rescue Mysql2::Error => e
   print e.to_s + "\n"

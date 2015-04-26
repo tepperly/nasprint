@@ -86,7 +86,7 @@ class QSO
       (@sent.probablyMatch(qso.recvd) *
        @recvd.probablyMatch(qso.sent) *
        ((@band == qso.band) ? 1.0 : 0.99) *
-       hillFunc(@datetime - qso.datetime, 15*60, 60*60))
+       hillFunc(@datetime - qso.datetime, 15*60, 24*60*60))
   end
 
   def callProbability(qso)
@@ -168,6 +168,7 @@ class CrossMatch
 
   def restartMatch
     @db.query("update QSO set matchID = NULL, matchType = 'None' where logID in #{logSet};")
+    @db.query("update Log set clockadj = 0 where id in #{logSet};")
   end
 
   def linkConstraints(qso, sent, recvd)
@@ -356,9 +357,32 @@ class CrossMatch
     return full1 + full2, partial1 + partial2
   end
 
+  def chooseType(str, num1, num2)
+      if str == "TimeShiftFull"
+        return "Full", num1 + 1, num2
+      else
+        return "Partial", num1, num2 + 1
+      end
+  end
+  
+  def resolveShifted
+    num1 = 0
+    num2 = 0
+    queryStr = "select q1.id, q1.matchType, q2.id, q2.matchType from QSO as q1, QSO as q2, Log as l1, Log as l2 where q1.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.matchID = q2.id and q1.id = q2.matchID and q2.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.id < q2.id and l1.id = q1.logID and l2.id = q2.logID and l1.contestID = #{@contestID} and l2.contestID = #{@contestID} and DATE_ADD(q1.time, interval l1.clockadj second) between DATE_SUB(DATE_ADD(q2.time, interval l2.clockadj second), interval #{PERFECT_TIME_MATCH} minute) and DATE_ADD(DATE_ADD(q2.time, interval l2.clockadj second), interval #{PERFECT_TIME_MATCH} minute) order by q1.id asc;"
+    res = @db.query(queryStr) { |row|
+      oneType, num1, num2 = chooseType(row[1], num1, num2)
+      twoType, num1, num2 = chooseType(row[3], num1, num2)
+      @db.query("update QSO set matchType='#{oneType}' where id = #{row[0].to_i} limit 1;")
+      @db.query("update QSO set matchType='#{twoType}' where id = #{row[2].to_i} limit 1;")
+    }
+    @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and logID in #{logSet};")
+    num2 = num2 + @db.affected_rows
+    return num1, num2
+  end
+
   def ignoreDups
     count = 0
-    queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3, Exchange as e2, Exchange as e3 where q1.matchID is not null and q1.matchType in ('Parial', 'Full') and q1.logID in #{logSet} and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and q2.logID in #{logSet} and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and e2.id = q2.sentID and e3.id = q3.recvdID and e2.callID = e3.callID;"
+    queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3, Exchange as e2, Exchange as e3 where q1.matchID is not null and q1.matchType in ('Partial', 'Full') and q1.logID in #{logSet} and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and q2.logID in #{logSet} and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and e2.id = q2.sentID and e3.id = q3.recvdID and e2.callID = e3.callID;"
     res = @db.query(queryStr)
     res.each(:as => :array) { |row|
       @db.query("update QSO set matchType = 'Dupe' where id = #{row[0].to_i} and matchType = 'None' and matchID is null limit 1;")

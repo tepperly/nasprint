@@ -67,7 +67,7 @@ class ResolveSingletons
 
   def farMoreCommon(list, count)
     if list
-      sorted = list.sort { |x,y| y.numQSOS <=> x.numQSOs }
+      sorted = list.sort { |x,y| y.numQSOs <=> x.numQSOs }
       if (sorted[0].numQSOs >= 10) and (sorted[0].numQSOs >= 5*count)
         return sorted[0]
       end
@@ -75,7 +75,12 @@ class ResolveSingletons
     nil
   end
 
+
   def resolve
+    res = @db.query("select distinct q.id from QSO as q, Exchange as e where matchType = 'None' and q.recvdID = e.id and (e.multiplierID is null or e.serial is null or e.name is null);")
+    res.each( :as => :array) { |row|
+      @db.query("update QSO set matchType = 'Removed', comment='Incomplete exchanged received.' where id = #{row[0]} limit 1;")
+    }
     res = @db.query("select q.id, e.callID, e.serial from QSO as q, Exchange as e where q.logID in (#{@logIDs.join(", ")}) and q.matchType = 'None' and e.id = q.recvdID order by q.id asc;")
     res.each(:as => :array) { |row|
       call = @callFromID[row[1]]
@@ -109,5 +114,17 @@ class ResolveSingletons
         @db.query("update QSO set matchType = 'Removed', comment='Unknown callsign ID in record.' where id = #{row[0]} limit 1;")
       end
     }
+  end
+
+  def finalDupeCheck
+    print "Starting final dupe check: #{Time.now.to_s}\n"
+    res = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as e1, Exchange as e2 where q1.logID in (#{@logIDs.join(",")}) and q2.logID in (#{@logIDs.join(",")}) and q1.id < q2.id and q1.logID = q2.logID and q1.matchType in ('Full','Bye') and q2.matchType in ('Full','Bye') and q1.band = q2.band and e1.id = q1.recvdID and e2.id = q2.recvdID and e1.callID = e2.callID order by q1.id;")
+    count = 0
+    res.each(:as => :array) { |row|
+      @db.query("update QSO set matchType = 'Dupe' where id = #{row[1]} and matchType in ('Full','Bye') limit 1;")
+      count = count + @db.affected_rows
+    }
+    print "Done final dupe check: #{Time.now.to_s}\n"
+    count
   end
 end
