@@ -79,7 +79,7 @@ class Multiplier
   def twoThirdsMajority(list, total)
     list.each { |item|
       if (item[2].to_f/total.to_f) >= 2.0/3.0 # two-third majority
-        return item[0]
+        return item[0], item[1]
       end
     }
     nil
@@ -87,22 +87,28 @@ class Multiplier
 
   def askUser(list)
     list = list.sort { |x,y| y[2] <=> x[2] }
-    last.each { |item|
+    list.each { |item|
       print "ID #{item[0]} #{item[1]} #{item[2]}\n"
     }
     print "Please enter the ID number: "
     item = STDIN.gets
-    item.strip.to_i
+    num = item.strip.to_i
+    list.each { |item|
+      if item[0] == num
+        return num, item[1]
+      end
+    }
+    return num, nil
   end
 
-  def markDiscentingQSOasRemoved(id, choice)
+  def markDiscentingQSOasRemoved(id, choice, name)
     qlist = Array.new
     res = @db.query("select q.id from QSO as q, Exchange as e where e.id = q.recvdID and e.callID = #{id} and q.matchType='Bye' and e.multiplierID != #{choice};")
     res.each(:as => :array) { |row|
       qlist << row[0].to_i
     }
     if not qlist.empty?
-      @db.query("update QSO set matchType='Removed' where id in (#{qlist.join(", ")});")
+      @db.query("update QSO set matchType='Removed', comment='Location mismatch #{name}' where id in (#{qlist.join(", ")});")
       return @db.affected_rows
     end
     0
@@ -111,12 +117,12 @@ class Multiplier
 
   def resolveAmbiguous(id, res)
     list, total = toArray(res)
-    choice = twoThirdsMajority(list, total)
+    choice, name = twoThirdsMajority(list, total)
     if not choice
-      choice = askUser(list)
+      choice, name = askUser(list)
     end
     if choice
-      return markDiscentingQSOasRemoved(id, choice)
+      return markDiscentingQSOasRemoved(id, choice, name)
     end
     0
   end

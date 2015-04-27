@@ -5,6 +5,7 @@
 #
 
 require 'jaro_winkler'
+require_relative 'homophone'
 
 class StringSpace
   def initialize
@@ -30,20 +31,22 @@ end
 class Exchange
   @@stringspace = StringSpace.new
 
-  def initialize(basecall, callsign, serial, name, mult, location)
+  def initialize(basecall, callsign, serial, name, mult, location, namecmp)
     @basecall = @@stringspace.register(basecall)
     @callsign = @@stringspace.register(callsign)
     @serial = serial.to_i
     @name = @@stringspace.register(name)
     @mult = @@stringspace.register(mult)
     @location = @@stringspace.register(location)
+    @namecmp = namecmp
   end
 
   attr_reader :basecall, :callsign, :serial, :name, :mult, :location
 
   def probablyMatch(exch)
     callProb(exch) *
-      JaroWinkler.distance(@name, exch.name) *
+      (@namecmp.namesEqual?(@name, exch.name) ? 1.0 :
+       JaroWinkler.distance(@name, exch.name)) *
       [ hillFunc(@serial-exch.serial, 1, 10),
         JaroWinkler.distance(@serial.to_s,exch.serial.to_s) ].max *
       [ JaroWinkler.distance(@mult, exch.mult),
@@ -53,7 +56,8 @@ class Exchange
   def fullMatch?(exch)
     @basecall == exch.basecall and 
       ((@serial - exch.serial).abs <= 1) and
-      @mult == exch.mult
+      @mult == exch.mult and 
+      @namecmp.namesEqual?(@name, exch.name)
   end
 
   def callProb(exch)
@@ -151,6 +155,7 @@ class CrossMatch
     @db = db
     @contestID = contestID.to_i
     @logs = queryContestLogs
+    @namecmp = NameCompare.new(db)
   end
 
   def queryContestLogs
@@ -211,8 +216,10 @@ class CrossMatch
 
   def qsosFromDB(res, qsos = Array.new)
     res.each(:as => :array) { |row|
-      s = Exchange.new(row[6], row[7], row[8], row[9], row[10], row[11])
-      r = Exchange.new(row[12], row[13], row[14], row[15], row[16], row[17])
+      s = Exchange.new(row[6], row[7], row[8], row[9], row[10], row[11], 
+                       @namecmp)
+      r = Exchange.new(row[12], row[13], row[14], row[15], row[16], row[17],
+                       @namecmp)
       qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
                     row[5], s, r)
       qsos << qso
@@ -282,14 +289,14 @@ class CrossMatch
   def perfectMatch(timediff = PERFECT_TIME_MATCH, matchType="Full")
     print "Staring perfect match test phase 1: #{Time.now.to_s}\n"
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2 where " +
+                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
+                    " and q1.logID != q2.logID and q1.id < q2.id and " +
+                    notMatched("q1") + " and " + notMatched("q2") + " and " +
                     linkConstraints("q1", "s1", "r1") + " and " +
                     linkConstraints("q2", "s2", "r2") + " and " +
-                    notMatched("q1") + " and " + notMatched("q2") + " and " +
-                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
-                    " and q1.logID != q2.logID " +
-                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
+                    qsoMatch("q1", "q2", timediff) + " and " +
                     exchangeMatch("r1", "s2") + " and " +
-                    exchangeMatch("r2", "s1") + " and q1.id < q2.id " +
+                    exchangeMatch("r2", "s1") + 
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     num1, num2 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
@@ -339,7 +346,7 @@ class CrossMatch
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Partial match test phase 1: #{Time.now.to_s}\n"
-    full1, partial1 = linkQSOs(@db.query(queryStr), fullType, partialType, false)
+    full1, partial1 = linkQSOs(@db.query(queryStr), fullType, partialType, true)
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
                     linkConstraints("q2", "s2", "r2") + " and " +
@@ -352,7 +359,7 @@ class CrossMatch
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Partial match test phase 2: #{Time.now.to_s}\n"
-    full2, partial2 = linkQSOs(@db.query(queryStr), fullType, partialType, false)
+    full2, partial2 = linkQSOs(@db.query(queryStr), fullType, partialType, true)
     print "Partial match end: #{Time.now.to_s}\n"
     return full1 + full2, partial1 + partial2
   end
@@ -415,7 +422,7 @@ class CrossMatch
                     " (s2.callID = r1.callID or s2.callsign = r1.callsign) " +
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    return linkQSOs(@db.query(queryStr), 'Partial', 'Partial', false)
+    return linkQSOs(@db.query(queryStr), 'Partial', 'Partial', true)
   end
 
   def hillFunc(quantity, fullrange, zerorange)
@@ -454,8 +461,10 @@ class CrossMatch
     res = @db.query(queryStr)
     qsos = Array.new
     res.each(:as => :array) { |row|
-      s = Exchange.new(row[6], row[7], row[8], row[9], row[10], row[11])
-      r = Exchange.new(row[12], row[13], row[14], row[15], row[16], row[17])
+      s = Exchange.new(row[6], row[7], row[8], row[9], row[10], row[11],
+                       @namecmp)
+      r = Exchange.new(row[12], row[13], row[14], row[15], row[16], row[17],
+                       @namecmp)
       qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
                     row[5], s, r)
       qsos << qso

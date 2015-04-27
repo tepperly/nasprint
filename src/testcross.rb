@@ -10,6 +10,7 @@ require_relative 'calctimeadj'
 require_relative 'singletons'
 require_relative 'multiplier'
 require_relative 'report'
+require_relative 'errors'
 
 $name = nil
 $year = nil
@@ -112,6 +113,7 @@ begin
   m = Multiplier.new(db, contestID)
   m.resolveDX
   m.checkByeMultipliers
+  fillInComments(db, contestID)
   r = Report.new(db, contestID)
   r.makeReport
   # 0.94 similarity is good for comparisons

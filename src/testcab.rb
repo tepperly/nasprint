@@ -11,11 +11,13 @@ $makeoutput = true
 $year = nil
 $name = nil
 $addToDB = false
+$create = false
 
 opts = GetoptLong.new(
                       [ '--overwrite', '-O', GetoptLong::NO_ARGUMENT],
                       [ '--help', '-h', GetoptLong::NO_ARGUMENT],
                       [ '--checkonly', '-C', GetoptLong::NO_ARGUMENT],
+                      [ '--new', '-N', GetoptLong::NO_ARGUMENT],
                       [ '--year', '-y', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--name', '-n', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--populate', '-p', GetoptLong::NO_ARGUMENT]
@@ -26,6 +28,8 @@ opts.each { |opt,arg|
     $overwritefile = true
   when '--checkonly'
     $makeoutput = false
+  when '--new'
+    $create = true
   when '--name'
     $name = arg
   when '--populate'
@@ -41,7 +45,7 @@ $addToDB = ($addToDB and $year and $name)
 if $addToDB
   db = makeDB
   contestDB = ContestDatabase.new(db)
-  contestID = contestDB.addOrLookupContest($name, $year, true)
+  contestID = contestDB.addOrLookupContest($name, $year, $create)
   contestDB.contestID = contestID
 end
 

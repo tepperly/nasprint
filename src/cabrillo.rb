@@ -218,7 +218,7 @@ class Cabrillo
       return  MULTIPLIER_ALIASES[tmp]
     else
       $stderr.write("Unknown multiplier: '" + str + "'\n")
-      return nil
+      return tmp
     end
   end
 

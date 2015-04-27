@@ -3,7 +3,7 @@
 require_relative 'callsign'
 
 def calcOpClass(cab)
-  if (cab.logAssisted == "ASSISTED") or (cab.logOperator != "SINGLE-OP")
+  if (cab.logOperator != "SINGLE-OP") # or (cab.logAssisted == "ASSISTED")
     return "CHECKLOG"
   else
     return cab.logPower
