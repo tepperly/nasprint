@@ -5,6 +5,7 @@
 # By Tom Epperly
 # ns6t@arrl.net
 #
+require 'set'
 
 def fixIt(prompt, value, hash)
   if hash.has_key?(value)
@@ -49,7 +50,7 @@ def checkName(name, linechanged, nameChange)
   return newname, (linechanged or (newname != name))
 end
 
-
+MDC_MULTS = ["DC", "MD", "MDC"].to_set.freeze
 
 def checkMultiplier(mult, callsign, linechanged, multChange)
   mult = mult.upcase
@@ -68,12 +69,21 @@ def checkMultiplier(mult, callsign, linechanged, multChange)
     else
       return "MAR", false
     end
+  elsif MDC_MULTS.include?(mult)
+    case callsign.upcase
+    when "4U1WB", "NN3RP", "W3DQ", "W3GQ", "W3HAC"
+      return "DC", ("DC" != mult)
+    else
+      return mult, false
+    end 
   else
     newmult = fixIt("MULT: ", mult, multChange)
     return newmult, (linechanged or (newmult != mult))
   end
 end
 
+
+CHECK_MULTS = ["MR", "MD", "DC", "MDC"].to_set.freeze
 
 def filterLines(filename, lines, callChange, multiplierChange, nameChange, serialChange)
   changed = false
@@ -105,11 +115,11 @@ def filterLines(filename, lines, callChange, multiplierChange, nameChange, seria
         print filename + ":" + (i+1).to_s + ":" + lines[i]
         fields[11], linechanged = checkName(fields[11], linechanged, namechange)
       end
-      if not /\A[A-Z][A-Z]\Z/i.match(fields[8]) or ("MR" == fields[8])
+      if not /\A[A-Z][A-Z]\Z/i.match(fields[8]) or CHECK_MULTS.include?(fields[8])
         print filename + ":" + (i+1).to_s + ":" + lines[i]
         fields[8], linechanged = checkMultiplier(fields[8], fields[5], linechanged, multiplierChange)
       end
-      if not /\A[A-Z][A-Z]\Z/i.match(fields[12]) or ("MR" == fields[12])
+      if not /\A[A-Z][A-Z]\Z/i.match(fields[12]) or CHECK_MULTS.include?(fields[12])
         print filename + ":" + (i+1).to_s + ":" + lines[i]
         fields[12], linechanged = checkMultiplier(fields[12], fields[9], linechanged, multiplierChange)
       end

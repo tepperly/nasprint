@@ -232,7 +232,7 @@ class ContestDatabase
   end
   
   def createPairs
-    @db.query("create table if not exists Pairs (id integer primary key auto_increment, contestID integer not null, line1 varchar(256) not null, line2 varchar(256) not null, ismatch bool, index contind (contestID), index lineind (line1, line2));")
+    @db.query("create table if not exists Pairs (id integer primary key auto_increment, contestID integer not null, line1 varchar(128) not null, line2 varchar(128) not null, ismatch bool, index contind (contestID), index lineind (line1, line2));")
   end
 
   def removePairs(contestID)
