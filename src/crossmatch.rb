@@ -69,6 +69,21 @@ class Exchange
     "%-6s %-7s %4d %-12s %-2s %-4s" % [@basecall, @callsign, @serial,
                                   @name, @mult, @location]
   end
+
+  def self.lookupExchange(db, id, namecmp)
+    res = db.query("select c.basecall, e.callsign, e.serial, e.name, e.location, e.multiplierID from Exchange as e join Callsign as c on c.id = e.callID where e.id = #{id} limit 1;")
+    res.each(:as => :array) { |row|
+      if row[5]
+        mq = db.query("select abbrev from Multiplier where id = #{row[5]} limit 1;")
+        mq.each(:as => :array) { |mrow|
+          return Exchange.new(row[0], row[1], row[2].to_i, row[3], mrow[0], row[4], namecmp)
+        }
+      end
+      return Exchange.new(row[0], row[1], row[2].to_i, row[3], nil, row[4], namecmp)
+    }
+    print "Unable to find exchange #{id}\n"
+    nil
+  end
 end
 
 class QSO
@@ -111,6 +126,25 @@ class QSO
       (reversed ?  (@recvd.to_s + " " + @sent.to_s):
        (@sent.to_s + " " + @recvd.to_s))
   end
+
+  def basicLine
+    ("%5d %-4s %-2s %s " % [@freq, @band, @mode,
+                                  @datetime.strftime("%Y-%m-%d %H%M")]) +
+      @sent.to_s + " " + @recvd.to_s
+  end
+
+  def self.lookupQSO(db, id, namecmp, timeadj=0)
+    res = db.query("select logID, frequency, band, fixedMode, time, sentID, recvdID from QSO where id = #{id} limit 1;")
+    res.each(:as => :array) { |row|
+      sent = Exchange.lookupExchange(db, row[5].to_i, namecmp)
+      recvd = Exchange.lookupExchange(db, row[6].to_i, namecmp)
+      if sent and recvd
+        return QSO.new(id, row[0].to_i, row[1], row[2], row[3], row[4]+timeadj,
+                       sent, recvd)
+      end
+    }
+    nil
+  end
 end
 
 class Match
@@ -123,6 +157,10 @@ class Match
   end
 
   attr_reader :metric, :metric2
+
+  def qsoLines 
+    return @q1.basicLine, @q2.basicLine
+  end
 
   def <=>(match)
       @metric <=> match.metric
@@ -172,8 +210,8 @@ class CrossMatch
   end
 
   def restartMatch
-    @db.query("update QSO set matchID = NULL, matchType = 'None' where logID in #{logSet};")
-    @db.query("update Log set clockadj = 0 where id in #{logSet};")
+    @db.query("update QSO set matchID = NULL, matchType = 'None', comment = NULL where logID in #{logSet};")
+    @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where id in #{logSet};")
   end
 
   def linkConstraints(qso, sent, recvd)
@@ -266,7 +304,7 @@ class CrossMatch
     matches.each(:as => :array) { |row|
       chk = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.id = #{row[0].to_i} and q2.id = #{row[1].to_i} and q1.matchID is null and q2.matchID is null and q1.matchType = 'None' and q2.matchType = 'None' limit 1;")
       found = false
-      chk.each { |chkrow|
+      chk.each(:as => :array) { |chkrow|
         found = true
         @db.query("update QSO set matchID = #{row[1].to_i}, matchType = '#{match1}' where id = #{row[0].to_i} and matchID is null and matchType = 'None' limit 1;")
         count1 = count1 + 1
@@ -376,7 +414,8 @@ class CrossMatch
     num1 = 0
     num2 = 0
     queryStr = "select q1.id, q1.matchType, q2.id, q2.matchType from QSO as q1, QSO as q2, Log as l1, Log as l2 where q1.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.matchID = q2.id and q1.id = q2.matchID and q2.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.id < q2.id and l1.id = q1.logID and l2.id = q2.logID and l1.contestID = #{@contestID} and l2.contestID = #{@contestID} and DATE_ADD(q1.time, interval l1.clockadj second) between DATE_SUB(DATE_ADD(q2.time, interval l2.clockadj second), interval #{PERFECT_TIME_MATCH} minute) and DATE_ADD(DATE_ADD(q2.time, interval l2.clockadj second), interval #{PERFECT_TIME_MATCH} minute) order by q1.id asc;"
-    res = @db.query(queryStr) { |row|
+    res = @db.query(queryStr) 
+    res.each(:as => :array) { |row|
       oneType, num1, num2 = chooseType(row[1], num1, num2)
       twoType, num1, num2 = chooseType(row[3], num1, num2)
       @db.query("update QSO set matchType='#{oneType}' where id = #{row[0].to_i} limit 1;")
@@ -449,6 +488,22 @@ class CrossMatch
     return "#{exch}.multiplierID = #{mult}.id"
   end
 
+  def alreadyPaired?(m)
+    line1, line2 = m.qsoLines
+    line1 = @db.escape(line1)
+    line2 = @db.escape(line2)
+    res = @db.query("select ismatch from Pairs where (line1 = \"#{line1}\" and line2 = \"#{line2}\") or (line1 = \"#{line2}\" and line2 = \"#{line1}\") limit 1;")
+    res.each(:as => :array) { |row|
+      return row[0] == 1 ? "YES" : "NO"
+    }
+    return nil
+  end
+
+  def recordPair(m, matched)
+    line1, line2 = m.qsoLines
+    @db.query("insert into Pairs (contestID, line1, line2, ismatch) values (#{@contestID}, \"#{@db.escape(line1)}\", \"#{@db.escape(line2)}\", #{matched ? 1 : 0});")
+  end
+
   def probMatch
     queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, s.callsign, s.serial, s.name, ms.abbrev, s.location, cr.basecall, r.callsign, r.serial, r.name, mr.abbrev, r.location " +
       " from QSO as q, Exchange as s, Exchange as r, Callsign as cr, Callsign as cs, Multiplier as ms, Multiplier as mr where " +
@@ -496,15 +551,27 @@ class CrossMatch
           print matchtypes.join(" ") + "\n\n"
         end
       else
-        print "Is this a match (y/n): "
-        answer = STDIN.gets
-        if [ "Y", "YES" ].include?(answer.strip.upcase)
-          matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
-          if matchtypes
+        answer = alreadyPaired?(m)
+        if answer
+          if "YES" == answer
+            matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
             print matchtypes.join(" ") + "\n\n"
+          else
+            print "Not a match.\n"
           end
         else
-          print "Not a match.\n"
+          print "Is this a match (y/n): "
+          answer = STDIN.gets
+          if [ "Y", "YES" ].include?(answer.strip.upcase)
+            matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
+            if matchtypes
+              print matchtypes.join(" ") + "\n\n"
+            end
+            recordPair(m, true)
+          else
+            print "Not a match.\n"
+            recordPair(m, false)
+          end
         end
       end
     }

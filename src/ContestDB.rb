@@ -48,6 +48,12 @@ class ContestDatabase
     if not (tables.include?("Exchange") and tables.include?("QSO"))
       createQSOTable
     end
+    if not tables.include?("Overrides")
+      createOverrides
+    end
+    if not tables.include?("Pairs")
+      createPairs
+    end
   end
 
   def createContestTable
@@ -217,8 +223,28 @@ class ContestDatabase
     return nil, nil
   end
 
+  def createOverrides
+    @db.query("create table if not exists Overrides (id integer primary key auto_increment, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, multiplierID integer not null, entityID integer not null, index callindex (callsign));")
+  end
+
+  def removeOverrides(contestID)
+    @db.query("delete from Overrides where contestID = #{contestID};")
+  end
+  
+  def createPairs
+    @db.query("create table if not exists Pairs (id integer primary key auto_increment, contestID integer not null, line1 varchar(256) not null, line2 varchar(256) not null, ismatch bool, index contind (contestID), index lineind (line1, line2));")
+  end
+
+  def removePairs(contestID)
+    @db.query("delete from Pairs where contestID = #{contestID};")
+  end
+
   def removeExchange(id)
-    @db.query("delete from Exchange where id = #{id.to_i} limit 1;")
+    if id.respond_to?('join')
+      @db.query("delete from Exchange where id in (#{id.join(", ")}) limit #{id.size};")
+    else
+      @db.query("delete from Exchange where id = #{id.to_i} limit 1;")
+    end
   end
 
   def addExchange(callsign, callID, serial, name, location, multID,
@@ -238,5 +264,26 @@ class ContestDatabase
   def insertQSO(logID, frequency, band, roughMode, mode, datetime,
                 sentID, recvdID, transNum)
     @db.query("insert into QSO (logID, frequency, band, mode, fixedMode, time, sentID, recvdID, transmitterNum) values (#{numOrNull(logID)}, #{numOrNull(frequency)}, #{strOrNull(band)}, #{capOrNull(roughMode)}, #{strOrNull(mode)}, #{dateOrNull(datetime)}, #{numOrNull(sentID)}, #{numOrNull(recvdID)}, #{numOrNull(transNum)});")
+  end
+
+  def removeContestQSOs(contestID)
+    logs = Array.new
+    exchanges = Array.new
+    res = @db.query("select id from Log where contestID = #{contestID};")
+    res.each(:as => :array) { |row| logs << row[0] }
+    res = @db.query("select recvdID, sentID from QSO where logID in (#{logs.join(", ")});")
+    res.each(:as => :array) { |row| 
+      removeExchange([row[0], row[1]])
+    }
+    @db.query("delete from QSO where logID in (#{logs.join(", ")});")
+    @db.query("delete from Callsign where contestID = #{contestID};")
+    @db.query("delete from Log where contestID = #{contestID};")
+  end
+
+  def removeWholeContest(contestID)
+    removeContestQSOs(contestID)
+    removeOverrides(contestID)
+    removePairs(contestID)
+    @db.query("delete from Contest where contestID = #{contestID} limit 1;")
   end
 end

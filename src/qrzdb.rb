@@ -40,15 +40,17 @@ end
 
 
 def lookupCall(qrz, db, call)
-  str, xml = qrz.lookupCall(call)
-  if str and xml
-    open("xml_db/#{call}.xml", "w:iso-8859-1") { |out|
-      out.write(str)
-    }
-    return addToDb(db, xml, "xml_db/#{call}.xml")
-  else
-    print "Lookup failed: #{call}\n"
-    return false
+  if qrz
+    str, xml = qrz.lookupCall(call)
+    if str and xml
+      open("xml_db/#{call}.xml", "w:iso-8859-1") { |out|
+        out.write(str)
+      }
+      return addToDb(db, xml, "xml_db/#{call}.xml")
+    else
+      print "Lookup failed: #{call}\n"
+      return false
+    end
   end
-  true
+  false
 end

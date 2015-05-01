@@ -4,6 +4,10 @@
 require 'set'
 
 class Log
+  WAS = %w(AK AL AR AZ CA CO CT DE FL GA HI IA ID IL IN KS KY LA MA ME MI 
+           MN MO MS MT NC ND NE NH NJ NM NV NY OH OK OR PA RI SC SD TN TX 
+           UT VA VT WA WI WV WY ).freeze
+
   def initialize(call, email, opclass)
     @call = call
     @email = email
@@ -33,8 +37,29 @@ class Log
     @multipliers.add(name)
   end
 
+  def numqsos
+    @numFull+@numBye-@numNIL
+  end
+
+  def nummultipliers
+    @multipliers.size
+  end
+
+  def was?
+    WAS.each { |state| 
+      if not @multipliers.include?(state)
+        return false
+      end
+    }
+    return (@multipliers.include?("MD") or @multipliers.include?("DC"))
+  end
+
+  def score
+    numqsos * nummultipliers
+  end
+
   def to_s
-    "\"#{@call}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",#{@numFull},#{@numBye},#{@numUnique},#{@numDupe},#{@numPartial+@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numFull+@numBye-@numNIL},#{@multipliers.size},#{(@numFull+@numBye-@numNIL)*@multipliers.size},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",#{@numFull},#{@numBye},#{@numUnique},#{@numDupe},#{@numPartial+@numRemoved},#{@numNIL},#{@numOutsideContest},#{was? ? 1 : 0},#{@numFull+@numBye-@numNIL},#{@multipliers.size},#{(@numFull+@numBye-@numNIL)*@multipliers.size},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -88,9 +113,10 @@ class Report
     res.each(:as => :array) { |row|
       log = Log.new(row[0], row[1], row[2])
       scoreLog(row[3],log)
+      @db.query("update Log set verifiedscore = #{log.score}, verifiedQSOs = #{log.numqsos}, verifiedMultipliers = #{log.nummultipliers} where id = #{row[3]} limit 1;")
       logs << log
     }
-    print "\"Callsign\",\"Email\",\"Operator Class\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\n"
+    print "\"Callsign\",\"Email\",\"Operator Class\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"WAS?\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\n"
     logs.each { |log|
       print log.to_s + "\n"
     }

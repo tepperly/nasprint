@@ -11,6 +11,7 @@ require_relative 'singletons'
 require_relative 'multiplier'
 require_relative 'report'
 require_relative 'errors'
+require_relative 'dumplog'
 
 $name = nil
 $year = nil
@@ -48,13 +49,18 @@ opts.each { |opt,arg|
 }
 
 def checkCallsigns(db, cid, user, pwd)
-  qrz = QRZLookup.new(user, pwd)
+  if user and pwd
+    qrz = QRZLookup.new(user, pwd)
+  else
+    qrz = nil
+  end
   xmldb = readXMLDb()
   res = db.query("select id, basecall from Callsign where contestID = #{cid.to_i} and validcall is null;")
   res.each(:as => :array) { |row|
     if xmldb.has_key?(row[1]) or lookupCall(qrz, xmldb, row[1])
       db.query("update Callsign set validcall = 1 where id = #{row[0].to_i} limit 1;")
     else
+      db.query("update Callsign set validcall = 0 where id = #{row[0].to_i} limit 1;");
       print "Callsign #{row[1]} is unknown to QRZ.\n"
     end
   }
@@ -74,9 +80,7 @@ begin
   if $restart
     cm.restartMatch
   end
-  if $qrzuser and $qrzpwd
-    checkCallsigns(db, contestID, $qrzuser, $qrzpwd)
-  end
+  checkCallsigns(db, contestID, $qrzuser, $qrzpwd)
   num1, num2 = cm.perfectMatch
   print "Perfect matches: #{num1}\n"
   print "Perfect matches with homophones: #{num2}\n"
@@ -113,9 +117,10 @@ begin
   m = Multiplier.new(db, contestID)
   m.resolveDX
   m.checkByeMultipliers
-  fillInComments(db, contestID)
+  fillInComment(db, contestID)
   r = Report.new(db, contestID)
   r.makeReport
+  dumpLogs(db, contestID)
   # 0.94 similarity is good for comparisons
 rescue Mysql2::Error => e
   print e.to_s + "\n"
