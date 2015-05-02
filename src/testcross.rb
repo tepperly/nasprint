@@ -84,17 +84,22 @@ begin
   num1, num2 = cm.perfectMatch
   print "Perfect matches: #{num1}\n"
   print "Perfect matches with homophones: #{num2}\n"
+  $stdout.flush
   num3, partial = cm.partialMatch
   print "Full matches partial: #{num3}\n"
   print "Partial matches full: #{partial}\n"
+  $stdout.flush
   num1, num2 = cm.perfectMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull')
   print "Time shifted perfect matches: #{num1}\n"
   print "Time shifted perfect matches with homophones: #{num2}\n"
+  $stdout.flush
   num3, partial = cm.partialMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull', 'TimeShiftPartial')
   print "Time shifted full matches partial: #{num3}\n"
   print "Time shifted partial matches full: #{partial}\n"
+  $stdout.flush
   p1, p2 = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
   print "Basic QSO matches within 24 hours: #{p1+p2}\n"
+  $stdout.flush
   cm.probMatch
   print "Calculating clock drift\n"
   ct = CalcTimeAdj.new(db, contestID)
@@ -102,8 +107,10 @@ begin
   ct.buildMatrix
   timeviolation = ct.markOutOfContest
   print "QSOs outside contest time period: #{timeviolation}\n"
+  $stdout.flush
   num1, num2 = cm.resolveShifted
   print "Time shift resolved #{num1} full and #{num2} partial\n"
+  $stdout.flush
   d1 = cm.ignoreDups
   print "Duplicates of matches: #{d1}\n"
   ct = nil
@@ -111,6 +118,7 @@ begin
   print "Not In Log penalties: #{nil1}\n"
   singles = ResolveSingletons.new(db, contestID)
   print "Resolving singletons\n"
+  $stdout.flush
   singles.resolve
   num = singles.finalDupeCheck
   print "#{num} Dupe QSOs identified during final check\n."

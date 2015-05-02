@@ -104,7 +104,7 @@ class QSO
     (qso.logID == @logID) ? 0 :
       (@sent.probablyMatch(qso.recvd) *
        @recvd.probablyMatch(qso.sent) *
-       ((@band == qso.band) ? 1.0 : 0.99) *
+       ((@band == qso.band) ? 1.0 : 0.85) *
        hillFunc(@datetime - qso.datetime, 15*60, 24*60*60))
   end
 
@@ -326,6 +326,7 @@ class CrossMatch
 
   def perfectMatch(timediff = PERFECT_TIME_MATCH, matchType="Full")
     print "Staring perfect match test phase 1: #{Time.now.to_s}\n"
+    $stdout.flush
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2 where " +
                     "q1.logID in " + logSet + " and q2.logID in " + logSet +
                     " and q1.logID != q2.logID and q1.id < q2.id and " +
@@ -351,6 +352,7 @@ class CrossMatch
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Perfect match test phase 2: #{Time.now.to_s}\n"
+    $stdout.flush
     num2, num3 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
     num2 = num2 + num3
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h1, Homophone as h2 where " +
@@ -365,6 +367,7 @@ class CrossMatch
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Perfect match test phase 3: #{Time.now.to_s}\n"
+    $stdout.flush
     num3, num4 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
     num2 = num2 + num3 + num4
     print "Ending perfect match test: #{Time.now.to_s}\n"
@@ -384,6 +387,7 @@ class CrossMatch
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Partial match test phase 1: #{Time.now.to_s}\n"
+    $stdout.flush
     full1, partial1 = linkQSOs(@db.query(queryStr), fullType, partialType, true)
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h where " +
                     linkConstraints("q1", "s1", "r1") + " and " +
@@ -397,6 +401,7 @@ class CrossMatch
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Partial match test phase 2: #{Time.now.to_s}\n"
+    $stdout.flush
     full2, partial2 = linkQSOs(@db.query(queryStr), fullType, partialType, true)
     print "Partial match end: #{Time.now.to_s}\n"
     return full1 + full2, partial1 + partial2
@@ -526,6 +531,7 @@ class CrossMatch
     }
     print "#{qsos.length} unmatched QSOs read in\n"
     print "Starting probability-based cross match: #{Time.now.to_s}\n"
+    $stdout.flush
     matches = Array.new
     alreadyseen = Hash.new
     qsos.each { |q1|
@@ -542,6 +548,7 @@ class CrossMatch
     }
     print "Done ranking potential matches: #{Time.now.to_s}\n"
     print matches.length.to_s + " possible matches selected\n"
+    $stdout.flush
     matches.sort! { |a,b| b <=> a }
     matches.each { |m|
       print m.to_s + "\n"

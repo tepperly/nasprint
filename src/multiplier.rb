@@ -41,7 +41,7 @@ class Multiplier
 
   def checkOverride(call)
     res = @db.query("select entityID from Overrides where contestID = #{@contestID} and callsign = \"#{call}\" limit 1;")
-    res.each(:as => :array) { |row| row[0].to_i }
+    res.each(:as => :array) { |row| return row[0].to_i }
     nil
   end
 
