@@ -36,12 +36,11 @@ class ContestDatabase
     if not tables.include?("Entity")
       createEntityTable
     end
-    if not tables.include?("Homophone")
-      createHomophoneTable
-    end
-    if not (tables.include?("Multiplier") and tables.include?("MultiplierAlias"))
+    createHomophoneTable
+    if not tables.include?("Multiplier")
       createMultiplierTable
     end
+    createMultiplierAlias
     if not (tables.include?("Callsign") and tables.include?("Log"))
       createLogTable
     end
@@ -94,7 +93,6 @@ class ContestDatabase
         end
       }
     }
-
   end
 
   def createMultiplierTable
@@ -116,6 +114,9 @@ class ContestDatabase
         end
       end
     }
+  end
+  
+  def createMultiplierAlias
     @db.query("create table if not exists MultiplierAlias (id integer primary key auto_increment, abbrev varchar(32) not null unique, multiplierID integer not null, entityID integer not null);")
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii") { |row|
       if row[0] != row[1]
@@ -140,7 +141,7 @@ class ContestDatabase
       end
     }
   end
-
+  
   def createLogTable
     # table of callsigns converted to base format
     @db.query("create table if not exists Callsign (id integer primary key auto_increment, contestID integer not null, basecall varchar(#{CHARS_PER_CALL}) not null, logrecvd bool, validcall bool, index bcind (contestID, basecall));")

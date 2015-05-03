@@ -68,11 +68,26 @@ class ResolveSingletons
   def farMoreCommon(list, count)
     if list
       sorted = list.sort { |x,y| y.numQSOs <=> x.numQSOs }
-      if (sorted[0].numQSOs >= 10) and (sorted[0].numQSOs >= 5*count)
+      if (sorted[0].numQSOs >= 10) and (sorted[0].numQSOs >= 10*count) and sorted[0].haveLog
         return sorted[0]
       end
     end
     nil
+  end
+
+  def exchangeClose(qid, call)
+    res = @db.query("select e.name, m.abbrev from QSO as q join Exchange as e on e.id = q.recvdID left join Multiplier as m on m.id = e.multiplierID where q.id = #{qid} limit 1;")
+    res.each(:as => :array) { |row|
+      ref = @db.query("select e.name, m.abbrev from Callsign as c join Log as l on (l.contestID = #{@contestID} and  c.id = l.callID) join QSO as q join Exchange as e on e.id = q.recvdID left join Multiplier as m on m.id = e.multiplierID where c.basecall = \"#{call}\" limit 1;")
+      print "exchangeClose1 #{row[0]} #{row[1]}\n"
+      ref.each(:as => :array) { |refrow|
+        print "exchangeClose2 #{refrow[0]} #{refrow[1]}\n"
+        if JaroWinkler.distance(row[0], refrow[0]) >= 0.92 and JaroWinkler.distance(row[1], refrow[1])
+          return true
+        end
+      }
+    }
+    false
   end
 
 
@@ -102,7 +117,7 @@ class ResolveSingletons
             else
               list = possibleMatches(call.id, call.callsign)
               mc = farMoreCommon(list, call.numQSOs)
-              if mc
+              if mc and exchangeClose(row[0],mc)
                 @db.query("update QSO set matchType = 'Removed', comment='Busted call - likely match: #{mc.callsign}.'  where id = #{row[0]} limit 1;")
               else
                 @db.query("update QSO set matchType = 'Bye' where id = #{row[0]} limit 1;")

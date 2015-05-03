@@ -76,6 +76,12 @@ def checkMultiplier(mult, callsign, linechanged, multChange)
     else
       return mult, false
     end 
+  elsif "DX" == mult
+    if /^[AKN]H6/.match(callsign.upcase)
+      return "HI", ("HI" != mult)
+    else
+      return mult, false
+    end
   else
     newmult = fixIt("MULT: ", mult, multChange)
     return newmult, (linechanged or (newmult != mult))
@@ -83,7 +89,7 @@ def checkMultiplier(mult, callsign, linechanged, multChange)
 end
 
 
-CHECK_MULTS = ["MR", "MD", "DC", "MDC"].to_set.freeze
+CHECK_MULTS = ["MR", "MD", "DC", "MDC", "DX"].to_set.freeze
 
 def filterLines(filename, lines, callChange, multiplierChange, nameChange, serialChange)
   changed = false

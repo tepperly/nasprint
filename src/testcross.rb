@@ -65,7 +65,20 @@ def checkCallsigns(db, cid, user, pwd)
     end
   }
 end
-    
+
+NUMSECS=5
+NUMDOTS=3
+if $restart
+  print "Restarting in 5 seconds: "
+  NUMSECS.times { |i|
+    print (NUMSECS-i).to_s
+    NUMDOTS.times { 
+      sleep (1.0/NUMDOTS)
+      print "."
+    }
+  }
+  print "0  Done.\n"
+end    
 
 db = makeDB
 contestDB = ContestDatabase.new(db)

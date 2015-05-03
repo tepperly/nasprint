@@ -41,7 +41,11 @@ class Multiplier
 
   def checkOverride(call)
     res = @db.query("select entityID from Overrides where contestID = #{@contestID} and callsign = \"#{call}\" limit 1;")
-    res.each(:as => :array) { |row| return row[0].to_i }
+    print "Checking #{call}\n"
+    res.each(:as => :array) { |row| 
+      print "result #{row[0]}\n"
+      return row[0].to_i 
+    }
     nil
   end
 
@@ -49,6 +53,7 @@ class Multiplier
     res = @db.query("select distinct c.id, c.basecall from QSO as q, Exchange as e, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye') and q.recvdID = e.id and m.abbrev='DX' and c.id = e.callID and m.entityID is null and m.id = e.multiplierID and q.logID in (#{@logs.join(", ")});")
     res.each(:as => :array) { |row|
       entity = checkOverride(row[1])
+      override = entity
       if not entity and @callDB.has_key?(row[1])
         entity = lookupEntity(@callDB[row[1]])
       end
@@ -63,7 +68,11 @@ class Multiplier
         when 110 # Hawaii
           @db.query("update Exchange set entityID = #{entity}, multiplierID = #{@hawaiiID} where callID = #{row[0]};")
         else
-          @db.query("update Exchange set entityID = #{entity} where callID = #{row[0]} and entityID is null;")
+          if override
+            @db.query("update Exchange set entityID = #{entity} where callID = #{row[0]};")
+          else
+            @db.query("update Exchange set entityID = #{entity} where callID = #{row[0]} and entityID is null;")
+          end
         end
       else
         print "Skipping callsign #{row[1]}\n"
