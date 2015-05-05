@@ -171,6 +171,7 @@ class Cabrillo
     @filename = filename
     @cabversion = nil
     @certificate = nil
+    @name = nil
     @claimed = nil
     @section = nil
     @location = nil
@@ -201,7 +202,7 @@ class Cabrillo
     parse
   end
 
-  attr_reader :cleanparse, :logcall, :qsos
+  attr_reader :cleanparse, :logcall, :qsos, :club, :name
 
   def trans(oldstate, newstate)
     if @parsestate <= oldstate
@@ -406,9 +407,9 @@ class Cabrillo
           @logCat.sentQTH = MULTIPLIER_ALIASES[@section]
         end
       end
-    when /\Aclub(-name)?:\s*(.*)/i
+    when /\A(team|club(-name)?):\s*(.*)/i
       trans(1, 1)
-      @club = $2.strip.gsub(/\s+/, " ")
+      @club = $3.strip.gsub(/\s+/, " ")
     when /\Aiota-island-name:\s*(.*)/i
       trans(1, 1)
       @iota = $1.strip.gsub(/s+/, " ")
@@ -427,9 +428,9 @@ class Cabrillo
       if MULTIPLIER_ALIASES[@location]
         @logCat.sentQTH = MULTIPLIER_ALIASES[@location]
       end
-    when /\Aname:\s*(.*)/i
+    when /\A(category-)?name:\s*(.*)/i
       trans(1, 1)
-      @name = $1.strip.gsub(/\s+/, " ")
+      @name = $2.strip.gsub(/\s+/, " ")
     when /\Aaddress:\s*(.*)/i
       trans(1, 1)
       @address << $1.strip

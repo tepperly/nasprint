@@ -78,6 +78,25 @@ class Multiplier
         print "Skipping callsign #{row[1]}\n"
       end
     }
+
+    res = @db.query("select distinct l.id, c.basecall, l.callsign, m.entityID from Log as l join Callsign as c on l.callID = c.id left join Multiplier as m on m.id = l.multiplierID where l.entityID is null;")
+    res.each(:as => :array) { |row|
+      if row[3]
+        @db.query("update Log set entityID = #{row[3].to_i} where id = #{row[0].to_i} limit 1;")
+      else                      # multiplier entity is NULL
+        entity = checkOverride(row[1])
+        override = entity
+        if not entity and @callDB.has_key?(row[1])
+          entity = lookupEntity(@callDB[row[1]])
+        end
+        if not entity and @callDB.has_key?(row[2])
+          entity = lookupEntity(@callDB[row[2]])
+        end
+        if entity
+          @db.query("update Log set entityID = #{entity.to_i} where id = #{row[0].to_i} limit 1;")
+        end
+      end
+    }
   end
 
   def toArray(res)

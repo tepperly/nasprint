@@ -82,7 +82,7 @@ def addLog(db, cID, cab)
       db.markReceived(bcID)
       logID = db.addLog(cID, cab.logcall, bcID, cab.logEmail,
                         calcOpClass(cab),
-                        multID, entID)
+                        multID, entID, cab.name, cab.club)
       addQSOs(db, cID, logID, cab.qsos)
     else
       print "!!Can't add a log with no location\n"

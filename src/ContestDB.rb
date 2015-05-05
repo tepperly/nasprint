@@ -33,9 +33,9 @@ class ContestDatabase
     if not tables.include?("Contest")
       createContestTable
     end
-    if not tables.include?("Entity")
+#    if not tables.include?("Entity")
       createEntityTable
-    end
+#    end
     createHomophoneTable
     if not tables.include?("Multiplier")
       createMultiplierTable
@@ -76,13 +76,17 @@ class ContestDatabase
     }
   end
 
+  def extractPrefix(prefix)
+    
+  end
+
   def createEntityTable
-    @db.query("create table if not exists Entity (id integer primary key, name varchar(64) not null, continent enum ('AS', 'EU', 'AF', 'OC', 'NA', 'SA', 'AN') not null);")
+    @db.query("create table if not exists Entity (id integer primary key, name varchar(64) not null, prefix varchar(8), continent enum ('AS', 'EU', 'AF', 'OC', 'NA', 'SA', 'AN') not null);")
     open(File.dirname(__FILE__) + "/entitylist.txt", "r:ascii") { |inf|
       inf.each { |line|
-        if (line =~ /^\s+\S+\s+(.*)\s+([a-z][a-z](,[a-z][a-z])?)\s+\S+\s+\S+\s+(\d+)\s*$/i)
+        if (line =~ /^\s+(\S+)\s+(.*)\s+([a-z][a-z](,[a-z][a-z])?)\s+\S+\s+\S+\s+(\d+)\s*$/i)
           begin
-            @db.query("insert into Entity (id, name, continent) values (#{$4.to_i}, \"#{@db.escape($1.strip)}\", \"#{@db.escape($2[0,2])}\");")
+            @db.query("insert into Entity (id, name, continent) values (#{$5.to_i}, \"#{@db.escape($2.strip)}\", \"#{@db.escape($3[0,2])}\");")
           rescue Mysql2::Error => e
             if e.error_number != 1062 # ignore duplicate entry
               raise e
@@ -92,6 +96,15 @@ class ContestDatabase
           "Entity line doesn't match: #{line}"
         end
       }
+    }
+    CSV.foreach(File.dirname(__FILE__) + "/prefixlist.txt", "r:ascii") { |row|
+      begin
+        @db.query("update Entity set prefix = \"#{@db.escape(row[1].to_s)}\" where id = #{row[0].to_i} limit 1;")
+      rescue Mysql2::Error => e
+        if e.error_number != 1062 # ignore duplicate entry
+          raise e
+        end
+      end
     }
   end
 
@@ -145,7 +158,7 @@ class ContestDatabase
   def createLogTable
     # table of callsigns converted to base format
     @db.query("create table if not exists Callsign (id integer primary key auto_increment, contestID integer not null, basecall varchar(#{CHARS_PER_CALL}) not null, logrecvd bool, validcall bool, index bcind (contestID, basecall));")
-    @db.query("create table if not exists Log (id integer primary key auto_increment, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, opclass enum('CHECKLOG', 'QRP', 'LOW', 'HIGH'), verifiedscore integer, verifiedQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, index callind (callsign), index contestind (contestID));")
+    @db.query("create table if not exists Log (id integer primary key auto_increment, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, opclass enum('CHECKLOG', 'QRP', 'LOW', 'HIGH'), verifiedscore integer, verifiedQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, name varchar(128), club varchar(128), index callind (callsign), index contestind (contestID));")
   end
 
   def createQSOTable
@@ -211,8 +224,8 @@ class ContestDatabase
     @db.query("update Callsign set logrecvd = 1 where id = #{callID.to_i} limit 1;")
   end
 
-  def addLog(contID, callsign, callID, email, opclass, multID, entID)
-    @db.query("insert into Log (contestID, callsign, callID, email, opclass, multiplierID, entityID) values (#{contID.to_i}, #{capOrNull(callsign)}, #{callID.to_i}, #{strOrNull(email)}, #{strOrNull(opclass)}, #{multID.to_i}, #{numOrNull(entID)});")
+  def addLog(contID, callsign, callID, email, opclass, multID, entID, name, club)
+    @db.query("insert into Log (contestID, callsign, callID, email, opclass, multiplierID, entityID, name, club) values (#{contID.to_i}, #{capOrNull(callsign)}, #{callID.to_i}, #{strOrNull(email)}, #{strOrNull(opclass)}, #{multID.to_i}, #{numOrNull(entID)},#{strOrNull(name)},#{strOrNull(club)});")
     return @db.last_id
   end
 
@@ -256,7 +269,7 @@ class ContestDatabase
 
   def dateOrNull(date)
     if date
-      return date.strftime("\"%Y-%m-%d %H:%M:%S\"")
+      return "cast(" + date.strftime("\"%Y-%m-%d %H:%M:%S\"") + " as datetime)"
     else
       "NULL"
     end
@@ -286,5 +299,78 @@ class ContestDatabase
     removeOverrides(contestID)
     removePairs(contestID)
     @db.query("delete from Contest where contestID = #{contestID} limit 1;")
+  end
+
+  def logsByMultipliers(contestID, multipliers)
+    logs = Array.new
+    if multipliers.is_a?(String)
+      multiplierConstraints = " = \"#{@db.escape(multipliers)}\""
+    else
+      if multipliers.empty?
+        return logs
+      else
+        multiplierConstraints = " in (#{multipliers.map { |x| "\"" + @db.escape(x.to_s) + "\"" }.join(", ")})"
+      end
+    end
+    res = @db.query("select l.id from Log as l join Multiplier as m on l.multiplierID = m.id where l.contestID = #{contestID} and m.abbrev #{multiplierConstraints} order by l.verifiedscore desc, l.verifiedMultipliers desc, l.callsign asc")
+    res.each(:as => :array) { |row|
+      logs << row[0].to_i
+    }
+    return logs
+  end
+
+  def numBandChanges(logID)
+    count = 0
+    prev = nil
+    res = @db.query("select q.band from QSO as q join Exchange as e on e.id = q.sentID where q.logID = #{logID.to_i} order by q.time asc, e.serial asc, q.id asc;")
+    res.each(:as => :array) { |row|
+      if row[0].to_s != prev
+        count = count + 1
+        prev = row[0].to_s
+      end
+    }
+    return (count > 0) ? (count - 1) : 0
+  end
+
+  def qsosByBand(logID)
+    res = @db.query("select band, matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL') group by band, matchType order by band asc, matchType asc;")
+    results = Hash.new(0)
+    res.each(:as => :array) { |row|
+      case row[1]
+      when 'Full', 'Bye'
+        results[row[0]] = results[row[0]] + row[2].to_i
+      when 'NIL'
+        results[row[0]] = results[row[0]] - row[2].to_i
+      end
+    }
+    return results
+  end
+
+  def qsosByHour(logID)
+    results = Array.new
+    cres = @db.query("select c.start, c.end from Contest as c join Log as l on l.contestID = c.id and l.id = #{logID} limit 1;")
+    cres.each(:as => :array) { |crow|
+      tstart = row[0]
+      tend = row[1]
+      prev = tstart - 24*60*60
+      numHours = (tend - tstart)/3600
+      results = Array.new(numHours)
+      numHours.times {  |i|
+        res = @db.query("select matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL') and time between #{dateOrNull(prev)} and #{dateOrNull(tstart + 3600*i - 1)} order by matchType asc;")
+        res.each(:as => :array) { |row|
+          case row[0]
+          when 'Full', 'Bye'
+            results[i] = results[i] + row[1].to_i
+          when 'NIL'
+            results[i] = results[i] - row[1].to_i
+          end
+        }
+      }
+    }
+    return results
+  end
+  
+  def logInfo(logID)
+    res = @db.query("select l.callsign, l.name, m.abbrev")
   end
 end
