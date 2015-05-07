@@ -6,7 +6,7 @@
 
 require 'set'
 require 'getoptlong'
-# require 'humanize'
+require 'humanize'
 require_relative 'database'
 require_relative 'ContestDB'
 
@@ -97,17 +97,23 @@ def printArea(cdb, logs, key)
   }
 end
 
-def topReport(cdb, cid, num, title, opclass=nil, criteria="verifiedscore", columnHeading="Score")
+def topReport(cdb, cid, num, title, full=true, opclass=nil, criteria="verifiedscore", columnHeading="Score")
   logs = cdb.topLogs(cid, num, opclass, criteria)
   if not logs.empty?
-    print title + "\n"
-    print "Call Sign  %-13s  Bnd Chgs  Qs Lost    00Z    01Z    02Z    03Z\n" % [columnHeading]
-    print "=========  =============  ========  =======  =====  =====  =====  =====\n"
+    print "Top " + logs.length.humanize.capitalize + " " + title + "\n"
+    if full
+      print "Call Sign  %-13s  Bnd Chgs  Qs Lost    00Z    01Z    02Z    03Z\n=========  =============  ========  =======  =====  =====  =====  =====\n" % [columnHeading]
+    else
+      print "Call Sign  %-13s\n=========  =============\n" % [columnHeading]
+    end
     logs.each { |row|
-      print "%-9s  %13s    %4d      %3d  " % [row[0], commaScore(row[1]), row[2], row[3] ]
-      row[4].each { |hour|
-        print "  %5d" % hour
-      }
+      print "%-9s  %13s" % [row[0], commaScore(row[1])]
+      if full
+        print "   %4d       %3d  " %  [ row[2], row[3] ]
+        row[4].each { |hour|
+          print "  %5d" % hour
+        }
+      end
       print "\n"
     }
     print "\n"
@@ -136,12 +142,12 @@ if $name and $year
       end
     }
     print "\n"
-    topReport(cdb, contestID, 10, "Top Ten Scores")
-    topReport(cdb, contestID, 10, "Top Ten High Power", "High")
-    topReport(cdb, contestID, 10, "Top Ten Low Power", "Low")
-    topReport(cdb, contestID, 10, "Top Ten QRP", "QRP")
-    topReport(cdb, contestID, 10, "Top Ten QSO Totals", nil, "verifiedqsos", "# QSOs")
-    topReport(cdb, contestID, 10, "Top Ten Multipliers", nil, "verifiedMultipliers", "# Multipliers")
+    topReport(cdb, contestID, 10, "Scores")
+    topReport(cdb, contestID, 10, "High Power", true, "High")
+    topReport(cdb, contestID, 10, "Low Power", true, "Low")
+    topReport(cdb, contestID, 10, "QRP", true, "QRP")
+    topReport(cdb, contestID, 10, "QSO Totals", false, nil, "verifiedqsos", "# QSOs")
+    topReport(cdb, contestID, 10, "Multipliers", false, nil, "verifiedMultipliers", "# Multipliers")
 
   ensure
     db.close

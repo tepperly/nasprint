@@ -406,7 +406,7 @@ class ContestDatabase
     res.each(:as => :array) {|row|
       name = firstName(row[1])
       if not name or name.length == 0
-        namequery = @db.query("select e.name from Exchange as e join QSO as q on q.sentID = e.id order by q.id asc limit 1;")
+        namequery = @db.query("select e.name from Exchange as e join QSO as q on q.sentID = e.id where q.logID = #{logID} order by q.id asc limit 1;")
         namequery.each(:as => :array) { |nrow|
           if name and name.length > 0
             if nrow[0].length < name.length
@@ -435,11 +435,27 @@ class ContestDatabase
     count
   end
 
+  # In the case of ties, this can return more than num
   def topLogs(contestID, num, opclass=nil, criteria="verifiedscore")
     logs = Array.new
-    res = @db.query("select l.id, l.callsign, l.#{criteria} from Log as l where l.contestID = #{contestID} " +
-                    (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
-                    "order by l.#{criteria} desc limit #{num};")
+    basicQuery = "select l.id, l.callsign, l.#{criteria} from Log as l where l.contestID = #{contestID} " +
+      (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
+      "order by l.#{criteria} desc, l.callsign asc limit #{num-1}, 1;"
+    # get score of last item on list
+    res = @db.query(basicQuery)
+    limit = nil
+    res.each(:as => :array) { |row|
+      limit = row[2]
+    }
+    if limit
+      res = @db.query("select l.id, l.callsign, l.#{criteria} from Log as l where l.contestID = #{contestID} and l.#{criteria} >= #{limit} " +
+      (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
+      "order by l.#{criteria} desc, l.callsign asc;")
+    else
+      res = @db.query("select l.id, l.callsign, l.#{criteria} from Log as l where l.contestID = #{contestID} " +
+      (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
+                      "order by l.#{criteria} desc, l.callsign asc limit #{num};")
+    end
     res.each(:as => :array) { |row|
       logs << [ row[1], row[2], numBandChanges(row[0]), lostQSOs(row[0]), qsosByHour(row[0])]
     }
