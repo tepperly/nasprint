@@ -33,10 +33,12 @@ class ContestDatabase
     if not tables.include?("Contest")
       createContestTable
     end
-#    if not tables.include?("Entity")
+    if not tables.include?("Entity")
       createEntityTable
-#    end
-    createHomophoneTable
+    end
+    if not tables.include?("Homophone")
+      createHomophoneTable
+    end
     if not tables.include?("Multiplier")
       createMultiplierTable
     end
@@ -319,6 +321,22 @@ class ContestDatabase
     return logs
   end
 
+  def logsByContinent(contestID, continent)
+    result = Array.new
+    res = @db.query("select id from Multiplier where abbrev='DX' limit 1;")
+    multID = nil
+    res.each(:as => :array) { |row|
+      multID = row[0].to_i
+    }
+    if multID
+      res = @db.query("select l.id from Log as l join Entity as e on e.id = l.entityID where l.contestID = #{contestID} and l.multiplierID = #{multID} and e.continent = \"#{continent}\" order by l.verifiedscore desc, l.verifiedMultipliers desc, l.callsign asc")
+      res.each(:as => :array) {  |row|
+        result << row[0].to_i
+      }
+    end
+    result
+  end
+
   def numBandChanges(logID)
     count = 0
     prev = nil
@@ -350,13 +368,14 @@ class ContestDatabase
     results = Array.new
     cres = @db.query("select c.start, c.end from Contest as c join Log as l on l.contestID = c.id and l.id = #{logID} limit 1;")
     cres.each(:as => :array) { |crow|
-      tstart = row[0]
-      tend = row[1]
+      tstart = crow[0]
+      tend = crow[1]
       prev = tstart - 24*60*60
-      numHours = (tend - tstart)/3600
-      results = Array.new(numHours)
+      numHours = (tend - tstart).to_i/3600
+      results = Array.new(numHours, 0)
       numHours.times {  |i|
-        res = @db.query("select matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL') and time between #{dateOrNull(prev)} and #{dateOrNull(tstart + 3600*i - 1)} order by matchType asc;")
+        queryStr = "select matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL') and time between #{dateOrNull(prev)} and #{dateOrNull(tstart + 3600*(i+1) - 1)} order by matchType asc;"
+        res = @db.query(queryStr)
         res.each(:as => :array) { |row|
           case row[0]
           when 'Full', 'Bye'
@@ -365,12 +384,65 @@ class ContestDatabase
             results[i] = results[i] - row[1].to_i
           end
         }
+        prev = tstart + 3600*(i+1)
       }
     }
     return results
   end
   
+  def firstName(str)
+    if str
+      match = /^(\S+)\b/.match(str)
+      if match
+        return match[1].upcase
+      end
+      return str.upcase
+    end
+    return ""
+  end
+
   def logInfo(logID)
-    res = @db.query("select l.callsign, l.name, m.abbrev")
+    res = @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.club, l.verifiedqsos, l.verifiedMultipliers, l.verifiedscore, l.opclass from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = #{logID} limit 1;")
+    res.each(:as => :array) {|row|
+      name = firstName(row[1])
+      if not name or name.length == 0
+        namequery = @db.query("select e.name from Exchange as e join QSO as q on q.sentID = e.id order by q.id asc limit 1;")
+        namequery.each(:as => :array) { |nrow|
+          if name and name.length > 0
+            if nrow[0].length < name.length
+              name = nrow[0].upcase
+            end
+          else
+            name = nrow[0].upcase
+          end
+        }
+      end
+      return row[0], name, row[2], row[3], row[4], row[5], row[6], row[7], row[8]
+    }
+    return nil
+  end
+
+  def lostQSOs(logID)
+    count = 0
+    res = @db.query("select count(*) from QSO where logID = #{logID} and matchType in ('None','Unique','Partial','Dupe','OutsideContest','Removed');")
+    res.each(:as => :array) { |row|
+      count += row[0]
+    }
+    res = @db.query("select count(*) from QSO where logID = #{logID} and matchType = 'NIL';")
+    res.each(:as => :array) { |row|
+      count += 2*row[0]
+    }
+    count
+  end
+
+  def topLogs(contestID, num, opclass=nil, criteria="verifiedscore")
+    logs = Array.new
+    res = @db.query("select l.id, l.callsign, l.#{criteria} from Log as l where l.contestID = #{contestID} " +
+                    (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
+                    "order by l.#{criteria} desc limit #{num};")
+    res.each(:as => :array) { |row|
+      logs << [ row[1], row[2], numBandChanges(row[0]), lostQSOs(row[0]), qsosByHour(row[0])]
+    }
+    logs
   end
 end
