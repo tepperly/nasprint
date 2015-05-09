@@ -141,8 +141,13 @@ begin
     m.checkByeMultipliers
     fillInComment(db, contestID)
     r = Report.new(db, contestID)
-    r.makeReport
+    print "Making report\n"
+    open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
+      r.makeReport(out)
+    }
+    print "Dumping logs\n"
     dumpLogs(db, contestID)
+    print "All Done\n"
     # 0.94 similarity is good for comparisons
   rescue Mysql2::Error => e
     print e.to_s + "\n"

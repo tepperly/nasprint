@@ -107,7 +107,7 @@ class Report
     }
   end
 
-  def makeReport
+  def makeReport(out = $stdout)
     logs = Array.new
     res = @db.query("select callsign, email, opclass, id from Log where contestID = #{@contestID} order by callsign asc;")
     res.each(:as => :array) { |row|
@@ -116,9 +116,9 @@ class Report
       @db.query("update Log set verifiedscore = #{log.score}, verifiedQSOs = #{log.numqsos}, verifiedMultipliers = #{log.nummultipliers} where id = #{row[3]} limit 1;")
       logs << log
     }
-    print "\"Callsign\",\"Email\",\"Operator Class\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"WAS?\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\n"
+    out.write("\"Callsign\",\"Email\",\"Operator Class\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"WAS?\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\n")
     logs.each { |log|
-      print log.to_s + "\n"
+      out.write(log.to_s + "\n")
     }
   end
 end

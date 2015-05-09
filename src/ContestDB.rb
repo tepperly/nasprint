@@ -4,6 +4,7 @@
 # Build a SQL database to do log crossing checking & scoring
 #
 require 'csv'
+require 'set'
 
 
 class ContestDatabase
@@ -55,10 +56,24 @@ class ContestDatabase
     if not tables.include?("Pairs")
       createPairs
     end
+    if not tables.include?("Team")
+      createTeamTable
+    end
+    if not tables.include?("TeamMember")
+      createTeamMemberTable
+    end
   end
 
   def createContestTable
     @db.query("create table if not exists Contest (id integer primary key auto_increment, name varchar(64) not null, year smallint not null, unique index contind (name, year), start datetime not null, end datetime not null);")
+  end
+
+  def createTeamTable
+    @db.query("create table if not exists Team (id integer primary key auto_increment, name varchar(64) not null, managercall varchar(#{CHARS_PER_CALL}) not null, manageremail varchar(128), registertime datetime, contestID integer not null, unique index teamind (name, contestID));")
+  end
+
+  def createTeamMemberTable
+    @db.query("create table if not exists TeamMember (teamID integer not null, logID integer not null, contestID integer not null, primary key (teamID, logID), unique index logind (logID, contestID));")
   end
 
   def createHomophoneTable
@@ -111,13 +126,13 @@ class ContestDatabase
   end
 
   def createMultiplierTable
-    @db.query("create table if not exists Multiplier (id integer primary key auto_increment, abbrev char(2) not null unique, entityID integer, ismultiplier bool);")
+    @db.query("create table if not exists Multiplier (id integer primary key auto_increment, abbrev char(2) not null unique, wasstate char(2), entityID integer, ismultiplier bool);")
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii") { |row|
       begin
         if row[0] == row[1]
           entity = row[2].to_i
           if entity > 0
-            @db.query("insert into Multiplier (abbrev, entityID, ismultiplier) values (\"#{@db.escape(row[1].strip.upcase)}\", #{entity}, TRUE);")
+            @db.query("insert into Multiplier (abbrev, entityID, wasstate, ismultiplier) values (\"#{@db.escape(row[1].strip.upcase)}\", #{entity}, #{strOrNull(row[3])}, TRUE);")
           else
             # DX gets a null for entityID and ismultiplier
             @db.query("insert into Multiplier (abbrev) values (\"#{@db.escape(row[1].strip.upcase)}\");")
@@ -181,6 +196,12 @@ class ContestDatabase
       @db.query("insert into Callsign (contestID, basecall) values (#{contestIDVar.to_i}, \"#{@db.escape(callsign)}\");")
       return @db.last_id
     end
+    nil
+  end
+
+  def findLog(callsign)
+    res =  @db.query("select l.id from Log as l join Callsign as c on c.id = l.callID where l.callsign=\"#{@db.escape(callsign)}\" or c.basecall=\"#{@db.escape(callsign)}\" limit 1;")
+    res.each(:as => :array) { |row| return row[0] }
     nil
   end
 
@@ -401,8 +422,25 @@ class ContestDatabase
     return ""
   end
 
+  def logMultipliers(logID)
+    multipliers = Set.new
+    res = @db.query("select distinct e.abbrev from QSO as q join Exchange as e join on e.id = q.recvdID where q.logID = #{logID} and q.matchType in ('Full', 'Bye');")
+    res.each(:as => :array) { |row|
+      multipliers.add(row[0])
+    }
+    multipliers
+  end
+
+  def lookupTeam(contestID, logID)
+    @db.query("select t.name from TeamMember as m join Team as t on t.id = m.teamID where m.contestID = #{contestID} and m.logID = #{logID} limit 1;").each(:as => :array) { |row|
+      return row[0]
+    }
+
+    nil
+  end
+
   def logInfo(logID)
-    res = @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.club, l.verifiedqsos, l.verifiedMultipliers, l.verifiedscore, l.opclass from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = #{logID} limit 1;")
+    res = @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedqsos, l.verifiedMultipliers, l.verifiedscore, l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = #{logID} limit 1;")
     res.each(:as => :array) {|row|
       name = firstName(row[1])
       if not name or name.length == 0
@@ -417,7 +455,7 @@ class ContestDatabase
           end
         }
       end
-      return row[0], name, row[2], row[3], row[4], row[5], row[6], row[7], row[8]
+      return row[0], name, row[2], row[3], lookupTeam(row[8], logID), row[4], row[5], row[6], row[7]
     }
     return nil
   end
@@ -435,12 +473,26 @@ class ContestDatabase
     count
   end
 
-  # In the case of ties, this can return more than num
-  def topLogs(contestID, num, opclass=nil, criteria="verifiedscore")
+  def topNumStates(contestID, num)
     logs = Array.new
-    basicQuery = "select l.id, l.callsign, l.#{criteria} from Log as l where l.contestID = #{contestID} " +
+    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID group by l.id order by numstates desc, l.callsign asc limit #{num-1}, 1;")
+    limit = nil
+    res.each(:as => :array) { |row|
+      limit = row[2]
+    }
+    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID group by l.id  having numstates >= #{limit} order by numstates desc, l.callsign asc;")
+    res.each(:as => :array) { |row|
+      logs << [ row[1], row[2] ]
+    }
+    logs
+  end
+
+  # In the case of ties, this can return more than num
+  def topLogs(contestID, num, opclass=nil, criteria="l.verifiedscore")
+    logs = Array.new
+    basicQuery = "select l.id, l.callsign, #{criteria} as reportcriteria from Log as l where l.contestID = #{contestID} " +
       (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
-      "order by l.#{criteria} desc, l.callsign asc limit #{num-1}, 1;"
+      "order by reportcriteria desc, l.callsign asc limit #{num-1}, 1;"
     # get score of last item on list
     res = @db.query(basicQuery)
     limit = nil
@@ -448,9 +500,9 @@ class ContestDatabase
       limit = row[2]
     }
     if limit
-      res = @db.query("select l.id, l.callsign, l.#{criteria} from Log as l where l.contestID = #{contestID} and l.#{criteria} >= #{limit} " +
+      res = @db.query("select l.id, l.callsign, #{criteria} as reportcriteria from Log as l where l.contestID = #{contestID} and #{criteria} >= #{limit} " +
       (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
-      "order by l.#{criteria} desc, l.callsign asc;")
+      "order by reportcriteria desc, l.callsign asc;")
     else
       res = @db.query("select l.id, l.callsign, l.#{criteria} from Log as l where l.contestID = #{contestID} " +
       (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
@@ -460,5 +512,42 @@ class ContestDatabase
       logs << [ row[1], row[2], numBandChanges(row[0]), lostQSOs(row[0]), qsosByHour(row[0])]
     }
     logs
+  end
+
+  def clearTeams(cid)
+    @db.query("delete from TeamMember where contestID = #{cid};")
+    @db.query("delete from Team where contestID = #{cid};")
+  end
+
+  def addTeam(name, managercall, manageremail, registertime, contestID)
+    @db.query("insert into Team (name, managercall, manageremail, registertime, contestID) values (\"#{@db.escape(name)}\", \"#{@db.escape(managercall)}\", #{strOrNull(manageremail)}, #{dateOrNull(registertime)}, #{contestID.to_i});")
+    return @db.last_id
+  end
+
+  def addTeamMember(cid, teamID, logID)
+    @db.query("insert into TeamMember (teamID, logID, contestID) values (#{teamID.to_i}, #{logID.to_i}, #{cid.to_i});")
+  end
+
+  def reportTeams(cid)
+    teams = Array.new
+    res = @db.query("select t.id, t.name, sum(l.verifiedscore) as score, count(l.id) as nummembers from (Team as t join Log as l) join TeamMember as tm on tm.teamID = t.id and tm.logID = l.id where l.contestID = #{cid} and t.contestID = #{cid} and tm.contestID = #{cid} group by t.id order by score desc;")
+    res.each(:as => :array) { |row|
+      memlist = Array.new
+      members = @db.query("select l.callsign, l.verifiedscore from Log as l join TeamMember as tm on l.id = tm.logID and tm.teamID = #{row[0]} order by l.verifiedscore desc, l.callsign desc;")
+      members.each(:as => :array) { |mrow|
+        memlist << { "callsign" => mrow[0], "score" => mrow[1] }
+      }
+      teams << { "name" => row[1], "score" => row[2], "nummembers" => row[3], "members" => memlist  }
+    }
+    teams
+  end
+
+  def goldenLogs(contestID)
+    golden = Array.new
+    res = @db.query("select l.id, l.callsign, l.verifiedQSOs, sum(q.matchType in ('Unique','Partial','NIL','OutsideContest','Removed')) as nongolden from Log as l join QSO as q on l.id = q.logID where l.contestID = #{contestID} group by l.id having nongolden = 0 order by l.verifiedQSOs desc, l.callsign asc;")
+    res.each(:as => :array) { |row|
+      golden << { "callsign" => row[1], "numQSOs" => row[2] }
+    }
+    golden
   end
 end

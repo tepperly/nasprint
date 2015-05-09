@@ -48,7 +48,6 @@ MULTIPLIERS_BY_CALLAREA.each { |key, value|
   end
   total.merge(value)
 }
-print "Total of multipliers: #{total.size}\n"
 
 $name = nil
 $year = nil
@@ -81,14 +80,14 @@ end
 def printArea(cdb, logs, key)
   print "\n" + key + "\n"
   count = 0
-  print "CALL   NAME        CLS  LOC  20m  40m  80m #QSOs #Mults  Score    BandChgs  Club\n"
+  print "CALL   NAME        CLS  LOC  20m  40m  80m #QSOs #Mults  Score    BandChgs  Team\n"
   print "====== =========== ===  ===  ===  ===  === ===== ====== ========= ========  ==================================================\n"
   logs.each { |log|
-    callsign, name, location, dxprefix, club, qsos, mults, score, opclass = cdb.logInfo(log)
+    callsign, name, location, dxprefix, team, qsos, mults, score, opclass = cdb.logInfo(log)
     bandQSOs = cdb.qsosByBand(log)
     bandChanges = cdb.numBandChanges(log)
     values = [callsign.upcase, name, opclass[0], location.to_s,  bandQSOs["20m"], bandQSOs["40m"],
-              bandQSOs["80m"], qsos, mults, commaScore(score.to_i), bandChanges, club.to_s.upcase]
+              bandQSOs["80m"], qsos, mults, commaScore(score.to_i), bandChanges, team.to_s.upcase]
     print ("%-6s %-11s  %1s   %-3s %4d %4d %4d %5d %6d %8s    %3d     %s\n" % values)
     count += 1
     if (count % 10) == 0
@@ -97,27 +96,62 @@ def printArea(cdb, logs, key)
   }
 end
 
-def topReport(cdb, cid, num, title, full=true, opclass=nil, criteria="verifiedscore", columnHeading="Score")
+def columnReport(logs, title, full, columnHeading)
+  print "Top " + logs.length.humanize.capitalize + " " + title + "\n"
+  if full
+    print "Call Sign  %-13s  Bnd Chgs  Qs Lost    00Z    01Z    02Z    03Z\n=========  =============  ========  =======  =====  =====  =====  =====\n" % [columnHeading]
+  else
+    print "Call Sign  %-13s\n=========  =============\n" % [columnHeading]
+  end
+  logs.each { |row|
+    print "%-9s  %13s" % [row[0], commaScore(row[1])]
+    if full
+      print "   %4d       %3d  " %  [ row[2], row[3] ]
+      row[4].each { |hour|
+        print "  %5d" % hour
+      }
+    end
+    print "\n"
+  }
+  print "\n"
+end
+
+def topReport(cdb, cid, num, title, full=true, opclass=nil, criteria="l.verifiedscore", columnHeading="Score")
   logs = cdb.topLogs(cid, num, opclass, criteria)
   if not logs.empty?
-    print "Top " + logs.length.humanize.capitalize + " " + title + "\n"
-    if full
-      print "Call Sign  %-13s  Bnd Chgs  Qs Lost    00Z    01Z    02Z    03Z\n=========  =============  ========  =======  =====  =====  =====  =====\n" % [columnHeading]
-    else
-      print "Call Sign  %-13s\n=========  =============\n" % [columnHeading]
-    end
-    logs.each { |row|
-      print "%-9s  %13s" % [row[0], commaScore(row[1])]
-      if full
-        print "   %4d       %3d  " %  [ row[2], row[3] ]
-        row[4].each { |hour|
-          print "  %5d" % hour
-        }
-      end
-      print "\n"
-    }
-    print "\n"
+    columnReport(logs, title, full, columnHeading)
   end
+end
+
+def wasReport(cdb, contestID, num)
+  logs = cdb.topNumStates(contestID, num)
+  if not logs.empty?
+    columnReport(logs, "States Worked", false, "#States Worked")
+  end
+end
+
+def goldenReport(cdb, contestID)
+  goldlogs = cdb.goldenLogs(contestID)
+  if not goldlogs.empty?
+    print "\nGolden Logs\n"
+    print "Call Sign  %-13s\n=========  =============\n" % [ "Num QSOs" ]
+    goldlogs.each { |log|
+      print "%-9s  %13s\n" % [ log["callsign"], log["numQSOs"] ]
+    }
+  end
+end
+
+def teamReport(cdb, contestID)
+  teams = cdb.reportTeams(contestID)
+  print "\n\nTEAM REPORTS\n============\n\n"
+  teams.each { |team|
+    print "\n#{team["name"]}\n"
+    team["members"].each { |mem|
+      print "  %-9s %9s\n" % [ mem["callsign"], commaScore(mem["score"]) ]
+    }
+    print "  " + ("-"*9) + "-" + ("-"*9) + "\n"
+    print "  %-9s %9s\n" % [ "TOTAL", commaScore(team["score"]) ]
+  }
 end
 
 if $name and $year
@@ -146,9 +180,11 @@ if $name and $year
     topReport(cdb, contestID, 10, "High Power", true, "High")
     topReport(cdb, contestID, 10, "Low Power", true, "Low")
     topReport(cdb, contestID, 10, "QRP", true, "QRP")
-    topReport(cdb, contestID, 10, "QSO Totals", false, nil, "verifiedqsos", "# QSOs")
-    topReport(cdb, contestID, 10, "Multipliers", false, nil, "verifiedMultipliers", "# Multipliers")
-
+    topReport(cdb, contestID, 10, "QSO Totals", false, nil, "l.verifiedqsos", "# QSOs")
+    topReport(cdb, contestID, 10, "Multipliers", false, nil, "l.verifiedMultipliers", "# Multipliers")
+    wasReport(cdb, contestID, 10)
+    goldenReport(cdb, contestID)
+    teamReport(cdb, contestID)
   ensure
     db.close
   end
