@@ -439,38 +439,42 @@ class ContestDatabase
     nil
   end
 
+  def sentName(logID)
+    namequery = @db.query("select e.name from Exchange as e join QSO as q on q.sentID = e.id where q.logID = #{logID} order by q.id asc limit 1;")
+    namequery.each(:as => :array) { |nrow|
+      if nrow[0] and nrow[0].length > 0
+        return nrow[0].strip.upcase
+      end
+    }
+    nil
+  end
+  
+  def numStates(logID)
+    res = @db.query("select count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = #{logID} and matchType in ('Full', 'Bye') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID where l.id = #{logID} group by l.id order by numstates desc, l.callsign asc limit 1;")
+    res.each(:as => :array) { |row|
+      return row[0]
+    }
+    0
+  end
+  
   def logInfo(logID)
     res = @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedqsos, l.verifiedMultipliers, l.verifiedscore, l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = #{logID} limit 1;")
     res.each(:as => :array) {|row|
       name = firstName(row[1])
-      if not name or name.length == 0
-        namequery = @db.query("select e.name from Exchange as e join QSO as q on q.sentID = e.id where q.logID = #{logID} order by q.id asc limit 1;")
-        namequery.each(:as => :array) { |nrow|
-          if name and name.length > 0
-            if nrow[0].length < name.length
-              name = nrow[0].upcase
-            end
-          else
-            name = nrow[0].upcase
-          end
-        }
+      sentname = sentName(logID)
+      if sentname
+        name = sentname
       end
-      return row[0], name, row[2], row[3], lookupTeam(row[8], logID), row[4], row[5], row[6], row[7]
+      return row[0], name, row[2], row[3], lookupTeam(row[8], logID), row[4], row[5], row[6], row[7], numStates(logID)
     }
     return nil
   end
 
   def lostQSOs(logID)
-    count = 0
-    res = @db.query("select count(*) from QSO where logID = #{logID} and matchType in ('None','Unique','Partial','Dupe','OutsideContest','Removed');")
+    res = @db.query("select sum(matchType in ('None','Unique','Partial','Dupe','OutsideContest','Removed')) as numremoved, sum(matchType = 'NIL') as numnil from QSO where logID = #{logID} group by logID;")
     res.each(:as => :array) { |row|
-      count += row[0]
+      return row[0] + 2*row[1]
     }
-    res = @db.query("select count(*) from QSO where logID = #{logID} and matchType = 'NIL';")
-    res.each(:as => :array) { |row|
-      count += 2*row[0]
-    }
-    count
   end
 
   def topNumStates(contestID, num)

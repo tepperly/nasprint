@@ -80,15 +80,15 @@ end
 def printArea(cdb, logs, key)
   print "\n" + key + "\n"
   count = 0
-  print "CALL   NAME        CLS  LOC  20m  40m  80m #QSOs #Mults  Score    BandChgs  Team\n"
-  print "====== =========== ===  ===  ===  ===  === ===== ====== ========= ========  ==================================================\n"
+  print "CALL   NAME        CLS  LOC  20m  40m  80m #QSOs #Mults #State Score     BandChgs  Team\n"
+  print "====== =========== ===  ===  ===  ===  === ===== ====== ====== ========= ========  ==================================================\n"
   logs.each { |log|
-    callsign, name, location, dxprefix, team, qsos, mults, score, opclass = cdb.logInfo(log)
+    callsign, name, location, dxprefix, team, qsos, mults, score, opclass, numstates = cdb.logInfo(log)
     bandQSOs = cdb.qsosByBand(log)
     bandChanges = cdb.numBandChanges(log)
     values = [callsign.upcase, name, opclass[0], location.to_s,  bandQSOs["20m"], bandQSOs["40m"],
-              bandQSOs["80m"], qsos, mults, commaScore(score.to_i), bandChanges, team.to_s.upcase]
-    print ("%-6s %-11s  %1s   %-3s %4d %4d %4d %5d %6d %8s    %3d     %s\n" % values)
+              bandQSOs["80m"], qsos, mults, numstates, commaScore(score.to_i), bandChanges, team.to_s.upcase]
+    print ("%-6s %-11s  %1s   %-3s %4d %4d %4d %5d %6d %6d %8s    %3d     %s\n" % values)
     count += 1
     if (count % 10) == 0
       print "\n"
