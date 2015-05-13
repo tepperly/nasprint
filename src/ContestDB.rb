@@ -304,15 +304,15 @@ class ContestDatabase
   end
 
   def removeContestQSOs(contestID)
-    logs = Array.new
-    exchanges = Array.new
-    res = @db.query("select id from Log where contestID = #{contestID};")
-    res.each(:as => :array) { |row| logs << row[0] }
-    res = @db.query("select recvdID, sentID from QSO where logID in (#{logs.join(", ")});")
-    res.each(:as => :array) { |row| 
-      removeExchange([row[0], row[1]])
-    }
-    @db.query("delete from QSO where logID in (#{logs.join(", ")});")
+    logs = logsForContest(contestID)
+    if not logs.empty?
+      res = @db.query("select recvdID, sentID from QSO where logID in (#{logs.join(", ")});")
+      res.each(:as => :array) { |row| 
+        removeExchange([row[0], row[1]])
+      }
+      @db.query("delete from QSO where logID in (#{logs.join(", ")});")
+    end
+    clearTeams(contestID)
     @db.query("delete from Callsign where contestID = #{contestID};")
     @db.query("delete from Log where contestID = #{contestID};")
   end
@@ -322,6 +322,15 @@ class ContestDatabase
     removeOverrides(contestID)
     removePairs(contestID)
     @db.query("delete from Contest where contestID = #{contestID} limit 1;")
+  end
+
+  def logsForContest(contestID)
+    logs = Array.new
+    res = @db.query("select id from Log where contestID = #{contestID} order by id asc;")
+    res.each(:as => :array) { |row|
+      logs << row[0].to_i
+    }
+    logs
   end
 
   def logsByMultipliers(contestID, multipliers)
@@ -424,7 +433,11 @@ class ContestDatabase
 
   def logMultipliers(logID)
     multipliers = Set.new
-    res = @db.query("select distinct e.abbrev from QSO as q join Exchange as e join on e.id = q.recvdID where q.logID = #{logID} and q.matchType in ('Full', 'Bye');")
+    res = @db.query("select distinct m.abbrev from QSO as q join Exchange as e on e.id = q.recvdID join Multiplier as m on m.id = e.multiplierID where q.logID = #{logID} and q.matchType in ('Full', 'Bye') and m.abbrev != 'DX';")
+    res.each(:as => :array) { |row|
+      multipliers.add(row[0])
+    }
+    res = @db.query("select distinct en.name from (QSO as q join Exchange as e on e.id = q.recvdID join Multiplier as m on m.id = e.multiplierID and m.abbrev='DX') join Entity as en on en.id = e.entityID where q.logID = #{logID} and q.matchType in ('Full', 'Bye') and en.continent = 'NA';")
     res.each(:as => :array) { |row|
       multipliers.add(row[0])
     }
@@ -455,6 +468,14 @@ class ContestDatabase
       return row[0]
     }
     0
+  end
+
+  def logCallsign(logID)
+    res = @db.query("select callsign from Log where id = #{logID} limit 1;")
+    res.each(:as => :array) { |row|
+      return row[0]
+    }
+    nil
   end
   
   def logInfo(logID)
@@ -545,6 +566,15 @@ class ContestDatabase
     }
     teams
   end
+  
+  def dupeQSOs(logID)
+    dupes = Array.new
+    res = @db.query("select s.serial, r.callsign from (QSO as q join Exchange as s on s.id = q.sentID) join Exchange as r on r.id = q.recvdID where q.logID = #{logID} and matchType = 'Dupe' order by s.serial asc;")
+    res.each(:as => :array) { |row|
+      dupes << { 'num' => row[0].to_i, 'callsign' => row[1].to_s }
+    }
+    dupes
+  end
 
   def goldenLogs(contestID)
     golden = Array.new
@@ -553,5 +583,38 @@ class ContestDatabase
       golden << { "callsign" => row[1], "numQSOs" => row[2] }
     }
     golden
+  end
+
+  def scoreSummary(logID)
+    res = @db.query("select count(*) as rawQSOs, sum(matchType='Dupe') as dupeQSOs, sum(matchType in ('Unique','Partial','Removed')) as bustedQSOs, sum(matchType = 'NIL') as penaltyQSOs, sum(matchType = 'OutsideContest') as outside from QSO where logID = #{logID} group by logID;")
+    res.each(:as => :array) { |row|
+      return row[0], row[1], row[2], row[3], row[4]
+    }
+    nil
+  end
+
+  def logEntity(logID)
+    res = @db.query("select e.name from Entity as e join Log as l on e.id = l.entityID where l.id = #{logID} limit 1;")
+    res.each(:as => :array) {  |row|
+      return row[0]
+    }
+    nil
+  end
+
+  def logClockAdj(logID)
+    res = @db.query("select clockadj from Log where id = #{logID} limit 1;")
+    res.each(:as => :array) {  |row|
+      return row[0]
+    }
+    0
+  end
+  
+  def qsosOutOfContest(logID)
+    logs = Array.new
+    res = @db.query("select q.time, s.serial from QSO as q join Exchange as s on s.id = q.sentID where q.logID = #{logID} and matchType = 'OutsideContest' order by s.serial asc;")
+    res.each(:as => :array) { |row|
+      logs << { 'time' => row[0], 'number' => row[1] }
+    }
+    logs
   end
 end

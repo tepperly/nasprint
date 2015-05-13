@@ -88,7 +88,7 @@ begin
     print "Unknown contest #{$name} #{$year}\n"
     exit 2
   end
-  cm = CrossMatch.new(db, contestID)
+  cm = CrossMatch.new(db, contestID, contestDB)
   
   begin
     if $restart
@@ -130,13 +130,13 @@ begin
     ct = nil
     nil1 = cm.markNIL
     print "Not In Log penalties: #{nil1}\n"
-    singles = ResolveSingletons.new(db, contestID)
+    singles = ResolveSingletons.new(db, contestID, contestDB)
     print "Resolving singletons\n"
     $stdout.flush
     singles.resolve
     num = singles.finalDupeCheck
     print "#{num} Dupe QSOs identified during final check\n."
-    m = Multiplier.new(db, contestID)
+    m = Multiplier.new(db, contestID, contestDB)
     m.resolveDX
     m.checkByeMultipliers
     fillInComment(db, contestID)

@@ -189,20 +189,12 @@ class CrossMatch
   PERFECT_TIME_MATCH = 15       # in minutes
   MAXIMUM_TIME_MATCH = 24*60    # one day in minutes
 
-  def initialize(db, contestID)
+  def initialize(db, contestID, cdb)
     @db = db
+    @cdb = cdb
     @contestID = contestID.to_i
-    @logs = queryContestLogs
+    @logs = cdb.logsForContest(contestID)
     @namecmp = NameCompare.new(db)
-  end
-
-  def queryContestLogs
-    logList = Array.new
-    res = @db.query("select id from Log where contestID = #{@contestID} order by id asc;")
-    res.each(:as => :array) { |row|
-      logList << row[0].to_i
-    }
-    return logList
   end
 
   def logSet

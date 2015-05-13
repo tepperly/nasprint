@@ -116,9 +116,9 @@ class Report
       @db.query("update Log set verifiedscore = #{log.score}, verifiedQSOs = #{log.numqsos}, verifiedMultipliers = #{log.nummultipliers} where id = #{row[3]} limit 1;")
       logs << log
     }
-    out.write("\"Callsign\",\"Email\",\"Operator Class\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"WAS?\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\n")
+    out.write("\"Callsign\",\"Email\",\"Operator Class\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"WAS?\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
     logs.each { |log|
-      out.write(log.to_s + "\n")
+      out.write(log.to_s + "\r\n")
     }
   end
 end

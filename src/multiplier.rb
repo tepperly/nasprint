@@ -4,21 +4,12 @@ require 'nokogiri'
 require_relative 'qrzdb'
 
 class Multiplier
-  def initialize(db, contestID)
+  def initialize(db, contestID, cdb)
     @db = db
     @contestID = contestID
-    @logs = queryContestLogs
+    @logs = cdb.logsForContest(contestID)
     @callDB = readXMLDb
     lookupStates
-  end
-
-  def queryContestLogs
-    logList = Array.new
-    res = @db.query("select id from Log where contestID = #{@contestID} order by id asc;")
-    res.each(:as => :array) { |row|
-      logList << row[0].to_i
-    }
-    return logList
   end
 
   def lookupStates
