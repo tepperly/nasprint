@@ -73,7 +73,7 @@ class ResolveSingletons
       print "exchangeClose1 #{row[0]} #{row[1]}\n"
       ref.each(:as => :array) { |refrow|
         print "exchangeClose2 #{refrow[0]} #{refrow[1]}\n"
-        if JaroWinkler.distance(row[0], refrow[0]) >= 0.92 and JaroWinkler.distance(row[1], refrow[1])
+        if JaroWinkler.distance(row[0], refrow[0]) >= 0.92 and JaroWinkler.distance(row[1], refrow[1]) >= 0.92
           return true
         end
       }
