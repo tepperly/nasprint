@@ -106,7 +106,7 @@ class ContestDatabase
   end
 
   def createMultiplierTable
-    @db.query("create table if not exists Multiplier (id integer primary key auto_increment, abbrev char(2) not null unique, wasstate char(2), entityID integer, ismultiplier bool);")
+    @db.query("create table if not exists Multiplier (id integer primary key auto_increment, abbrev char(4) not null unique, wasstate char(2), entityID integer, ismultiplier bool);")
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii") { |row|
       begin
         if row[0] == row[1]
@@ -159,7 +159,7 @@ class ContestDatabase
   end
 
   def createQSOTable
-    @db.query("create table if not exists Exchange (id integer primary key auto_increment, callsign varchar(#{CHARS_PER_CALL}), callID integer, serial integer, location varchar(8), multiplierID integer, entityID integer, index calltxtind (callsign), index callidind (callID), index serialind (serial), index locind (location), index multind (multiplierID), index nameind (name));")
+    @db.query("create table if not exists Exchange (id integer primary key auto_increment, callsign varchar(#{CHARS_PER_CALL}), callID integer, serial integer, location varchar(8), multiplierID integer, entityID integer, index calltxtind (callsign), index callidind (callID), index serialind (serial), index locind (location), index multind (multiplierID));")
     @db.query("create table if not exists QSO (id integer primary key auto_increment, logID integer not null, frequency integer, band enum('20m', '40m', '80m', 'unknown') default 'unknown', mode char(6), fixedMode enum('PH', 'CW', 'FM', 'RY'), time datetime, sentID integer not null, recvdID integer not null, transmitterNum integer, matchID integer, matchType enum('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None', comment varchar(256), index matchind (matchType), index bandind (band), index logind (logID), index timeind (time));")
   end
 
