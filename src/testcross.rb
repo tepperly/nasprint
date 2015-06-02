@@ -95,17 +95,15 @@ begin
       cm.restartMatch
     end
     checkCallsigns(db, contestID, $qrzuser, $qrzpwd)
-    num1, num2 = cm.perfectMatch
+    num1 = cm.perfectMatch
     print "Perfect matches: #{num1}\n"
-    print "Perfect matches with homophones: #{num2}\n"
     $stdout.flush
     num3, partial = cm.partialMatch
     print "Full matches partial: #{num3}\n"
     print "Partial matches full: #{partial}\n"
     $stdout.flush
-    num1, num2 = cm.perfectMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull')
+    num1 = cm.perfectMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull')
     print "Time shifted perfect matches: #{num1}\n"
-    print "Time shifted perfect matches with homophones: #{num2}\n"
     $stdout.flush
     num3, partial = cm.partialMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull', 'TimeShiftPartial')
     print "Time shifted full matches partial: #{num3}\n"

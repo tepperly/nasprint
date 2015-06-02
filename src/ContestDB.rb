@@ -37,9 +37,6 @@ class ContestDatabase
     if not tables.include?("Entity")
       createEntityTable
     end
-    if not tables.include?("Homophone")
-      createHomophoneTable
-    end
     if not tables.include?("Multiplier")
       createMultiplierTable
     end
@@ -74,23 +71,6 @@ class ContestDatabase
 
   def createTeamMemberTable
     @db.query("create table if not exists TeamMember (teamID integer not null, logID integer not null, contestID integer not null, primary key (teamID, logID), unique index logind (logID, contestID));")
-  end
-
-  def createHomophoneTable
-    @db.query("create table if not exists Homophone (id integer primary key auto_increment, name1 varchar(#{CHARS_PER_NAME}), name2 varchar(#{CHARS_PER_NAME}), index n1ind (name1), index n2ind (name2));")
-    CSV.foreach(File.dirname(__FILE__) + "/homophones.csv", "r:ascii") { |row|
-      row.each { |i|
-        row.each { |j|
-          begin
-            @db.query("insert into Homophone (name1, name2) values (\"#{@db.escape(i)}\", \"#{@db.escape(j)}\");")
-          rescue Mysql2::Error => e
-            if e.error_number != 1062 # ignore duplicate entry
-              raise e
-            end
-          end
-        }
-      }
-    }
   end
 
   def extractPrefix(prefix)
@@ -179,7 +159,7 @@ class ContestDatabase
   end
 
   def createQSOTable
-    @db.query("create table if not exists Exchange (id integer primary key auto_increment, callsign varchar(#{CHARS_PER_CALL}), callID integer, serial integer, name varchar(#{CHARS_PER_NAME}), location varchar(8), multiplierID integer, entityID integer, index calltxtind (callsign), index callidind (callID), index serialind (serial), index locind (location), index multind (multiplierID), index nameind (name));")
+    @db.query("create table if not exists Exchange (id integer primary key auto_increment, callsign varchar(#{CHARS_PER_CALL}), callID integer, serial integer, location varchar(8), multiplierID integer, entityID integer, index calltxtind (callsign), index callidind (callID), index serialind (serial), index locind (location), index multind (multiplierID), index nameind (name));")
     @db.query("create table if not exists QSO (id integer primary key auto_increment, logID integer not null, frequency integer, band enum('20m', '40m', '80m', 'unknown') default 'unknown', mode char(6), fixedMode enum('PH', 'CW', 'FM', 'RY'), time datetime, sentID integer not null, recvdID integer not null, transmitterNum integer, matchID integer, matchType enum('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None', comment varchar(256), index matchind (matchType), index bandind (band), index logind (logID), index timeind (time));")
   end
 
@@ -284,9 +264,9 @@ class ContestDatabase
     end
   end
 
-  def addExchange(callsign, callID, serial, name, location, multID,
+  def addExchange(callsign, callID, serial, location, multID,
                   entityID)
-    @db.query("insert into Exchange (callsign, callID, serial, name, location, multiplierID, entityID) values (#{capOrNull(callsign)}, #{callID.to_i}, #{numOrNull(serial)}, #{capOrNull(name)}, #{capOrNull(location)}, #{numOrNull(multID)}, #{numOrNull(entityID)});")
+    @db.query("insert into Exchange (callsign, callID, serial, location, multiplierID, entityID) values (#{capOrNull(callsign)}, #{callID.to_i}, #{numOrNull(serial)}, #{capOrNull(location)}, #{numOrNull(multID)}, #{numOrNull(entityID)});")
     return @db.last_id
   end
 
@@ -452,16 +432,6 @@ class ContestDatabase
     nil
   end
 
-  def sentName(logID)
-    namequery = @db.query("select e.name from Exchange as e join QSO as q on q.sentID = e.id where q.logID = #{logID} order by q.id asc limit 1;")
-    namequery.each(:as => :array) { |nrow|
-      if nrow[0] and nrow[0].length > 0
-        return nrow[0].strip.upcase
-      end
-    }
-    nil
-  end
-  
   def numStates(logID)
     res = @db.query("select count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = #{logID} and matchType in ('Full', 'Bye') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID where l.id = #{logID} group by l.id order by numstates desc, l.callsign asc limit 1;")
     res.each(:as => :array) { |row|
@@ -482,10 +452,6 @@ class ContestDatabase
     res = @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedqsos, l.verifiedMultipliers, l.verifiedscore, l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = #{logID} limit 1;")
     res.each(:as => :array) {|row|
       name = firstName(row[1])
-      sentname = sentName(logID)
-      if sentname
-        name = sentname
-      end
       return row[0], name, row[2], row[3], lookupTeam(row[8], logID), row[4], row[5], row[6], row[7], numStates(logID)
     }
     return nil

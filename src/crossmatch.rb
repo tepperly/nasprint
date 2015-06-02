@@ -5,7 +5,6 @@
 #
 
 require 'jaro_winkler'
-require_relative 'homophone'
 
 class StringSpace
   def initialize
@@ -31,22 +30,18 @@ end
 class Exchange
   @@stringspace = StringSpace.new
 
-  def initialize(basecall, callsign, serial, name, mult, location, namecmp)
+  def initialize(basecall, callsign, serial, mult, location)
     @basecall = @@stringspace.register(basecall)
     @callsign = @@stringspace.register(callsign)
     @serial = serial.to_i
-    @name = @@stringspace.register(name)
     @mult = @@stringspace.register(mult)
     @location = @@stringspace.register(location)
-    @namecmp = namecmp
   end
 
-  attr_reader :basecall, :callsign, :serial, :name, :mult, :location
+  attr_reader :basecall, :callsign, :serial, :mult, :location
 
   def probablyMatch(exch)
     callProb(exch) *
-      (@namecmp.namesEqual?(@name, exch.name) ? 1.0 :
-       JaroWinkler.distance(@name, exch.name)) *
       [ hillFunc(@serial-exch.serial, 1, 10),
         JaroWinkler.distance(@serial.to_s,exch.serial.to_s) ].max *
       [ JaroWinkler.distance(@mult, exch.mult),
@@ -56,8 +51,7 @@ class Exchange
   def fullMatch?(exch)
     @basecall == exch.basecall and 
       ((@serial - exch.serial).abs <= 1) and
-      @mult == exch.mult and 
-      @namecmp.namesEqual?(@name, exch.name)
+      @mult == exch.mult
   end
 
   def callProb(exch)
@@ -66,20 +60,20 @@ class Exchange
   end
 
   def to_s
-    "%-6s %-7s %4d %-12s %-2s %-4s" % [@basecall, @callsign, @serial,
-                                  @name, @mult, @location]
+    "%-6s %-7s %4d %-2s %-4s" % [@basecall, @callsign, @serial,
+                                  @mult, @location]
   end
 
-  def self.lookupExchange(db, id, namecmp)
-    res = db.query("select c.basecall, e.callsign, e.serial, e.name, e.location, e.multiplierID from Exchange as e join Callsign as c on c.id = e.callID where e.id = #{id} limit 1;")
+  def self.lookupExchange(db, id)
+    res = db.query("select c.basecall, e.callsign, e.serial, e.location, e.multiplierID from Exchange as e join Callsign as c on c.id = e.callID where e.id = #{id} limit 1;")
     res.each(:as => :array) { |row|
-      if row[5]
-        mq = db.query("select abbrev from Multiplier where id = #{row[5]} limit 1;")
+      if row[4]
+        mq = db.query("select abbrev from Multiplier where id = #{row[4]} limit 1;")
         mq.each(:as => :array) { |mrow|
-          return Exchange.new(row[0], row[1], row[2].to_i, row[3], mrow[0], row[4], namecmp)
+          return Exchange.new(row[0], row[1], row[2].to_i, mrow[0], row[3])
         }
       end
-      return Exchange.new(row[0], row[1], row[2].to_i, row[3], nil, row[4], namecmp)
+      return Exchange.new(row[0], row[1], row[2].to_i, nil, row[3])
     }
     print "Unable to find exchange #{id}\n"
     nil
@@ -133,11 +127,11 @@ class QSO
       @sent.to_s + " " + @recvd.to_s
   end
 
-  def self.lookupQSO(db, id, namecmp, timeadj=0)
+  def self.lookupQSO(db, id, timeadj=0)
     res = db.query("select logID, frequency, band, fixedMode, time, sentID, recvdID from QSO where id = #{id} limit 1;")
     res.each(:as => :array) { |row|
-      sent = Exchange.lookupExchange(db, row[5].to_i, namecmp)
-      recvd = Exchange.lookupExchange(db, row[6].to_i, namecmp)
+      sent = Exchange.lookupExchange(db, row[5].to_i)
+      recvd = Exchange.lookupExchange(db, row[6].to_i)
       if sent and recvd
         return QSO.new(id, row[0].to_i, row[1], row[2], row[3], row[4]+timeadj,
                        sent, recvd)
@@ -194,7 +188,6 @@ class CrossMatch
     @cdb = cdb
     @contestID = contestID.to_i
     @logs = cdb.logsForContest(contestID)
-    @namecmp = NameCompare.new(db)
   end
 
   def logSet
@@ -231,25 +224,17 @@ class CrossMatch
       ") and (" + s2 + " + " + range.to_s + "))"
   end
 
-  def exchangeMatch(e1, e2, homophone = nil)
+  def exchangeMatch(e1, e2)
     result = e1 + ".callID = " + e2 + ".callID and " +
       e1 + ".multiplierID = " + e2 + ".multiplierID and "
-    if homophone
-      result << e1 + ".name = " + homophone + ".name1 and " +
-        e2 + ".name = " + homophone + ".name2 and "
-    else
-      result << e1 + ".name = " + e2 + ".name and "
-    end
     return result + serialCmp(e1 + ".serial", e2 + ".serial", 1) + " and " +
       serialCmp(e1 + ".serial", e2 + ".serial", 1)
   end
 
   def qsosFromDB(res, qsos = Array.new)
     res.each(:as => :array) { |row|
-      s = Exchange.new(row[6], row[7], row[8], row[9], row[10], row[11], 
-                       @namecmp)
-      r = Exchange.new(row[12], row[13], row[14], row[15], row[16], row[17],
-                       @namecmp)
+      s = Exchange.new(row[6], row[7], row[8], row[9], row[10]) 
+      r = Exchange.new(row[11], row[12], row[13], row[14], row[15])
       qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
                     row[5], s, r)
       qsos << qso
@@ -258,7 +243,7 @@ class CrossMatch
   end
 
   def printDupeMatch(id1, id2)
-    queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, s.callsign, s.serial, s.name, ms.abbrev, s.location, cr.basecall, r.callsign, r.serial, r.name, mr.abbrev, r.location " +
+    queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, s.callsign, s.serial, ms.abbrev, s.location, cr.basecall, r.callsign, r.serial, mr.abbrev, r.location " +
                     " from QSO as q, Exchange as s, Exchange as r, Callsign as cr, Callsign as cs, Multiplier as ms, Multiplier as mr where " +
                     linkConstraints("q", "s", "r") + " and " +
                     linkCallsign("s","cs") + " and " + linkCallsign("r", "cr") + " and " +
@@ -271,7 +256,7 @@ class CrossMatch
       qsos.each { |q|
         ids.delete(q.id)
       }
-      queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, s.callsign, s.serial, s.name, 'NULL', s.location, cr.basecall, r.callsign, r.serial, r.name, 'NULL', r.location " +
+      queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, s.callsign, s.serial, 'NULL', s.location, cr.basecall, r.callsign, r.serial, 'NULL', r.location " +
                     " from QSO as q, Exchange as s, Exchange as r, Callsign as cr, Callsign as cs where " +
                     linkConstraints("q", "s", "r") + " and " +
                     linkCallsign("s","cs") + " and " + linkCallsign("r", "cr") + " and " +
@@ -332,38 +317,8 @@ class CrossMatch
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     num1, num2 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
     num1 = num1 + num2
-    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h where " +
-                    linkConstraints("q1", "s1", "r1") + " and " +
-                    linkConstraints("q2", "s2", "r2") + " and " +
-                    notMatched("q1") + " and " + notMatched("q2") + " and " +
-                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
-                    " and q1.logID != q2.logID " +
-                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
-                    exchangeMatch("r1", "s2", "h") + " and " +
-                    exchangeMatch("r2", "s1") +
-                    " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
-      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    print "Perfect match test phase 2: #{Time.now.to_s}\n"
-    $stdout.flush
-    num2, num3 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
-    num2 = num2 + num3
-    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h1, Homophone as h2 where " +
-                    linkConstraints("q1", "s1", "r1") + " and " +
-                    linkConstraints("q2", "s2", "r2") + " and " +
-                    notMatched("q1") + " and " + notMatched("q2") + " and " +
-                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
-                    " and q1.logID != q2.logID " +
-                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
-                    exchangeMatch("r1", "s2", "h1") + " and " +
-                    exchangeMatch("r2", "s1", "h2") + " and q1.id < q2.id " +
-                    " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
-      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    print "Perfect match test phase 3: #{Time.now.to_s}\n"
-    $stdout.flush
-    num3, num4 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
-    num2 = num2 + num3 + num4
     print "Ending perfect match test: #{Time.now.to_s}\n"
-    return num1, num2
+    return num1
   end
 
   def partialMatch(timediff = PERFECT_TIME_MATCH, fullType="Full",  partialType="Partial")
@@ -381,20 +336,6 @@ class CrossMatch
     print "Partial match test phase 1: #{Time.now.to_s}\n"
     $stdout.flush
     full1, partial1 = linkQSOs(@db.query(queryStr), fullType, partialType, true)
-    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as s1, Exchange as s2, Exchange as r1, Exchange as r2, Homophone as h where " +
-                    linkConstraints("q1", "s1", "r1") + " and " +
-                    linkConstraints("q2", "s2", "r2") + " and " +
-                    notMatched("q1") + " and " + notMatched("q2") + " and " +
-                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
-                    " and q1.logID != q2.logID " +
-                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
-                    exchangeMatch("r1", "s2", "h") + " and " +
-                    " r2.callID = s1.callID " +
-                    " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
-      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
-    print "Partial match test phase 2: #{Time.now.to_s}\n"
-    $stdout.flush
-    full2, partial2 = linkQSOs(@db.query(queryStr), fullType, partialType, true)
     print "Partial match end: #{Time.now.to_s}\n"
     return full1 + full2, partial1 + partial2
   end
@@ -469,8 +410,6 @@ class CrossMatch
     return hillFunc("timestampdiff(MINUTE,#{q1}.time,#{q2}.time)", 15, 60) +
       "*jaro_winkler_similarity(#{cs1}.basecall, #{cr2}.basecall)*" +
       "jaro_winkler_similarity(#{cs2}.basecall, #{cr1}.basecall)*" +
-      "jaro_winkler_similarity(#{s1}.name, #{r2}.name)*" +
-      "jaro_winkler_similarity(#{s2}.name, #{r1}.name)*" +
       hillFunc("#{s1}.serial - #{r2}.serial", 1, 10) + "*" +
       hillFunc("#{s2}.serial - #{r1}.serial", 1, 10) + "*" +
       "jaro_winkler_similarity(#{ms1}.abbrev,#{mr2}.abbrev)*" +
@@ -502,7 +441,7 @@ class CrossMatch
   end
 
   def probMatch
-    queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, s.callsign, s.serial, s.name, ms.abbrev, s.location, cr.basecall, r.callsign, r.serial, r.name, mr.abbrev, r.location " +
+    queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, s.callsign, s.serial, ms.abbrev, s.location, cr.basecall, r.callsign, r.serial, mr.abbrev, r.location " +
       " from QSO as q, Exchange as s, Exchange as r, Callsign as cr, Callsign as cs, Multiplier as ms, Multiplier as mr where " +
       linkConstraints("q", "s", "r") + " and " +
       linkCallsign("s","cs") + " and " + linkCallsign("r", "cr") + " and " +
@@ -513,10 +452,8 @@ class CrossMatch
     res = @db.query(queryStr)
     qsos = Array.new
     res.each(:as => :array) { |row|
-      s = Exchange.new(row[6], row[7], row[8], row[9], row[10], row[11],
-                       @namecmp)
-      r = Exchange.new(row[12], row[13], row[14], row[15], row[16], row[17],
-                       @namecmp)
+      s = Exchange.new(row[6], row[7], row[8], row[9], row[10])
+      r = Exchange.new(row[11], row[12], row[13], row[14], row[15])
       qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
                     row[5], s, r)
       qsos << qso

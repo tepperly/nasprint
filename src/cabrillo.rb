@@ -31,7 +31,6 @@ class Exchange
   def initialize
     @callsign = nil
     @leadingZero = nil
-    @name = nil
     @serial = nil
     @qth = nil
     @origqth = nil
@@ -39,14 +38,14 @@ class Exchange
 
   def to_s
     if @leadingZero
-      "%-13s %04d %-11s %-11s" % [callsign.to_s, serial.to_i, name.to_s, qth.to_s]
+      "%-13s %04d %-11s" % [callsign.to_s, serial.to_i, qth.to_s]
     else
-      "%-13s %4d %-11s %-11s" % [callsign.to_s, serial.to_i, name.to_s, qth.to_s]
+      "%-13s %4d %-11s" % [callsign.to_s, serial.to_i, qth.to_s]
     end
   end
 
-  attr_reader :callsign, :serial, :qth, :name, :leadingZero, :origqth
-  attr_writer :callsign, :qth, :name, :leadingZero, :origqth
+  attr_reader :callsign, :serial, :qth, :leadingZero, :origqth
+  attr_writer :callsign, :qth, :leadingZero, :origqth
 
   def serial=(value)
     if value.instance_of?(String)
@@ -472,7 +471,6 @@ class Cabrillo
     when /\Aqso: +(\d+) +([a-z]{2,3}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?) +(\d+) +([a-z]+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?) +(\d+) +([a-z]+) +([a-z0-9]+)( +(\d+) *| *)(\{.*\})?$/i
       qso = startQSO($1, $2, $3, $4, $5)
       qso.sentExch.serial = $8
-      qso.sentExch.name = $9
       qso.sentExch.origqth = $10.upcase.strip
       qso.sentExch.qth = normalizeMult($10)
       if qso.sentExch.qth and not @logCat.sentQTH
@@ -480,7 +478,6 @@ class Cabrillo
       end
       qso.recdExch.callsign = $11.upcase
       qso.recdExch.serial = $14
-      qso.recdExch.name = $15
       qso.recdExch.origqth = $16.upcase.strip
       qso.recdExch.qth = normalizeMult($16)
       if ($18)

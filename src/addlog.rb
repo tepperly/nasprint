@@ -25,7 +25,7 @@ def addExchange(db, exchange, cID)
   if bcID
     multID, entityID = db.lookupMultiplier(exchange.qth)
     return db.addExchange(exchange.callsign, bcID, exchange.serial,
-                          exchange.name, exchange.origqth,
+                          exchange.origqth,
                           multID, entityID)
   else
     print "Exchange callsign -- not base id #{exchange.callsign}\n"

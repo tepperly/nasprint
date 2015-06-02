@@ -67,13 +67,13 @@ class ResolveSingletons
   end
 
   def exchangeClose(qid, call)
-    res = @db.query("select e.name, m.abbrev from QSO as q join Exchange as e on e.id = q.recvdID left join Multiplier as m on m.id = e.multiplierID where q.id = #{qid} limit 1;")
+    res = @db.query("select m.abbrev from QSO as q join Exchange as e on e.id = q.recvdID left join Multiplier as m on m.id = e.multiplierID where q.id = #{qid} limit 1;")
     res.each(:as => :array) { |row|
-      ref = @db.query("select e.name, m.abbrev from Callsign as c join Log as l on (l.contestID = #{@contestID} and  c.id = l.callID) join QSO as q join Exchange as e on e.id = q.recvdID left join Multiplier as m on m.id = e.multiplierID where c.basecall = \"#{call}\" limit 1;")
-      print "exchangeClose1 #{row[0]} #{row[1]}\n"
+      ref = @db.query("select m.abbrev from Callsign as c join Log as l on (l.contestID = #{@contestID} and  c.id = l.callID) join QSO as q join Exchange as e on e.id = q.recvdID left join Multiplier as m on m.id = e.multiplierID where c.basecall = \"#{call}\" limit 1;")
+      print "exchangeClose1 #{row[0]}\n"
       ref.each(:as => :array) { |refrow|
-        print "exchangeClose2 #{refrow[0]} #{refrow[1]}\n"
-        if JaroWinkler.distance(row[0], refrow[0]) >= 0.92 and JaroWinkler.distance(row[1], refrow[1])
+        print "exchangeClose2 #{refrow[0]}\n"
+        if JaroWinkler.distance(row[1], refrow[1]) >= 0.92
           return true
         end
       }
@@ -83,7 +83,7 @@ class ResolveSingletons
 
 
   def resolve
-    res = @db.query("select distinct q.id from QSO as q, Exchange as e where matchType = 'None' and q.recvdID = e.id and (e.multiplierID is null or e.serial is null or e.name is null);")
+    res = @db.query("select distinct q.id from QSO as q, Exchange as e where matchType = 'None' and q.recvdID = e.id and (e.multiplierID is null or e.serial is null);")
     res.each( :as => :array) { |row|
       @db.query("update QSO set matchType = 'Removed', comment='Incomplete exchanged received.' where id = #{row[0]} limit 1;")
     }
