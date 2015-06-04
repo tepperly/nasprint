@@ -215,8 +215,7 @@ class CrossMatch
 
   def qsoMatch(q1, q2, timediff=PERFECT_TIME_MATCH)
     return q1 + ".band = " + q2 + ".band and " + q1 + ".fixedMode = " +
-      q2 + ".fixedMode and " + timeMatch("q1.time", "q2.time", timediff) +
-      " and " + timeMatch("q2.time", "q1.time", timediff)
+      q2 + ".fixedMode and " + timeMatch("q1.time", "q2.time", timediff) 
   end
 
   def serialCmp(s1, s2, range)
@@ -227,8 +226,7 @@ class CrossMatch
   def exchangeMatch(e1, e2)
     result = e1 + ".callID = " + e2 + ".callID and " +
       e1 + ".multiplierID = " + e2 + ".multiplierID and "
-    return result + serialCmp(e1 + ".serial", e2 + ".serial", 1) + " and " +
-      serialCmp(e1 + ".serial", e2 + ".serial", 1)
+    return result + serialCmp(e1 + ".serial", e2 + ".serial", 1)
   end
 
   def qsosFromDB(res, qsos = Array.new)
@@ -315,6 +313,7 @@ class CrossMatch
                     exchangeMatch("r2", "s1") + 
                     " order by (abs(r1.serial - s2.serial) + abs(r2.serial - s1.serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+    print queryStr + "\n"
     num1, num2 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
     num1 = num1 + num2
     print "Ending perfect match test: #{Time.now.to_s}\n"
@@ -337,7 +336,7 @@ class CrossMatch
     $stdout.flush
     full1, partial1 = linkQSOs(@db.query(queryStr), fullType, partialType, true)
     print "Partial match end: #{Time.now.to_s}\n"
-    return full1 + full2, partial1 + partial2
+    return full1, partial1
   end
 
   def chooseType(str, num1, num2)

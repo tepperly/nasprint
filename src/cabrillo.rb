@@ -7,8 +7,8 @@
 require 'csv'
 require 'time'
 
-CONTEST_START=Time.utc(2015,2,1, 00, 00)
-CONTEST_END=Time.utc(2015,2,1,04,00)
+CONTEST_START=Time.utc(2014,10,4,16, 00)
+CONTEST_END=Time.utc(2014,10,5,22,00)
 
 def mySplit(str, pattern)
   result = [ ]
@@ -454,6 +454,8 @@ class Cabrillo
     when /\Aofftime:\s*(.*)/i
       trans(1, 1)
       @offtimes << $1.strip
+    when /\Ax-cqp-confirm1:\s*(.*)/i
+      # ignore
     # when /\Ax-cqp-comments:\s*(.*)\Z/i
     #   trans(1, 1)
     #   if $1 and $1.length > 0
@@ -468,20 +470,20 @@ class Cabrillo
     when /\Asoapbox:\s*(.*)/i
       trans(1, 1)
       @soapbox << $1.strip
-    when /\Aqso: +(\d+) +([a-z]{2,3}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?) +(\d+) +([a-z]+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?) +(\d+) +([a-z]+) +([a-z0-9]+)( +(\d+) *| *)(\{.*\})?$/i
+    when /\Aqso: +(\d+) +([a-z]{2,3}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+)( +(\d+) *| *)(\{.*\})?$/i
       qso = startQSO($1, $2, $3, $4, $5)
       qso.sentExch.serial = $8
-      qso.sentExch.origqth = $10.upcase.strip
-      qso.sentExch.qth = normalizeMult($10)
+      qso.sentExch.origqth = $9.upcase.strip
+      qso.sentExch.qth = normalizeMult($9)
       if qso.sentExch.qth and not @logCat.sentQTH
         @logCat.sentQTH = qso.sentExch.qth
       end
-      qso.recdExch.callsign = $11.upcase
-      qso.recdExch.serial = $14
-      qso.recdExch.origqth = $16.upcase.strip
-      qso.recdExch.qth = normalizeMult($16)
-      if ($18)
-        qso.transceiver = $18.strip.to_i
+      qso.recdExch.callsign = $10.upcase
+      qso.recdExch.serial = $13
+      qso.recdExch.origqth = $14.upcase.strip
+      qso.recdExch.qth = normalizeMult($14)
+      if ($16)
+        qso.transceiver = $16.strip.to_i
       end
       @qsos << qso
     else

@@ -52,6 +52,16 @@ def band(freq)
     "12m"
   when 28000..29700
     "10m"
+  when 50
+    "6m"
+  when 144
+    "2m"
+  when 222
+    '222'
+  when 432
+    '432'
+  when 902
+    '902'
   else
     "unknown"
   end
