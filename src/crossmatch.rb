@@ -208,9 +208,7 @@ class CrossMatch
   end
 
   def timeMatch(t1, t2, timediff)
-    return "(" + t1 + " between date_sub(" + t2 +", interval " +
-      timediff.to_s + " minute) and date_add(" + t2 + ",  interval " +
-      timediff.to_s + " minute))"
+    return "(abs(timestampdiff(MINUTE," + t1 + ", " + t2 + ")) <= " + timediff.to_s + ")"
   end
 
   def qsoMatch(q1, q2, timediff=PERFECT_TIME_MATCH)
