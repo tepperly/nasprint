@@ -7,11 +7,73 @@
 require_relative 'ContestDB'
 require 'jaro_winkler'
 
+CW_MAPPING = {
+  "A" => ".-",
+  "B" => "-...",
+  "C" => "-.-.",
+  "D" => "-..",
+  "E" => ".",
+  "F" => "..-.",
+  "G" => "--.",
+  "H" => "...",
+  "I" => "..",
+  "J" => ".---",
+  "K" => "-.-",
+  "L" => ".-..",
+  "M" => "--",
+  "N" => "-.",
+  "O" => "---",
+  "P" => ".--.",
+  "Q" => "--.-",
+  "R" => ".-.",
+  "S" => "...",
+  "T" => "-",
+  "U" => "..-",
+  "V" => "...-",
+  "W" => ".--",
+  "X" => "-..-",
+  "Y" => "-.--",
+  "Z" => "--..",
+  " " => "  ".
+  "1" => ".----",
+  "2" => "..---",
+  "3" => "...--",
+  "4" => "....-",
+  "5" => ".....",
+  "6" => "-....",
+  "7" => "--...",
+  "8" => "---..",
+  "9" => "----.",
+  "0" => "-----",
+  "." => ".-.-.-",
+  "?" => "..--..",
+  "," => "--..--",
+  ":" => "---...",
+  "'" => ".----.",
+  "-" => "-....-",
+  "/" => "-..-.",
+  "@" => ".--.-.",
+  "=" => "-...-"
+}
+CW_MAPPING.default = " "
+
+def toCW(str)
+  result = ""
+  space = false
+  str.upcase.each_char { |char|
+    if space
+      result << " "
+    end
+    result << CW_MAPPING[char]
+  }
+  result
+end
+
 class StringSpace
   def initialize
     @space = Hash.new
   end
-  
+
   def register(str)
     if @space.has_key?(str)
       return @space[str]
@@ -41,12 +103,35 @@ class Exchange
 
   attr_reader :basecall, :callsign, :serial, :mult, :location
 
-  def probablyMatch(exch)
-    callProb(exch) *
+  def crossProbs(l1, l2, isCW)
+    result = Array.new
+    l1.each { |s1|
+      l2.each { |s2|
+        result << JaroWinkler.distance(s1, s2)
+        if isCW
+          result << JaroWinkler.distance(toCW(s1),toCW(s2))
+        end
+      }
+    }
+    result.max
+  end
+
+  def probablyMatch(exch, isCW = false)
+    if @mult == @location
+      m1 = [ @mult ]
+    else
+      m1 = [ @mult, @location ]
+    end
+    if exch.mult == exch.location
+      m2 = [ exch.mult ]
+    else
+      m2 = [ exch.mult, exch.location ]
+    end
+    callProb(exch, isCW) *
       [ hillFunc(@serial-exch.serial, 1, 10),
-        JaroWinkler.distance(@serial.to_s,exch.serial.to_s) ].max *
-      [ JaroWinkler.distance(@mult, exch.mult),
-        JaroWinkler.distance(@location, exch.location) ].max
+      JaroWinkler.distance(@serial.to_s,exch.serial.to_s),
+      isCW ? JaroWinkler.distance(toCW(@serial.to_s),toCW(exch.serial.to_s)) : 0].max *
+      crossProbs(m1, m2, isCW)
   end
 
   def fullMatch?(exch)
@@ -55,9 +140,18 @@ class Exchange
       @mult == exch.mult
   end
 
-  def callProb(exch)
-    [ JaroWinkler.distance(@basecall, exch.basecall),
-      JaroWinkler.distance(@callsign, exch.callsign) ].max
+  def callProb(exch, isCW=false)
+    if @basecall == @callsign
+      l1 = [ @basecall ]
+    else
+      l1 = [ @basecall, @callsign ]
+    end
+    if exch.basecall == exch.callsign
+      l2 = [ exch.basecall ]
+    else
+      l2 = [ exch.basecall, exch.callsign ]
+    end
+    return crossProbs(l1, l2, isCW)
   end
 
   def to_s
@@ -90,8 +184,10 @@ class QSO
   end
 
   def callProbability(qso)
-    @sent.callProb(qso.recvd) *
-      @recvd.callProb(qso.sent)
+    isCW = (("CW" == @mode) or ("CW" == qso.mode))
+      @sent.callProb(qso.recvd, isCW) *
+        @recvd.callProb(qso.sent, isCW)
+    end
   end
 
   def fullMatch?(qso, time)
