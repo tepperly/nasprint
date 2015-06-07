@@ -117,6 +117,7 @@ class Exchange
   end
 
   def probablyMatch(exch, isCW = false)
+    cp = callProb(exch, isCW)
     if @mult == @location
       m1 = [ @mult ]
     else
@@ -127,11 +128,11 @@ class Exchange
     else
       m2 = [ exch.mult, exch.location ]
     end
-    callProb(exch, isCW) *
+     return cp*
       [ hillFunc(@serial-exch.serial, 1, 10),
       JaroWinkler.distance(@serial.to_s,exch.serial.to_s),
       isCW ? JaroWinkler.distance(toCW(@serial.to_s),toCW(exch.serial.to_s)) : 0].max *
-      crossProbs(m1, m2, isCW)
+      crossProbs(m1, m2, isCW), cp
   end
 
   def fullMatch?(exch)
@@ -176,11 +177,13 @@ class QSO
   attr_reader :id, :logID, :freq, :band, :mode, :datetime, :sent, :recvd
 
   def probablyMatch(qso)
+    sp, scp = @sent.probablyMatch(qso.recvd)
+    rp, rcp = @recvd.probablyMatch(qso.sent)
     (qso.logID == @logID) ? 0 :
-      (@sent.probablyMatch(qso.recvd) *
-       @recvd.probablyMatch(qso.sent) *
-       ((@band == qso.band) ? 1.0 : 0.85) *
-       hillFunc(@datetime - qso.datetime, 15*60, 24*60*60))
+      ( sp * rp *
+       ((@band == qso.band) ? 1.0 : 0.90) *
+       ((@mode == qso.mode) ? 1.0 : 0.90) *
+       hillFunc(@datetime - qso.datetime, 15*60, 24*60*60)), scp*rcp
   end
 
   def callProbability(qso)
@@ -192,6 +195,7 @@ class QSO
 
   def fullMatch?(qso, time)
     @band == qso.band and @mode == qso.mode and 
+      @mode == qso.mode and
       (qso.datetime >= (@datetime - 60*time) and
        qso.datetime <= (@datetime + 60*time)) and
       @recvd.fullMatch?(qso.sent)
@@ -353,7 +357,8 @@ class CrossMatch
         return nil
       end
     end
-    m = Match.new(qsos[0], qsos[1], qsos[0].probablyMatch(qsos[1]), qsos[0].callProbability(qsos[1]))
+    pm, cp = qsos[0].probablyMatch(qsos[1])
+    m = Match.new(qsos[0], qsos[1], pm, cp)
     print m.to_s + "\n"
   end
  
@@ -557,12 +562,12 @@ class CrossMatch
     alreadyseen = Hash.new
     qsos.each { |q1|
       qsos.each { |q2|
-        metric = q1.probablyMatch(q2)
-        if metric > 0.20
-          ids = [ q1.id, q2.id ].sort
-          if not alreadyseen[ids]
+        ids = [ q1.id, q2.id ].sort
+        if not alreadyseen[ids]
+          metric, cp = q1.probablyMatch(q2)
+          if metric > 0.20
             alreadyseen[ids] = true
-            matches << Match.new(q1, q2, metric, q1.callProbability(q2))
+            matches << Match.new(q1, q2, metric, cp)
           end
         end
       }
