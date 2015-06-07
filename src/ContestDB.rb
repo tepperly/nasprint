@@ -5,6 +5,7 @@
 #
 require 'csv'
 require 'set'
+require_relative 'callsign'
 
 
 class ContestDatabase
@@ -14,6 +15,7 @@ class ContestDatabase
   def initialize(db)
     @db = db
     @contestID = nil
+    @callCache = Hash.new
     createDB
   end
 
@@ -44,7 +46,7 @@ class ContestDatabase
     if not (tables.include?("Callsign") and tables.include?("Log"))
       createLogTable
     end
-    if not (tables.include?("Exchange") and tables.include?("QSO"))
+    if not (tables.include?("QSOExtra") and tables.include?("QSO"))
       createQSOTable
     end
     if not tables.include?("Overrides")
@@ -158,9 +160,40 @@ class ContestDatabase
     @db.query("create table if not exists Log (id integer primary key auto_increment, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, opclass enum('CHECKLOG', 'QRP', 'LOW', 'HIGH'), verifiedscore integer, verifiedQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, name varchar(128), club varchar(128), index callind (callsign), index contestind (contestID));")
   end
 
+  def lookupMultiplierByID(mID)
+    res = @db.query("select abbrev from Multiplier where id = #{mID} limit 1;")
+    res.each(:as => :array) { |row|
+      return row[0]
+    }
+    nil
+  end
+
+  EXCHANGE_FIELD_TYPES = { "_callID" => "integer not null" ,
+    "_entityID" => "integer",
+    "_multiplier_ID" => "integer",
+    "_serial" => "integer"
+  }
+  EXCHANGE_EXTRA_FIELD_TYPES = {
+    "_callsign" => "varchar(#{CHARS_PER_CALL})",
+    "_location" => "varchar(24)"
+  }
+
+  def exchangeFields(m, prefix)
+    m.keys.sort.map { |field|
+      prefix + field + " " + m[field]
+    }.join(", ")
+  end
+
+
   def createQSOTable
-    @db.query("create table if not exists Exchange (id integer primary key auto_increment, callsign varchar(#{CHARS_PER_CALL}), callID integer, serial integer, location varchar(8), multiplierID integer, entityID integer, index calltxtind (callsign), index callidind (callID), index serialind (serial), index locind (location), index multind (multiplierID));")
-    @db.query("create table if not exists QSO (id integer primary key auto_increment, logID integer not null, frequency integer, band enum('241G','142G','119G','75G','47G','24G','10G','5.7G','3.4G','2.3G','1.2G','902','432','222','2m','6m','10m','15m','20m', '40m', '80m','160m', 'unknown') default 'unknown', mode char(6), fixedMode enum('PH', 'CW', 'FM', 'RY'), time datetime, sentID integer not null, recvdID integer not null, transmitterNum integer, matchID integer, matchType enum('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None', comment varchar(256), index matchind (matchType), index bandind (band), index logind (logID), index timeind (time));")
+    @db.query("create table if not exists QSO (id integer primary key auto_increment, logID integer not null, frequency integer, band enum('241G','142G','119G','75G','47G','24G','10G','5.7G','3.4G','2.3G','1.2G','902','432','222','2m','6m','10m','15m','20m', '40m', '80m','160m', 'unknown') default 'unknown', fixedMode enum('PH', 'CW', 'FM', 'RY'), time datetime, " +
+              exchangeFields(EXCHANGE_FIELD_TYPES, "sent") + ", " +
+              exchangeFields(EXCHANGE_FIELD_TYPES, "recvd") +
+              ", matchID integer, matchType enum('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None', index matchind (matchType), index bandind (band), index logind (logID), index timeind (time));")
+    @db.query("create table if not exists QSOExtra (id integer primary key auto_increment, logID integer not null, mode char(6), transmitterNum integer, comment varchar(256), " +
+              exchangeFields(EXCHANGE_EXTRA_FIELD_TYPES, "sent") + ", " +
+              exchangeFields(EXCHANGE_EXTRA_FIELD_TYPES, "recvd") +
+              ", index logind (logID));")
   end
 
   def addOrLookupCall(callsign, contestIDVar=nil)
@@ -169,8 +202,15 @@ class ContestDatabase
       contestIDVar = @contestID
     end
     if contestIDVar
+      if contestIDVar == @contestID and @callCache.has_key?(callsign)
+        return @callCache[callsign]
+      end
+
       result = @db.query("select id from Callsign where basecall=\"#{@db.escape(callsign)}\" and contestID = #{contestIDVar.to_i} limit 1;")
       result.each(:as => :array) { |row|
+        if contestIDVar == @contestID
+          @callCache[callsign] = row[0].to_i
+        end
         return row[0].to_i
       }
       @db.query("insert into Callsign (contestID, basecall) values (#{contestIDVar.to_i}, \"#{@db.escape(callsign)}\");")
@@ -256,20 +296,6 @@ class ContestDatabase
     @db.query("delete from Pairs where contestID = #{contestID};")
   end
 
-  def removeExchange(id)
-    if id.respond_to?('join')
-      @db.query("delete from Exchange where id in (#{id.join(", ")}) limit #{id.size};")
-    else
-      @db.query("delete from Exchange where id = #{id.to_i} limit 1;")
-    end
-  end
-
-  def addExchange(callsign, callID, serial, location, multID,
-                  entityID)
-    @db.query("insert into Exchange (callsign, callID, serial, location, multiplierID, entityID) values (#{capOrNull(callsign)}, #{callID.to_i}, #{numOrNull(serial)}, #{capOrNull(location)}, #{numOrNull(multID)}, #{numOrNull(entityID)});")
-    return @db.last_id
-  end
-
   def dateOrNull(date)
     if date
       return "cast(" + date.strftime("\"%Y-%m-%d %H:%M:%S\"") + " as datetime)"
@@ -278,19 +304,33 @@ class ContestDatabase
     end
   end
 
-  def insertQSO(logID, frequency, band, roughMode, mode, datetime,
-                sentID, recvdID, transNum)
-    @db.query("insert into QSO (logID, frequency, band, mode, fixedMode, time, sentID, recvdID, transmitterNum) values (#{numOrNull(logID)}, #{numOrNull(frequency)}, #{strOrNull(band)}, #{capOrNull(roughMode)}, #{strOrNull(mode)}, #{dateOrNull(datetime)}, #{numOrNull(sentID)}, #{numOrNull(recvdID)}, #{numOrNull(transNum)});")
+  def translateExchange(exch, contestID)
+    basecall = callBase(exch.callsign)
+    bcID = addOrLookupCall(basecall, contestID)
+    multID, entityID = lookupMultiplier(exch.qth)
+    return bcID, multID, entityID
+  end
+
+  def insertQSO(contestID, logID, frequency, band, roughMode, mode, datetime,
+                sentExchange, recvdExchange, transNum)
+    recvdCallID, recvdMultID, recvdEntityID = translateExchange(recvdExchange, contestID)
+    sentCallID, sentMultID, sentEntityID = translateExchange(sentExchange, contestID)
+    @db.query("insert into QSO (logID, frequency, band, fixedMode, time, " +
+              (EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "sent" + f }.join(", ")) + ", " +
+              (EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "recvd" + f}.join(", ")) +
+              ") values (#{numOrNull(logID)}, #{numOrNull(frequency)}, #{strOrNull(band)}, #{strOrNull(mode)}, #{dateOrNull(datetime)}, #{numOrNull(sentCallID)}, #{numOrNull(sentEntityID)}, #{numOrNull(sentMultID)}, #{numOrNull(sentExchange.serial)}, #{numOrNull(recvdCallID)}, #{numOrNull(recvdEntityID)}, #{numOrNull(recvdMultID)}, #{numOrNull(recvdExchange.serial)});")
+    qsoID = @db.last_id
+    @db.query("insert into QSOExtra (id, logID, mode, " +
+              (EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "sent" + f }.join(", ")) + ", " +
+              (EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "recvd" + f}.join(", ")) +
+              ", transmitterNum) values (#{numOrNull(qsoID)}, #{numOrNull(logID)}, #{capOrNull(roughMode)}, #{strOrNull(sentExchange.callsign)}, #{strOrNull(sentExchange.origqth)}, #{strOrNull(recvdExchange.callsign)}, #{strOrNull(recvdExchange.origqth)}, #{numOrNull(transNum)});")
   end
 
   def removeContestQSOs(contestID)
     logs = logsForContest(contestID)
     if not logs.empty?
-      res = @db.query("select recvdID, sentID from QSO where logID in (#{logs.join(", ")});")
-      res.each(:as => :array) { |row| 
-        removeExchange([row[0], row[1]])
-      }
       @db.query("delete from QSO where logID in (#{logs.join(", ")});")
+      @db.query("delete from QSOExtra where logID in (#{logs.join(", ")});")
     end
     clearTeams(contestID)
     @db.query("delete from Callsign where contestID = #{contestID};")
@@ -350,7 +390,7 @@ class ContestDatabase
   def numBandChanges(logID)
     count = 0
     prev = nil
-    res = @db.query("select q.band from QSO as q join Exchange as e on e.id = q.sentID where q.logID = #{logID.to_i} order by q.time asc, e.serial asc, q.id asc;")
+    res = @db.query("select q.band from QSO as q where q.logID = #{logID.to_i} order by q.time asc, q.sent_serial asc, q.id asc;")
     res.each(:as => :array) { |row|
       if row[0].to_s != prev
         count = count + 1
@@ -413,11 +453,11 @@ class ContestDatabase
 
   def logMultipliers(logID)
     multipliers = Set.new
-    res = @db.query("select distinct m.abbrev from QSO as q join Exchange as e on e.id = q.recvdID join Multiplier as m on m.id = e.multiplierID where q.logID = #{logID} and q.matchType in ('Full', 'Bye') and m.abbrev != 'DX';")
+    res = @db.query("select distinct m.abbrev from QSO as q join Multiplier as m on m.id = q.recvd_multiplierID where q.logID = #{logID} and q.matchType in ('Full', 'Bye') and m.abbrev != 'DX';")
     res.each(:as => :array) { |row|
       multipliers.add(row[0])
     }
-    res = @db.query("select distinct en.name from (QSO as q join Exchange as e on e.id = q.recvdID join Multiplier as m on m.id = e.multiplierID and m.abbrev='DX') join Entity as en on en.id = e.entityID where q.logID = #{logID} and q.matchType in ('Full', 'Bye') and en.continent = 'NA';")
+    res = @db.query("select distinct en.name from (QSO as q join Multiplier as m on m.id = q.recvd_multiplierID and m.abbrev='DX') join Entity as en on en.id = q.recvd_entityID where q.logID = #{logID} and q.matchType in ('Full', 'Bye') and en.continent = 'NA';")
     res.each(:as => :array) { |row|
       multipliers.add(row[0])
     }
@@ -433,11 +473,19 @@ class ContestDatabase
   end
 
   def numStates(logID)
-    res = @db.query("select count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = #{logID} and matchType in ('Full', 'Bye') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID where l.id = #{logID} group by l.id order by numstates desc, l.callsign asc limit 1;")
+    res = @db.query("select count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = #{logID} and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID where l.id = #{logID} group by l.id order by numstates desc, l.callsign asc limit 1;")
     res.each(:as => :array) { |row|
       return row[0]
     }
     0
+  end
+
+  def baseCall(callID)
+    res = @db.query("select basecall from Callsign where id = #{callID} limit 1;")
+    res.each(:as => :array) { |row|
+      return row[0]
+    }
+    nil
   end
 
   def logCallsign(logID)
@@ -466,12 +514,12 @@ class ContestDatabase
 
   def topNumStates(contestID, num)
     logs = Array.new
-    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID group by l.id order by numstates desc, l.callsign asc limit #{num-1}, 1;")
+    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID group by l.id order by numstates desc, l.callsign asc limit #{num-1}, 1;")
     limit = nil
     res.each(:as => :array) { |row|
       limit = row[2]
     }
-    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID group by l.id  having numstates >= #{limit} order by numstates desc, l.callsign asc;")
+    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID group by l.id  having numstates >= #{limit} order by numstates desc, l.callsign asc;")
     res.each(:as => :array) { |row|
       logs << [ row[1], row[2] ]
     }
@@ -535,7 +583,7 @@ class ContestDatabase
   
   def dupeQSOs(logID)
     dupes = Array.new
-    res = @db.query("select s.serial, r.callsign from (QSO as q join Exchange as s on s.id = q.sentID) join Exchange as r on r.id = q.recvdID where q.logID = #{logID} and matchType = 'Dupe' order by s.serial asc;")
+    res = @db.query("select q.sent_serial, qe.recvd_callsign from QSO as q join QSOExtra as qe on q.id = qe.id where q.logID = #{logID} and q.matchType = 'Dupe' order by q.sent_serial asc;")
     res.each(:as => :array) { |row|
       dupes << { 'num' => row[0].to_i, 'callsign' => row[1].to_s }
     }
@@ -577,7 +625,7 @@ class ContestDatabase
   
   def qsosOutOfContest(logID)
     logs = Array.new
-    res = @db.query("select q.time, s.serial from QSO as q join Exchange as s on s.id = q.sentID where q.logID = #{logID} and matchType = 'OutsideContest' order by s.serial asc;")
+    res = @db.query("select q.time, q.sent_serial from QSO as q join where q.logID = #{logID} and matchType = 'OutsideContest' order by q.sent_serial asc;")
     res.each(:as => :array) { |row|
       logs << { 'time' => row[0], 'number' => row[1] }
     }

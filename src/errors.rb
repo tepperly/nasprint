@@ -22,7 +22,7 @@ def lookupMult(db, id)
 end
 
 def fillInComment(db, contestID)
-  res = db.query("select q1.id, q1.band, q1.fixedMode, q1.time, l1.clockadj, c1.basecall, e1.serial, e1.location, e1.multiplierID, q2.band, q2.fixedMode, q2.time, l2.clockadj, c2.basecall, e2.serial, e2.location, e2.multiplierID, q1.matchID from QSO as q1, QSO as q2, Exchange as e1, Exchange as e2, Callsign as c1, Callsign as c2, Log as l1, Log as l2 where q1.logID = l1.id  and q2.logID = l2.id and l1.contestID = #{contestID} and l2.contestID = #{contestID} and q1.matchType = 'Partial' and q1.matchID is not null and q2.id = q1.matchID and q1.id = q2.matchID and q1.comment is null and e1.id = q1.recvdID and e2.id = q2.sentID and c1.id = e1.callID and c2.id = e2.callID;")
+  res = db.query("select q1.id, q1.band, q1.fixedMode, q1.time, l1.clockadj, c1.basecall, q1.recvd_serial, qe1.recvd_location, q1.recvd_multiplierID, q2.band, q2.fixedMode, q2.time, l2.clockadj, c2.basecall, q2.sent_serial, qe2.sent_location, q2.sent_multiplierID, q1.matchID from QSO as q1 join QSOExtra as qe1 on q1.id = qe1.id, QSO as q2 join QSOExtra as qe2 on q2.id = qe2.id, Callsign as c1, Callsign as c2, Log as l1, Log as l2 where q1.logID = l1.id  and q2.logID = l2.id and l1.contestID = #{contestID} and l2.contestID = #{contestID} and q1.matchType = 'Partial' and q1.matchID is not null and q2.id = q1.matchID and q1.id = q2.matchID and q1.comment is null and c1.id = q1.recvd_callID and c2.id = q2.sent_callID;")
   res.each(:as => :array) { |row|
     comments = Array.new
     if row[5] != row[13]
@@ -50,7 +50,7 @@ def fillInComment(db, contestID)
       db.query("update QSO set comment='#{comments.join(", ")}' where id = #{row[0]} limit 1;")
     end
   }
-  res = db.query("select q.id, e.name, e.continent from QSO as q join Exchange as r on q.recvdID = r.id join Multiplier as m on (r.multiplierID = m.id and m.abbrev = 'DX') join Entity as e on e.id = r.entityID where q.matchType in ('Full', 'Bye');")
+  res = db.query("select q.id, e.name, e.continent from QSO as q join Multiplier as m on (q.recvd_multiplierID = m.id and m.abbrev = 'DX') join Entity as e on e.id = q.recvd_entityID where q.matchType in ('Full', 'Bye');")
   res.each(:as => :array) { |row|
     db.query("update QSO set comment = 'DX=#{row[1]} (#{row[2]})' where id = #{row[0].to_i} limit 1;")
   }

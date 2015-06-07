@@ -39,7 +39,7 @@ class ResolveSingletons
 
   def queryCallsigns
     callList = Array.new
-    res = @db.query("select c.id, c.basecall, c.validcall, c.logrecvd, count(*) as num from Callsign as c, Exchange as e, QSO as q where c.contestID = #{@contestID} and e.callID = c.id and e.id = q.recvdID group by c.id order by c.basecall asc;")
+    res = @db.query("select c.id, c.basecall, c.validcall, c.logrecvd, count(*) as num from Callsign as c, QSO as q where c.contestID = #{@contestID} and q.recvd_callID = c.id and group by c.id order by c.basecall asc;")
     res.each(:as => :array) { |row|
       callList << Call.new(row[0].to_i, row[1], (toBool(row[2]) or ONE_BY_ONE.match(row[1])), toBool(row[3]), row[4].to_i)
     }
@@ -67,9 +67,9 @@ class ResolveSingletons
   end
 
   def exchangeClose(qid, call)
-    res = @db.query("select m.abbrev from QSO as q join Exchange as e on e.id = q.recvdID left join Multiplier as m on m.id = e.multiplierID where q.id = #{qid} limit 1;")
+    res = @db.query("select m.abbrev from QSO as q left join Multiplier as m on m.id = q.recvd_multiplierID where q.id = #{qid} limit 1;")
     res.each(:as => :array) { |row|
-      ref = @db.query("select m.abbrev from Callsign as c join Log as l on (l.contestID = #{@contestID} and  c.id = l.callID) join QSO as q join Exchange as e on e.id = q.recvdID left join Multiplier as m on m.id = e.multiplierID where c.basecall = \"#{call}\" limit 1;")
+      ref = @db.query("select m.abbrev from Callsign as c join Log as l on (l.contestID = #{@contestID} and  c.id = l.callID) join QSO as q left join Multiplier as m on m.id = q.recvd_multiplierID where c.basecall = \"#{call}\" limit 1;")
       print "exchangeClose1 #{row[0]}\n"
       ref.each(:as => :array) { |refrow|
         print "exchangeClose2 #{refrow[0]}\n"
@@ -83,11 +83,11 @@ class ResolveSingletons
 
 
   def resolve
-    res = @db.query("select distinct q.id from QSO as q, Exchange as e where matchType = 'None' and q.recvdID = e.id and (e.multiplierID is null or e.serial is null);")
+    res = @db.query("select distinct q.id from QSO as q where matchType = 'None' and (q.recvd_multiplierID is null or q.recvd_serial is null);")
     res.each( :as => :array) { |row|
       @db.query("update QSO set matchType = 'Removed', comment='Incomplete exchanged received.' where id = #{row[0]} limit 1;")
     }
-    res = @db.query("select q.id, e.callID, e.serial from QSO as q, Exchange as e where q.logID in (#{@logIDs.join(", ")}) and q.matchType = 'None' and e.id = q.recvdID order by q.id asc;")
+    res = @db.query("select q.id, q.recvd_callID, q.recvd_serial from QSO as q where q.logID in (#{@logIDs.join(", ")}) and q.matchType = 'None' order by q.id asc;")
     res.each(:as => :array) { |row|
       call = @callFromID[row[1]]
       if call
@@ -124,7 +124,7 @@ class ResolveSingletons
 
   def finalDupeCheck
     print "Starting final dupe check: #{Time.now.to_s}\n"
-    res = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2, Exchange as e1, Exchange as e2 where q1.logID in (#{@logIDs.join(",")}) and q2.logID in (#{@logIDs.join(",")}) and q1.id < q2.id and q1.logID = q2.logID and q1.matchType in ('Full','Bye') and q2.matchType in ('Full','Bye') and q1.band = q2.band and e1.id = q1.recvdID and e2.id = q2.recvdID and e1.callID = e2.callID order by q1.id;")
+    res = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.logID in (#{@logIDs.join(",")}) and q2.logID in (#{@logIDs.join(",")}) and q1.id < q2.id and q1.logID = q2.logID and q1.matchType in ('Full','Bye') and q2.matchType in ('Full','Bye') and q1.band = q2.band and q1.recvd_callID = q2.recvd_callID order by q1.id;")
     count = 0
     res.each(:as => :array) { |row|
       @db.query("update QSO set matchType = 'Dupe' where id = #{row[1]} and matchType in ('Full','Bye') limit 1;")

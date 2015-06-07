@@ -121,3 +121,4 @@ ARGV.each { |arg|
 
 print "#{count} clean logs\n"
 print "#{total} total logs\n"
+db.close

@@ -19,19 +19,6 @@ def checkLocation(db, cab)
   return nil, nil
 end
 
-def addExchange(db, exchange, cID)
-  basecall = callBase(exchange.callsign)
-  bcID = db.addOrLookupCall(basecall, cID)
-  if bcID
-    multID, entityID = db.lookupMultiplier(exchange.qth)
-    return db.addExchange(exchange.callsign, bcID, exchange.serial,
-                          exchange.origqth,
-                          multID, entityID)
-  else
-    print "Exchange callsign -- not base id #{exchange.callsign}\n"
-  end
-end
-
 def band(freq)
   case freq
   when 1800..2000
@@ -69,17 +56,9 @@ end
 
 def addQSOs(db, contestID, logID, qsos)
   qsos.each { |qso|
-    sentID = addExchange(db, qso.sentExch, contestID)
-    if sentID
-      recvdID = addExchange(db, qso.recdExch, contestID)
-      if recvdID
-        db.insertQSO(logID, qso.freq, band(qso.freq),
-                     qso.origmode, qso.mode, qso.datetime,
-                     sentID, recvdID, qso.transceiver)
-      else
-        db.removeExchange(sentID)
-      end
-    end
+    db.insertQSO(contestID, logID, qso.freq, band(qso.freq),
+                 qso.origmode, qso.mode, qso.datetime,
+                 qso.sentExch, qso.recdExch, qso.transceiver)
   }
 end
 

@@ -39,7 +39,7 @@ class Multiplier
   end
 
   def resolveDX
-    res = @db.query("select distinct c.id, c.basecall from QSO as q, Exchange as e, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye') and q.recvdID = e.id and m.abbrev='DX' and c.id = e.callID and m.entityID is null and m.id = e.multiplierID and q.logID in (#{@logs.join(", ")});")
+    res = @db.query("select distinct c.id, c.basecall from QSO as q, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye') and m.abbrev='DX' and c.id = q.recvd_callID and m.entityID is null and m.id = q.recvd_multiplierID and q.logID in (#{@logs.join(", ")});")
     res.each(:as => :array) { |row|
       entity = checkOverride(row[1])
       override = entity
@@ -53,14 +53,18 @@ class Multiplier
       if entity
         case entity
         when 6 # Alaska
-          @db.query("update Exchange set entityID = #{entity}, multiplierID = #{@alaskaID} where callID = #{row[0]};")
+          @db.query("update QSO set recvd_entityID = #{entity}, recvd_multiplierID = #{@alaskaID} where recvd_callID = #{row[0]};")
+          @db.query("update QSO set sent_entityID = #{entity}, sent_multiplierID = #{@alaskaID} where sent_callID = #{row[0]};")
         when 110 # Hawaii
-          @db.query("update Exchange set entityID = #{entity}, multiplierID = #{@hawaiiID} where callID = #{row[0]};")
+          @db.query("update QSO set recvd_entityID = #{entity}, recvd_multiplierID = #{@hawaiiID} where recvd_callID = #{row[0]};")
+          @db.query("update QSO set sent_entityID = #{entity}, sent_multiplierID = #{@hawaiiID} where sent_callID = #{row[0]};")
         else
           if override
-            @db.query("update Exchange set entityID = #{entity} where callID = #{row[0]};")
+            @db.query("update QSO set recvd_entityID = #{entity} where recvd_callID = #{row[0]};")
+            @db.query("update QSO set sent_entityID = #{entity} where sent_callID = #{row[0]};")
           else
-            @db.query("update Exchange set entityID = #{entity} where callID = #{row[0]} and entityID is null;")
+            @db.query("update QSO set recvd_entityID = #{entity} where recvd_callID = #{row[0]} and recvd_entityID is null;")
+            @db.query("update QSO set sent_entityID = #{entity} where sent_callID = #{row[0]} and sent_entityID is null;")
           end
         end
       else
@@ -126,7 +130,7 @@ class Multiplier
 
   def markDiscentingQSOasRemoved(id, choice, name)
     qlist = Array.new
-    res = @db.query("select q.id from QSO as q, Exchange as e where e.id = q.recvdID and e.callID = #{id} and q.matchType='Bye' and e.multiplierID != #{choice};")
+    res = @db.query("select q.id from QSO as q where q.recvd_callID = #{id} and q.matchType='Bye' and q.recvd_multiplierID != #{choice};")
     res.each(:as => :array) { |row|
       qlist << row[0].to_i
     }
@@ -152,10 +156,10 @@ class Multiplier
 
   def checkByeMultipliers
     print "Checking Bye multipliers\n"
-    res = @db.query("select c.id, c.basecall, count(*) as numQ from Callsign as c, QSO as q, Exchange as e where q.logID in (#{@logs.join(", ")}) and q.matchType = 'Bye' and q.recvdID = e.id and c.id = e.callID group by c.id having numQ > 1;")
+    res = @db.query("select c.id, c.basecall, count(*) as numQ from Callsign as c, QSO as q where q.logID in (#{@logs.join(", ")}) and q.matchType = 'Bye' and c.id = q.recvd_callID group by c.id having numQ > 1;")
     count = 0
     res.each(:as => :array) { |row|
-      multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Exchange as e, Multiplier as m where e.callID=#{row[0]} and e.multiplierID=m.id and q.recvdID=e.id and q.matchType = 'Bye' group by m.id;")
+      multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=#{row[0]} and q.recvd_multiplierID=m.id and q.matchType = 'Bye' group by m.id;")
       if multres.count > 1
         count = count + resolveAmbiguous(row[0], multres)
       end

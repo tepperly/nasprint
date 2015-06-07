@@ -70,7 +70,7 @@ class Report
   end
 
   def lookupMultiplier(id)
-    res = @db.query("select m.abbrev, e.entityID from Multiplier as m, QSO as q, Exchange as e where q.id = #{id} and q.recvdID = e.id and e.multiplierID = m.id limit 1;")
+    res = @db.query("select m.abbrev, q.recvd_entityID from Multiplier as m, QSO as q where q.id = #{id} and  q.recvd_multiplierID = m.id limit 1;")
     res.each(:as => :array) { |row|
       return row[0], row[1]
     }
