@@ -4,7 +4,7 @@
 # Validate and cross match QSOs
 #
 
-require 'ContestDB'
+require_relative 'ContestDB'
 require 'jaro_winkler'
 
 class StringSpace
@@ -199,9 +199,13 @@ class CrossMatch
     return "(abs(timestampdiff(MINUTE," + t1 + ", " + t2 + ")) <= " + timediff.to_s + ")"
   end
 
-  def qsoMatch(q1, q2, timediff=PERFECT_TIME_MATCH)
+  def qsoExactMatch(q1,q2)
     return q1 + ".band = " + q2 + ".band and " + q1 + ".fixedMode = " +
-      q2 + ".fixedMode and " + timeMatch("q1.time", "q2.time", timediff) 
+      q2 + ".fixedMode"
+  end
+
+  def qsoMatch(q1, q2, timediff=PERFECT_TIME_MATCH)
+    return timeMatch("q1.time", "q2.time", timediff) 
   end
 
   def serialCmp(s1, s2, range)
@@ -209,10 +213,13 @@ class CrossMatch
       ") and (" + s2 + " + " + range.to_s + "))"
   end
 
+  def exchangeExactMatch(e1, e2)
+    return e1 + "_callID = " + e2 + "_callID and " +
+      e1 + "_multiplierID = " + e2 + "_multiplierID"
+  end
+
   def exchangeMatch(e1, e2)
-    result = e1 + "_callID = " + e2 + "_callID and " +
-      e1 + "_multiplierID = " + e2 + "_multiplierID and "
-    return result + serialCmp(e1 + "_serial", e2 + "_serial", 1)
+    return serialCmp(e1 + "_serial", e2 + "_serial", 1)
   end
 
   def qsosFromDB(res, qsos = Array.new)
@@ -285,17 +292,24 @@ class CrossMatch
 
   def perfectMatch(timediff = PERFECT_TIME_MATCH, matchType="Full")
     print "Staring perfect match test phase 1: #{Time.now.to_s}\n"
-    $stdout.flush
-    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2 where " +
-                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
-                    " and q1.logID != q2.logID and q1.id < q2.id and " +
-                    notMatched("q1") + " and " + notMatched("q2") + " and " +
-                    qsoMatch("q1", "q2", timediff) + " and " +
-                    exchangeMatch("q1.recvd_", "q2.sent_") + " and " +
-                    exchangeMatch("q2.recvd_", "q1.sent_") + 
-                    " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.recvd_serial)) asc" +
+    queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 " +
+      " on (" +  exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
+      exchangeExactMatch("q2.recvd", "q1.sent") + " and " +
+      qsoExactMatch("q1", "q2") +
+      ") where " +
+      "q1.logID in " + logSet + " and q2.logID in " + logSet + " and " +
+      "q1.logID != q2.logID and q1.id < q2.id and " +
+      exchangeMatch("q1.recvd", "q2.sent") + " and " +
+      exchangeMatch("q2.recvd", "q1.sent") + " and " +
+      notMatched("q1") + " and " + notMatched("q2") + " and " +
+      qsoMatch("q1", "q2", timediff) +
+      " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.recvd_serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print queryStr + "\n"
+    @db.query("explain " + queryStr).each(:as => :array) { |row|
+      print row.join(", ") + "\n"
+    }
+    $stdout.flush
     num1, num2 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
     num1 = num1 + num2
     print "Ending perfect match test: #{Time.now.to_s}\n"
@@ -303,16 +317,22 @@ class CrossMatch
   end
 
   def partialMatch(timediff = PERFECT_TIME_MATCH, fullType="Full",  partialType="Partial")
-    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2 where " +
-                    notMatched("q1") + " and " + notMatched("q2") + " and " +
-                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
-                    " and q1.logID != q2.logID " +
-                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
-                    exchangeMatch("q1.recvd_", "q2.sent_") + " and " +
-                    " q2.recvd_callID = q1.sent_callID " +
-                    " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
+    queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 on (" +
+      exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
+      qsoExactMatch("q1", "q2") + " and q2.recvd_callID = q1.sent_callID )" +
+      "where " +
+      notMatched("q1") + " and " + notMatched("q2") + " and " +
+      "q1.logID in " + logSet + " and q2.logID in " + logSet +
+      " and q1.logID != q2.logID " +
+      " and " + qsoMatch("q1", "q2", timediff) + " and " +
+      exchangeMatch("q1.recvd", "q2.sent") +
+      " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     print "Partial match test phase 1: #{Time.now.to_s}\n"
+    print queryStr + "\n"
+    @db.query("explain " + queryStr).each(:as => :array) { |row|
+      print row.join(", ") + "\n"
+    }
     $stdout.flush
     full1, partial1 = linkQSOs(@db.query(queryStr), fullType, partialType, true)
     print "Partial match end: #{Time.now.to_s}\n"

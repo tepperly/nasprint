@@ -170,7 +170,7 @@ class ContestDatabase
 
   EXCHANGE_FIELD_TYPES = { "_callID" => "integer not null" ,
     "_entityID" => "integer",
-    "_multiplier_ID" => "integer",
+    "_multiplierID" => "integer",
     "_serial" => "integer"
   }
   EXCHANGE_EXTRA_FIELD_TYPES = {
@@ -189,7 +189,7 @@ class ContestDatabase
     @db.query("create table if not exists QSO (id integer primary key auto_increment, logID integer not null, frequency integer, band enum('241G','142G','119G','75G','47G','24G','10G','5.7G','3.4G','2.3G','1.2G','902','432','222','2m','6m','10m','15m','20m', '40m', '80m','160m', 'unknown') default 'unknown', fixedMode enum('PH', 'CW', 'FM', 'RY'), time datetime, " +
               exchangeFields(EXCHANGE_FIELD_TYPES, "sent") + ", " +
               exchangeFields(EXCHANGE_FIELD_TYPES, "recvd") +
-              ", matchID integer, matchType enum('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None', index matchind (matchType), index bandind (band), index logind (logID), index timeind (time));")
+              ", matchID integer, matchType enum('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None', index matchind (matchType), index bandind (band), index logind (logID), index timeind (time), index modeind (fixedMode), index comb_multind (sent_multiplierID, recvd_multiplierID), index sent_multind (sent_multiplierID), index recvd_multind (recvd_multiplierID), index sent_callind (sent_callID), index recvd_callind (recvd_callID));")
     @db.query("create table if not exists QSOExtra (id integer primary key auto_increment, logID integer not null, mode char(6), transmitterNum integer, comment varchar(256), " +
               exchangeFields(EXCHANGE_EXTRA_FIELD_TYPES, "sent") + ", " +
               exchangeFields(EXCHANGE_EXTRA_FIELD_TYPES, "recvd") +
