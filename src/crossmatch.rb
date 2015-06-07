@@ -234,7 +234,7 @@ class CrossMatch
   end
 
   def printDupeMatch(id1, id2)
-    queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, qe.sent_callsign, q.sent_serial, ms.abbrev, qe.sent_location, cr.basecall, q.recvd_callsign, q.recvd_serial, mr.abbrev, qe.recvd_location " +
+    queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, qe.sent_callsign, q.sent_serial, ms.abbrev, qe.sent_location, cr.basecall, qe.recvd_callsign, q.recvd_serial, mr.abbrev, qe.recvd_location " +
                     " from QSO as q join QSOExtra as qe on qe.id = q.id, Callsign as cr, Callsign as cs, Multiplier as ms, Multiplier as mr where " +
                     linkCallsign("q.sent_","cs") + " and " + linkCallsign("q.recvd_", "cr") + " and " +
                     linkMultiplier("q.sent_","ms") + " and " + linkMultiplier("q.recvd_", "mr") + " and " +
@@ -393,8 +393,8 @@ class CrossMatch
                     " and q1.logID < q2.logID " +
                     " and " + qsoMatch("q1", "q2", timediff) + " and " +
                     " (qe1.sent_callsign = qe2.recvd_callsign or q1.sent_callID = q2.recvd_callID) and " +
-                    " (q2.sent_callID = q1.recvd_callID or qe2.sent_callsign = q1.recvd_callsign) " +
-                    " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.send_serial)) asc" +
+                    " (q2.sent_callID = q1.recvd_callID or qe2.sent_callsign = qe1.recvd_callsign) " +
+                    " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
     return linkQSOs(@db.query(queryStr), 'Partial', 'Partial', true)
   end
