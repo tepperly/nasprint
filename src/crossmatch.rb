@@ -34,7 +34,7 @@ CW_MAPPING = {
   "X" => "-..-",
   "Y" => "-.--",
   "Z" => "--..",
-  " " => "  ".
+  " " => "  ",
   "1" => ".----",
   "2" => "..---",
   "3" => "...--",
@@ -179,18 +179,17 @@ class QSO
   def probablyMatch(qso)
     sp, scp = @sent.probablyMatch(qso.recvd)
     rp, rcp = @recvd.probablyMatch(qso.sent)
-    (qso.logID == @logID) ? 0 :
-      ( sp * rp *
-       ((@band == qso.band) ? 1.0 : 0.90) *
-       ((@mode == qso.mode) ? 1.0 : 0.90) *
-       hillFunc(@datetime - qso.datetime, 15*60, 24*60*60)), scp*rcp
+    return ((qso.logID == @logID) ? 0 :
+            ( sp * rp *
+              ((@band == qso.band) ? 1.0 : 0.90) *
+              ((@mode == qso.mode) ? 1.0 : 0.90) *
+              hillFunc(@datetime - qso.datetime, 15*60, 24*60*60))), scp*rcp
   end
 
   def callProbability(qso)
     isCW = (("CW" == @mode) or ("CW" == qso.mode))
-      @sent.callProb(qso.recvd, isCW) *
+    return @sent.callProb(qso.recvd, isCW) *
         @recvd.callProb(qso.sent, isCW)
-    end
   end
 
   def fullMatch?(qso, time)
@@ -545,7 +544,7 @@ class CrossMatch
       linkMultiplier("q.sent","ms") + " and " + linkMultiplier("q.recvd", "mr") + " and " +
       notMatched("q") + " and " +
       "q.logID in " + logSet + " " +
-      "order by q.logID asc, q.time asc;"
+      "order by q.id asc;"
     res = @db.query(queryStr)
     qsos = Array.new
     res.each(:as => :array) { |row|
@@ -559,14 +558,11 @@ class CrossMatch
     print "Starting probability-based cross match: #{Time.now.to_s}\n"
     $stdout.flush
     matches = Array.new
-    alreadyseen = Hash.new
     qsos.each { |q1|
       qsos.each { |q2|
-        ids = [ q1.id, q2.id ].sort
-        if not alreadyseen[ids]
+        if (q1.id < q2.id) and (q1.logID != q2.logID)
           metric, cp = q1.probablyMatch(q2)
           if metric > 0.20
-            alreadyseen[ids] = true
             matches << Match.new(q1, q2, metric, cp)
           end
         end
