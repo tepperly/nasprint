@@ -439,6 +439,8 @@ class CrossMatch
     return full1, partial1
   end
 
+
+
   def chooseType(str, num1, num2)
       if str == "TimeShiftFull"
         return "Full", num1 + 1, num2
@@ -554,13 +556,15 @@ class CrossMatch
                     row[5], s, r)
       qsos << qso
     }
+    res = nil
     print "#{qsos.length} unmatched QSOs read in\n"
     print "Starting probability-based cross match: #{Time.now.to_s}\n"
     $stdout.flush
     matches = Array.new
     qsos.each { |q1|
       qsos.each { |q2|
-        if (q1.id < q2.id) and (q1.logID != q2.logID)
+        break if (q2.id >= q1.id)
+        if (q1.logID != q2.logID)
           metric, cp = q1.probablyMatch(q2)
           if metric > 0.20
             matches << Match.new(q1, q2, metric, cp)
