@@ -1,6 +1,6 @@
-# North American Sprint Scoring
+# California QSO Party
 
-This is software to help score the [North American Sprint](http://ssbsprint.com/) ham radio competition. The process
+This is software to help score the [California QSO Party](http://cqp.org/) ham radio competition. The process
 begins with a collection of [Cabrillo](http://www.kkn.net/~trey/cabrillo/) log files that contain records of ham
 radio contacts that took place during the running of the NA Sprint contest.
 
