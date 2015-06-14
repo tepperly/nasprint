@@ -156,7 +156,7 @@ class Exchange
   end
 
   def to_s
-    "%-6s %-7s %4d %-2s %-4s" % [@basecall, @callsign, @serial,
+    "%-6s %-7s %4d %-4s %-4s" % [@basecall, @callsign, @serial,
                                   @mult, @location]
   end
 
