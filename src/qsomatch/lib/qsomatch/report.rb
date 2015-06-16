@@ -71,7 +71,7 @@ class Report
 
   def lookupMultiplier(id)
     res = @db.query("select m.abbrev, q.recvd_entityID from Multiplier as m, QSO as q where q.id = #{id} and  q.recvd_multiplierID = m.id limit 1;")
-    res.each(:as => :array) { |row|
+    res.each { |row|
       return row[0], row[1]
     }
     return nil, nil
@@ -82,7 +82,7 @@ class Report
     if "DX" == abbrev
       if entity
         res = @db.query("select name, continent from Entity where id = #{entity} limit 1;")
-        res.each(:as => :array) { |row|
+        res.each { |row|
           if "NA" == row[1]     # it's a NA DX entity
             log.addMultiplier(row[0])
           end
@@ -99,7 +99,7 @@ class Report
 
   def scoreLog(id, log)
     res = @db.query("select q.matchType, q.id from QSO as q where q.logID = #{id} order by q.time asc;")
-    res.each(:as => :array) { |row|
+    res.each { |row|
       log.incCount(row[0])
       if ["Full", "Bye"].include?(row[0]) # QSO counts for credit
         addMultiplier(log, row[1])
@@ -110,7 +110,7 @@ class Report
   def makeReport(out = $stdout)
     logs = Array.new
     res = @db.query("select callsign, email, opclass, id from Log where contestID = #{@contestID} order by callsign asc;")
-    res.each(:as => :array) { |row|
+    res.each { |row|
       log = Log.new(row[0], row[1], row[2])
       scoreLog(row[3],log)
       @db.query("update Log set verifiedscore = #{log.score}, verifiedQSOs = #{log.numqsos}, verifiedMultipliers = #{log.nummultipliers} where id = #{row[3]} limit 1;")

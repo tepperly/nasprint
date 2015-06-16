@@ -33,8 +33,8 @@ const char *DEFAULT_ADJ_TABLE[] = {
 };
 
 
-AdjMatrix* jw_adj_matrix_new(unsigned int capacity){
-  AdjMatrix *matrix = malloc(sizeof(AdjMatrix));
+jw_AdjMatrix* jw_adj_matrix_new(unsigned int capacity){
+  jw_AdjMatrix *matrix = malloc(sizeof(jw_AdjMatrix));
   if (matrix) {
     matrix->d_capacity = capacity;
     matrix->d_length = 0;
@@ -65,13 +65,14 @@ adj_matrix_maxrow(const char * const x,
 		  const unsigned int num)
 {
   char maxrow = 0u;
-  for(unsigned int i = 0; i < num; ++i) {
+  unsigned int i;
+  for(i = 0; i < num; ++i) {
     maxrow = adj_matrix_max(maxrow, adj_matrix_min(x[i], y[i]));
   }
   return maxrow;
 }
 
-void jw_adj_matrix_add_multiple(AdjMatrix *matrix,
+void jw_adj_matrix_add_multiple(jw_AdjMatrix *matrix,
 				const char *x,
 				const char *y,
 				unsigned int num)
@@ -115,7 +116,7 @@ void jw_adj_matrix_add_multiple(AdjMatrix *matrix,
   }
 }
 
-char jw_adj_matrix_find(const AdjMatrix *matrix, char x, char y){
+char jw_adj_matrix_find(const jw_AdjMatrix *matrix, char x, char y){
   if (matrix && (matrix->d_length > 0)) {
     if (y < x) {			/* x should always be < y */
       char tmp = y;
@@ -124,8 +125,9 @@ char jw_adj_matrix_find(const AdjMatrix *matrix, char x, char y){
     }
     if (x < matrix->d_maxchar) {
       const int last = matrix->d_rowstart[x+1];
+      int j;
       /* assumes d_colindex is unordered */
-      for(int j = matrix->d_rowstart[x]; j < last; ++j) {
+      for(j = matrix->d_rowstart[x]; j < last; ++j) {
 	if (matrix->d_colindex[j] == y) return 1;
       }
     }
@@ -133,29 +135,30 @@ char jw_adj_matrix_find(const AdjMatrix *matrix, char x, char y){
   return 0;
 }
 
-void jw_adj_matrix_free(AdjMatrix *matrix){
+void jw_adj_matrix_free(jw_AdjMatrix *matrix){
   if (matrix){
     if (matrix->d_rowstart) free(matrix->d_rowstart);
     if (matrix->d_colindex) free(matrix->d_colindex);
-    memset(matrix, 0, sizeof(AdjMatrix));
+    memset(matrix, 0, sizeof(jw_AdjMatrix));
     free(matrix);
   }
 }
 
-AdjMatrix* jw_adj_matrix_default(){
+jw_AdjMatrix* jw_adj_matrix_default(){
   static char first_time = 1;
-  static AdjMatrix *ret_matrix;
+  static jw_AdjMatrix *ret_matrix;
   if(first_time){
     const unsigned int length = sizeof(DEFAULT_ADJ_TABLE)/sizeof(char*)/2;
     char 
       *x = malloc(sizeof(char)*length), 
       *y = malloc(sizeof(char)*length);
-    ret_matrix = adj_matrix_new(length);
-    for(unsigned int i = 0; i < length; ++i){
-      x[i] = DEFAULT_ADJ_TABLE[i << 1];
-      y[i] = DEFAULT_ADJ_TABLE[(i << 1) + 1];
+    unsigned i;
+    ret_matrix = jw_adj_matrix_new(length);
+    for(i = 0; i < length; ++i){
+      x[i] = DEFAULT_ADJ_TABLE[i << 1][0];
+      y[i] = DEFAULT_ADJ_TABLE[(i << 1) + 1][0];
     }
-    adj_matrix_add_multiple(ret_matrix, x, y, length);
+    jw_adj_matrix_add_multiple(ret_matrix, x, y, length);
     free(x);
     free(y);
     first_time = 0;

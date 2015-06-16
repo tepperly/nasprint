@@ -8,7 +8,7 @@ require 'set'
 require 'getoptlong'
 require 'humanize'
 require_relative 'database'
-require_relative 'ContestDB'
+require_relative 'contestdb'
 
 MULTIPLIERS_BY_CALLAREA = {
   "0" => [ "ND", "SD", "NE", "CO", "KS", "MO", "IA", "MN"].to_set.freeze,

@@ -2,7 +2,7 @@
 # -*- encoding: utf-8 -*-
 require 'getoptlong'
 require_relative 'database'
-require_relative 'ContestDB'
+require_relative 'contestdb'
 require_relative 'crossmatch'
 require_relative 'fetch'
 require_relative 'qrzdb'
@@ -56,7 +56,7 @@ def checkCallsigns(db, cid, user, pwd)
   end
   xmldb = readXMLDb()
   res = db.query("select id, basecall from Callsign where contestID = #{cid.to_i} and validcall is null;")
-  res.each(:as => :array) { |row|
+  res.each { |row|
     if xmldb.has_key?(row[1]) or lookupCall(qrz, xmldb, row[1])
       db.query("update Callsign set validcall = 1 where id = #{row[0].to_i} limit 1;")
     else

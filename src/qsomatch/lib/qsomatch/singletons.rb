@@ -40,7 +40,7 @@ class ResolveSingletons
   def queryCallsigns
     callList = Array.new
     res = @db.query("select c.id, c.basecall, c.validcall, c.logrecvd, count(*) as num from Callsign as c, QSO as q where c.contestID = #{@contestID} and q.recvd_callID = c.id and group by c.id order by c.basecall asc;")
-    res.each(:as => :array) { |row|
+    res.each { |row|
       callList << Call.new(row[0].to_i, row[1], (toBool(row[2]) or ONE_BY_ONE.match(row[1])), toBool(row[3]), row[4].to_i)
     }
     return callList
@@ -68,10 +68,10 @@ class ResolveSingletons
 
   def exchangeClose(qid, call)
     res = @db.query("select m.abbrev from QSO as q left join Multiplier as m on m.id = q.recvd_multiplierID where q.id = #{qid} limit 1;")
-    res.each(:as => :array) { |row|
+    res.each { |row|
       ref = @db.query("select m.abbrev from Callsign as c join Log as l on (l.contestID = #{@contestID} and  c.id = l.callID) join QSO as q left join Multiplier as m on m.id = q.recvd_multiplierID where c.basecall = \"#{call}\" limit 1;")
       print "exchangeClose1 #{row[0]}\n"
-      ref.each(:as => :array) { |refrow|
+      ref.each { |refrow|
         print "exchangeClose2 #{refrow[0]}\n"
         if JaroWinkler.distance(row[1], refrow[1]) >= 0.92
           return true
@@ -88,7 +88,7 @@ class ResolveSingletons
       @db.query("update QSO set matchType = 'Removed', comment='Incomplete exchanged received.' where id = #{row[0]} limit 1;")
     }
     res = @db.query("select q.id, q.recvd_callID, q.recvd_serial from QSO as q where q.logID in (#{@logIDs.join(", ")}) and q.matchType = 'None' order by q.id asc;")
-    res.each(:as => :array) { |row|
+    res.each { |row|
       call = @callFromID[row[1]]
       if call
         if row[2] >= 10 and call.numQSOs <= 2
@@ -126,7 +126,7 @@ class ResolveSingletons
     print "Starting final dupe check: #{Time.now.to_s}\n"
     res = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.logID in (#{@logIDs.join(",")}) and q2.logID in (#{@logIDs.join(",")}) and q1.id < q2.id and q1.logID = q2.logID and q1.matchType in ('Full','Bye') and q2.matchType in ('Full','Bye') and q1.band = q2.band and q1.recvd_callID = q2.recvd_callID order by q1.id;")
     count = 0
-    res.each(:as => :array) { |row|
+    res.each { |row|
       @db.query("update QSO set matchType = 'Dupe' where id = #{row[1]} and matchType in ('Full','Bye') limit 1;")
       count = count + @db.affected_rows
     }

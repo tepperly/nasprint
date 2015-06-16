@@ -1,3 +1,67 @@
 #!/usr/bin/env ruby
 
-abort "you need to write me"
+require 'getoptlong'
+require 'database'
+require 'contestdb'
+
+$year = nil
+$name = nil
+$totallydestroy = false
+$restart = false
+$create = false
+$readinit = true
+$action = nil
+
+opts = GetoptLong.new(
+                      [ '--new', '-N', GetoptLong::NO_ARGUMENT],
+                      [ '--no-init', '-I', GetoptLong::NO_ARGUMENT],
+                      [ '--sqlite', '-s', GetoptLong::REQUIRED_ARGUMENT],
+                      [ '--name', '-n', GetoptLong::REQUIRED_ARGUMENT],
+                      [ '--year', '-y', GetoptLong::REQUIRED_ARGUMENT],
+                      [ '--load', '-l', GetoptLong::NO_ARGUMENT]
+                      )
+
+cmddbopts = Hash.new
+opts.each { |opt, arg|
+  case opt
+  when '--new'
+    $create = true
+  when '--no-init'
+    $readinit = false
+  when '--sqlite'
+    cmddbopts['type'] = 'sqlite3'
+    cmddbopts['filename'] = arg
+  when '--load'
+    $action = :load
+  when '--name'
+    $name = arg
+  when '--year'
+    $year = arg.to_i
+  end
+}
+                      
+
+if $readinit and ENV["HOME"] and File.readable?(ENV["HOME"] + File::SEPARATOR + ".qsomatch")
+  require 'json'
+  dbopts = JSON.load(File.read(ENV["HOME"] + File::SEPARATOR + ".qsomatch"))
+else
+  dbopts = { 'type' => 'sqlite3', 'filename' => 'qsomatch.db' }
+end
+
+dbopts.merge!(cmddbopts)
+
+if $name and $year
+  begin
+    db = makeDB(dbopts)
+    cdb = ContestDatabase.new(db)
+    contestID = cdb.addOrLookupContest($name, $year, $create)
+    if not contestID
+      print "Unknown contest #{$name} #{$year}\n"
+      db.close
+      exit 2
+    end
+  ensure
+    db.close
+  end
+end
+

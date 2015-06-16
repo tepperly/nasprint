@@ -3,7 +3,7 @@
 require 'getoptlong'
 require_relative 'cabrillo'
 require_relative 'database'
-require_relative 'ContestDB'
+require_relative 'contestdb'
 require_relative 'addlog'
 
 $overwritefile = false

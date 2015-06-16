@@ -4,7 +4,7 @@ require 'getoptlong'
 require 'csv'
 require 'date'
 require_relative 'database'
-require_relative 'ContestDB'
+require_relative 'contestdb'
 
 $name = nil
 $year = nil

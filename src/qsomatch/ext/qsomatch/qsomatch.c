@@ -79,7 +79,7 @@ static struct StringMap_t s_bandMap[] = {
   { "119G", b_OneNineteenG},
   { "142G", b_OneFortyTwoG},
   { "15m",  b_FifteenM},
-  { "160m", b_OneSixtyM}
+  { "160m", b_OneSixtyM},
   { "2.3G", b_TwoPointThreeG},
   { "20m",  b_TwentyM},
   { "222",  b_TwoTwentyTwoM},
@@ -88,7 +88,7 @@ static struct StringMap_t s_bandMap[] = {
   { "2m",   b_TwoM},
   { "3.4G", b_ThreePointFourG},
   { "40m",  b_FortyM},
-  { "432",  FourThirtyTwoM},
+  { "432",  b_FourThirtyTwoM},
   { "47G",  b_FortySevenG},
   { "5.7G", b_FivePointSevenG},
   { "6m",   b_SixM},
@@ -174,7 +174,7 @@ const char * const s_CW_MAPPING[] = {
   0,
   " ",				/* space */
   "-.-.--",			/* ! exclamation point */
-  ".-..-.",`			/* " quotation mark */
+  ".-..-.",			/* " quotation mark */
   0,				/* # hash */
   "...-..-",			/* $ dollar sign */
   0,				/* % percent */
@@ -341,7 +341,7 @@ qso_band(VALUE obj)
   if (qsop->d_band < 0 ||
       qsop->d_band >= (sizeof(s_bandNames)/sizeof(char *)))
     rb_raise(rb_eQSOError, "QSO has an illegal band");
-  return rb_str_new2(s_bandNames[qsop->d_band])
+  return rb_str_new2(s_bandNames[qsop->d_band]);
 }
 
 /*
@@ -358,7 +358,7 @@ qso_mode(VALUE obj)
   if (qsop->d_mode < 0 ||
       qsop->d_mode >= (sizeof(s_modeNames)/sizeof(char *)))
     rb_raise(rb_eQSOError, "QSO has an illegal mode");
-  return rb_str_new2(s_modeNames[qsop->d_mode])
+  return rb_str_new2(s_modeNames[qsop->d_mode]);
 }
 
 /*
@@ -396,7 +396,7 @@ qso_exchange_serial(const struct Exchange_t *e)
 static VALUE
 qso_exchange_multiplier(const struct Exchange_t *e)
 {
-  return rb_str_new2(e->d_muliplier);
+  return rb_str_new2(e->d_multiplier);
 }
 
 static VALUE
@@ -564,9 +564,9 @@ qso_basicLine(VALUE obj)
 	   qsop->d_frequency,
 	   s_bandNames[qsop->d_band],
 	   s_modeNames[qsop->d_mode],
-	   1900+result->tm_year,
-	   1+result->tm_mon,
-	   result->tm_day,
+	   1900+result.tm_year,
+	   1+result.tm_mon,
+	   result.tm_mday,
 	   qsop->d_sent.d_basecall,
 	   qsop->d_sent.d_callsign,
 	   qsop->d_sent.d_serial,
@@ -582,7 +582,7 @@ qso_basicLine(VALUE obj)
 
 
 static VALUE
-q_to_s(const struct QSO_t *qso,
+q_to_s(const struct QSO_t *qsop,
      const struct Exchange_t *left,
      const struct Exchange_t *right)
 {
@@ -591,12 +591,14 @@ q_to_s(const struct QSO_t *qso,
   gmtime_r(&(qsop->d_datetime), &result);
   snprintf(buffer,sizeof(buffer),
 	   "%7d %5d %5d %-4s %-2s %04d-%02d-%02d %-7s %-7s %4d %-4s %-4s %-7s %-7s %4d %-4s %-4s",
+	   qsop->d_qsoID,
+	   qsop->d_logID,
 	   qsop->d_frequency,
 	   s_bandNames[qsop->d_band],
 	   s_modeNames[qsop->d_mode],
-	   1900+result->tm_year,
-	   1+result->tm_mon,
-	   result->tm_day,
+	   1900+result.tm_year,
+	   1+result.tm_mon,
+	   result.tm_mday,
 	   left->d_basecall,
 	   left->d_callsign,
 	   left->d_serial,
@@ -627,7 +629,7 @@ qso_to_s(int argc, VALUE* argv, VALUE obj)
   if (rb_scan_args(argc, argv, "01", &reversed) == 1) {
     isReversed = RTEST(reversed);
   }
-  if (isReversed)
+  if (isReversed) {
     return q_to_s(qsop, &(qsop->d_sent), &(qsop->d_recvd));
   }
  else {
@@ -681,7 +683,7 @@ toCW(const char *src, char *dest)
       dest += newlen;
     }
     else {
-      *dest = " ";
+      *dest = ' ';
       ++dest;
     }
     ++src;
@@ -697,11 +699,13 @@ max_match(const char * const left[],  const int left_len,
   char buffer1[MAX_MULTIPLIER_CHARS*8 + 1];
   char buffer2[MAX_MULTIPLIER_CHARS*8 + 1];
   double result = 0;
-  jw_Option opt = jw_Option_new();
-  for(int i = 0; i < left_len; ++i) {
+  jw_Option opt = jw_option_new();
+  int i;
+  for(i = 0; i < left_len; ++i) {
     const int length_left = (int)strlen(left[i]);
     const int length_left_cw = (isCW ? toCW(left[i], buffer1) : 0);
-    for(int j = 0; j < right_len; ++j) {
+    int j;
+    for(j = 0; j < right_len; ++j) {
       const int length_right = (int)strlen(right[j]);
       const int length_right_cw = (isCW ? toCW(right[j], buffer2) : 0);
       double tmp = jw_distance(left[i], length_left,
@@ -740,8 +744,8 @@ pack_list(const char *s1, const char *s2,
 static double
 serialNumberCmp(const int sent, const int recvd, const int isCW)
 {
-  jw_Option opt = jw_Option_new();
-  char buffer1[12] buffer2[12];
+  jw_Option opt = jw_option_new();
+  char buffer1[12], buffer2[12];
   int len1, len2;
   const int diff = abs(sent-recvd);
   double tmp, result = (diff > SERIAL_FULL)
@@ -764,15 +768,15 @@ serialNumberCmp(const int sent, const int recvd, const int isCW)
 
 void
 qso_exchange_probability(const struct Exchange_t * const sent,
-			 const struct Exhcnage_t * const recvd,
+			 const struct Exchange_t * const recvd,
 			 const int                       isCW,
 			 double                         *overallMetric,
 			 double                         *callMetric)
 {
   const char *sent_list[2];
   const char *recvd_list[2];
-  int sent_len = pack_list(sent->d_basecall, sent->d->callsign, sent_list);
-  int recvd_len = pack_list(recvd->d_basecall, recvd->d->callsign, recvd_list);
+  int sent_len = pack_list(sent->d_basecall, sent->d_callsign, sent_list);
+  int recvd_len = pack_list(recvd->d_basecall, recvd->d_callsign, recvd_list);
   *overallMetric = 0;
   *callMetric = max_match(sent_list, sent_len, recvd_list, recvd_len, isCW);
   if (*callMetric > 0) {

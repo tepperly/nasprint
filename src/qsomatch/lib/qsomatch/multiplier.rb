@@ -14,9 +14,9 @@ class Multiplier
 
   def lookupStates
     res = @db.query("select id from Multiplier where abbrev='HI' limit 1;")
-    res.each(:as => :array) { |row| @hawaiiID = row[0].to_i }
+    res.each { |row| @hawaiiID = row[0].to_i }
     res = @db.query("select id from Multiplier where abbrev='AK' limit 1;")
-    res.each(:as => :array) { |row| @alaskaID = row[0].to_i }
+    res.each { |row| @alaskaID = row[0].to_i }
   end
 
   XML_NAMESPACE = {'qrz' => 'http://xmldata.qrz.com'}
@@ -32,7 +32,7 @@ class Multiplier
 
   def checkOverride(call)
     res = @db.query("select entityID from Overrides where contestID = #{@contestID} and callsign = \"#{call}\" limit 1;")
-    res.each(:as => :array) { |row| 
+    res.each { |row| 
       return row[0].to_i 
     }
     nil
@@ -40,7 +40,7 @@ class Multiplier
 
   def resolveDX
     res = @db.query("select distinct c.id, c.basecall from QSO as q, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye') and m.abbrev='DX' and c.id = q.recvd_callID and m.entityID is null and m.id = q.recvd_multiplierID and q.logID in (#{@logs.join(", ")});")
-    res.each(:as => :array) { |row|
+    res.each { |row|
       entity = checkOverride(row[1])
       override = entity
       if not entity and @callDB.has_key?(row[1])
@@ -73,7 +73,7 @@ class Multiplier
     }
 
     res = @db.query("select distinct l.id, c.basecall, l.callsign, m.entityID from Log as l join Callsign as c on l.callID = c.id left join Multiplier as m on m.id = l.multiplierID where l.entityID is null;")
-    res.each(:as => :array) { |row|
+    res.each { |row|
       if row[3]
         @db.query("update Log set entityID = #{row[3].to_i} where id = #{row[0].to_i} limit 1;")
       else                      # multiplier entity is NULL
@@ -95,7 +95,7 @@ class Multiplier
   def toArray(res)
     list = Array.new
     total = 0
-    res.each(:as => :array)  {|row|
+    res.each  {|row|
       list << [ row[0], row[1], row[2] ]
       total = total + row[2]
     }
@@ -131,7 +131,7 @@ class Multiplier
   def markDiscentingQSOasRemoved(id, choice, name)
     qlist = Array.new
     res = @db.query("select q.id from QSO as q where q.recvd_callID = #{id} and q.matchType='Bye' and q.recvd_multiplierID != #{choice};")
-    res.each(:as => :array) { |row|
+    res.each { |row|
       qlist << row[0].to_i
     }
     if not qlist.empty?
@@ -158,7 +158,7 @@ class Multiplier
     print "Checking Bye multipliers\n"
     res = @db.query("select c.id, c.basecall, count(*) as numQ from Callsign as c, QSO as q where q.logID in (#{@logs.join(", ")}) and q.matchType = 'Bye' and c.id = q.recvd_callID group by c.id having numQ > 1;")
     count = 0
-    res.each(:as => :array) { |row|
+    res.each { |row|
       multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=#{row[0]} and q.recvd_multiplierID=m.id and q.matchType = 'Bye' group by m.id;")
       if multres.count > 1
         count = count + resolveAmbiguous(row[0], multres)

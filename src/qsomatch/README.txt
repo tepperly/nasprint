@@ -1,7 +1,7 @@
 = qsomatch
 
-home  :: FIX (url)
-code  :: FIX (url)
+home  :: http://github.com/tepperly/nasprint
+code  :: http://github.com/tepperly/nasprint
 rdoc  :: FIX (url)
 bugs  :: FIX (url)
 ... etc ...
@@ -39,7 +39,7 @@ and generate the RDoc.
 
 (The MIT License)
 
-Copyright (c) 2015 FIX
+Copyright (c) 2015 Thomas G. W. Epperly
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
