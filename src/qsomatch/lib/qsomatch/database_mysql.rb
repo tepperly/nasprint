@@ -30,6 +30,10 @@ class DatabaseMysql
   def last_id
     @db.last_id
   end
+
+  def affected_rows
+    @db.affected_rows
+  end
   
   def tables
     results = Array.new
@@ -38,6 +42,10 @@ class DatabaseMysql
       results << row[0]
     }
     results
+  end
+
+  def formattime(time)
+    time.strftime("%Y-%m-%d %H:%M:%S")
   end
 
   def query(queryStr, values = [ ])

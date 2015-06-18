@@ -81,7 +81,8 @@ class Report
     abbrev, entity = lookupMultiplier(qsoID)
     if "DX" == abbrev
       if entity
-        res = @db.query("select name, continent from Entity where id = #{entity} limit 1;")
+        res = @db.query("select name, continent from Entity where id = ? limit 1;",
+                        [entity])
         res.each { |row|
           if "NA" == row[1]     # it's a NA DX entity
             log.addMultiplier(row[0])
@@ -98,7 +99,7 @@ class Report
   end
 
   def scoreLog(id, log)
-    res = @db.query("select q.matchType, q.id from QSO as q where q.logID = #{id} order by q.time asc;")
+    res = @db.query("select q.matchType, q.id from QSO as q where q.logID = ? order by q.time asc;", [id])
     res.each { |row|
       log.incCount(row[0])
       if ["Full", "Bye"].include?(row[0]) # QSO counts for credit
@@ -109,11 +110,12 @@ class Report
 
   def makeReport(out = $stdout)
     logs = Array.new
-    res = @db.query("select callsign, email, opclass, id from Log where contestID = #{@contestID} order by callsign asc;")
+    res = @db.query("select callsign, email, opclass, id from Log where contestID = ? order by callsign asc;", [contestID])
     res.each { |row|
       log = Log.new(row[0], row[1], row[2])
       scoreLog(row[3],log)
-      @db.query("update Log set verifiedscore = #{log.score}, verifiedQSOs = #{log.numqsos}, verifiedMultipliers = #{log.nummultipliers} where id = #{row[3]} limit 1;")
+      @db.query("update Log set verifiedscore = #{log.score}, verifiedQSOs = ?, verifiedMultipliers = ? where id = ? limit 1;",
+                [log.numqsos, log.nummultipliers, row[3]])
       logs << log
     }
     out.write("\"Callsign\",\"Email\",\"Operator Class\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"WAS?\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")

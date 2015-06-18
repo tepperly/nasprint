@@ -4,7 +4,6 @@
 # Build a SQL database to do log crossing checking & scoring
 #
 
-require 'mysql2'
 
 def makeDB(opts = {})
   case opts["type"]

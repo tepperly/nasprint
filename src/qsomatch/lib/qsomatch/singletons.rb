@@ -39,7 +39,7 @@ class ResolveSingletons
 
   def queryCallsigns
     callList = Array.new
-    res = @db.query("select c.id, c.basecall, c.validcall, c.logrecvd, count(*) as num from Callsign as c, QSO as q where c.contestID = #{@contestID} and q.recvd_callID = c.id and group by c.id order by c.basecall asc;")
+    res = @db.query("select c.id, c.basecall, c.validcall, c.logrecvd, count(*) as num from Callsign as c, QSO as q where c.contestID = ? and q.recvd_callID = c.id and group by c.id order by c.basecall asc;", [@contestID])
     res.each { |row|
       callList << Call.new(row[0].to_i, row[1], (toBool(row[2]) or ONE_BY_ONE.match(row[1])), toBool(row[3]), row[4].to_i)
     }
@@ -67,9 +67,9 @@ class ResolveSingletons
   end
 
   def exchangeClose(qid, call)
-    res = @db.query("select m.abbrev from QSO as q left join Multiplier as m on m.id = q.recvd_multiplierID where q.id = #{qid} limit 1;")
+    res = @db.query("select m.abbrev from QSO as q left join Multiplier as m on m.id = q.recvd_multiplierID where q.id = ? limit 1;", [qid])
     res.each { |row|
-      ref = @db.query("select m.abbrev from Callsign as c join Log as l on (l.contestID = #{@contestID} and  c.id = l.callID) join QSO as q left join Multiplier as m on m.id = q.recvd_multiplierID where c.basecall = \"#{call}\" limit 1;")
+      ref = @db.query("select m.abbrev from Callsign as c join Log as l on (l.contestID = ? and  c.id = l.callID) join QSO as q left join Multiplier as m on m.id = q.recvd_multiplierID where c.basecall = ? limit 1;", [@contestID, call])
       print "exchangeClose1 #{row[0]}\n"
       ref.each { |refrow|
         print "exchangeClose2 #{refrow[0]}\n"
@@ -84,50 +84,51 @@ class ResolveSingletons
 
   def resolve
     res = @db.query("select distinct q.id from QSO as q where matchType = 'None' and (q.recvd_multiplierID is null or q.recvd_serial is null);")
-    res.each( :as => :array) { |row|
-      @db.query("update QSO set matchType = 'Removed', comment='Incomplete exchanged received.' where id = #{row[0]} limit 1;")
+    res.each { |row|
+      @db.query("update QSO set matchType = 'Removed', comment='Incomplete exchanged received.' where id = ? limit 1;", [row[0]])
     }
-    res = @db.query("select q.id, q.recvd_callID, q.recvd_serial from QSO as q where q.logID in (#{@logIDs.join(", ")}) and q.matchType = 'None' order by q.id asc;")
+    res = @db.query("select q.id, q.recvd_callID, q.recvd_serial from QSO as q where q.logID in (?) and q.matchType = 'None' order by q.id asc;",
+                    [@logIDs])
     res.each { |row|
       call = @callFromID[row[1]]
       if call
         if row[2] >= 10 and call.numQSOs <= 2
-          @db.query("update QSO set matchType = 'Unique', comment='High serial number a station only worked #{call.numQSOs} time(s).' where id = #{row[0]} limit 1;")
+          @db.query("update QSO set matchType = 'Unique', comment='High serial number a station only worked #{call.numQSOs.to_i} time(s).' where id = ? limit 1;", [row[0]])
         else
           if not call.valid and call.numQSOs <= 5
             # illegal callsign
             list = possibleMatches(call.id, call.callsign)
             if list
-              @db.query("update QSO set matchType = 'Removed', comment='Busted callsign - potential matches: #{list.join(" ")}.' where id = #{row[0]} limit 1;")
+              @db.query("update QSO set matchType = 'Removed', comment='Busted callsign - potential matches: #{list.join(" ")}.' where id = ? limit 1;", [row[0]])
             else
-              @db.query("update QSO set matchType = 'Removed', comment='Illegal callsign not close to known participants.' where id = #{row[0]} limit 1;")
+              @db.query("update QSO set matchType = 'Removed', comment='Illegal callsign not close to known participants.' where id = ? limit 1;", [row[0]])
             end
           else
             if call.numQSOs >= 10 or (call.valid and call.numQSOs >= 5)
-              @db.query("update QSO set matchType = 'Bye' where id = #{row[0]} limit 1;")
+              @db.query("update QSO set matchType = 'Bye' where id = ? limit 1;", [row[0]])
             else
               list = possibleMatches(call.id, call.callsign)
               mc = farMoreCommon(list, call.numQSOs)
               if mc and exchangeClose(row[0],mc)
-                @db.query("update QSO set matchType = 'Removed', comment='Busted call - likely match: #{mc.callsign}.'  where id = #{row[0]} limit 1;")
+                @db.query("update QSO set matchType = 'Removed', comment='Busted call - likely match: #{mc.callsign}.'  where id = ? limit 1;", [row[0]])
               else
-                @db.query("update QSO set matchType = 'Bye' where id = #{row[0]} limit 1;")
+                @db.query("update QSO set matchType = 'Bye' where id = ? limit 1;", [row[0]])
               end
             end
           end
         end
       else
-        @db.query("update QSO set matchType = 'Removed', comment='Unknown callsign ID in record.' where id = #{row[0]} limit 1;")
+        @db.query("update QSO set matchType = 'Removed', comment='Unknown callsign ID in record.' where id = ? limit 1;", [row[0]])
       end
     }
   end
 
   def finalDupeCheck
     print "Starting final dupe check: #{Time.now.to_s}\n"
-    res = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.logID in (#{@logIDs.join(",")}) and q2.logID in (#{@logIDs.join(",")}) and q1.id < q2.id and q1.logID = q2.logID and q1.matchType in ('Full','Bye') and q2.matchType in ('Full','Bye') and q1.band = q2.band and q1.recvd_callID = q2.recvd_callID order by q1.id;")
+    res = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.logID in (?) and q2.logID in (?) and q1.id < q2.id and q1.logID = q2.logID and q1.matchType in ('Full','Bye') and q2.matchType in ('Full','Bye') and q1.band = q2.band and q1.recvd_callID = q2.recvd_callID order by q1.id;", [@logIDs, @logIDs])
     count = 0
     res.each { |row|
-      @db.query("update QSO set matchType = 'Dupe' where id = #{row[1]} and matchType in ('Full','Bye') limit 1;")
+      @db.query("update QSO set matchType = 'Dupe' where id = ? and matchType in ('Full','Bye') limit 1;", [row[1]])
       count = count + @db.affected_rows
     }
     print "Done final dupe check: #{Time.now.to_s}\n"

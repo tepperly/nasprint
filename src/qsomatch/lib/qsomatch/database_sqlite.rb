@@ -16,8 +16,16 @@ class DatabaseSQLite
     1
   end
 
+  def formattime(time)
+    time.strftime("%Y-%m-%dT%H:%M:%SZ")
+  end
+
   def has_enum?
     false
+  end
+
+  def affected_rows
+    @db.changes
   end
 
   def autoincrement

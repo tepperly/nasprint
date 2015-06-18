@@ -31,7 +31,8 @@ class Multiplier
   end
 
   def checkOverride(call)
-    res = @db.query("select entityID from Overrides where contestID = #{@contestID} and callsign = \"#{call}\" limit 1;")
+    res = @db.query("select entityID from Overrides where contestID = ? and callsign = ? limit 1;",
+                    [@contestID, call])
     res.each { |row| 
       return row[0].to_i 
     }
@@ -39,7 +40,8 @@ class Multiplier
   end
 
   def resolveDX
-    res = @db.query("select distinct c.id, c.basecall from QSO as q, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye') and m.abbrev='DX' and c.id = q.recvd_callID and m.entityID is null and m.id = q.recvd_multiplierID and q.logID in (#{@logs.join(", ")});")
+    res = @db.query("select distinct c.id, c.basecall from QSO as q, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye') and m.abbrev='DX' and c.id = q.recvd_callID and m.entityID is null and m.id = q.recvd_multiplierID and q.logID in (?);",
+                    [@logs])
     res.each { |row|
       entity = checkOverride(row[1])
       override = entity
@@ -53,18 +55,27 @@ class Multiplier
       if entity
         case entity
         when 6 # Alaska
-          @db.query("update QSO set recvd_entityID = #{entity}, recvd_multiplierID = #{@alaskaID} where recvd_callID = #{row[0]};")
-          @db.query("update QSO set sent_entityID = #{entity}, sent_multiplierID = #{@alaskaID} where sent_callID = #{row[0]};")
+          @db.query("update QSO set recvd_entityID = ?, recvd_multiplierID = ? where recvd_callID = ?;",
+                    [entity, @alaskaID, row[0]])
+          @db.query("update QSO set sent_entityID = ?, sent_multiplierID = ? where sent_callID = ?;",
+                    [entity, @alaskaID, row[0]])
         when 110 # Hawaii
-          @db.query("update QSO set recvd_entityID = #{entity}, recvd_multiplierID = #{@hawaiiID} where recvd_callID = #{row[0]};")
-          @db.query("update QSO set sent_entityID = #{entity}, sent_multiplierID = #{@hawaiiID} where sent_callID = #{row[0]};")
+          @db.query("update QSO set recvd_entityID = ?, recvd_multiplierID = ? where recvd_callID = ?;",
+                    [entity, @hawaiiID, row[0]])
+          @db.query("update QSO set sent_entityID = ?, sent_multiplierID = ? where sent_callID = ?;",
+                    [entity, @hawaiiID, row[0]]))
         else
           if override
-            @db.query("update QSO set recvd_entityID = #{entity} where recvd_callID = #{row[0]};")
-            @db.query("update QSO set sent_entityID = #{entity} where sent_callID = #{row[0]};")
+            @db.query("update QSO set recvd_entityID = ? where recvd_callID = ?;",
+                      [entity, row[0]])
+            @db.query("update QSO set sent_entityID = ? where sent_callID = ?;",
+                      [entity, row[0]])
+            
           else
-            @db.query("update QSO set recvd_entityID = #{entity} where recvd_callID = #{row[0]} and recvd_entityID is null;")
-            @db.query("update QSO set sent_entityID = #{entity} where sent_callID = #{row[0]} and sent_entityID is null;")
+            @db.query("update QSO set recvd_entityID = ? where recvd_callID = ? and recvd_entityID is null;",
+                      [entity, row[0]])
+            @db.query("update QSO set sent_entityID = ? where sent_callID = ? and sent_entityID is null;",
+                      [entity, row[0]])
           end
         end
       else
@@ -75,7 +86,8 @@ class Multiplier
     res = @db.query("select distinct l.id, c.basecall, l.callsign, m.entityID from Log as l join Callsign as c on l.callID = c.id left join Multiplier as m on m.id = l.multiplierID where l.entityID is null;")
     res.each { |row|
       if row[3]
-        @db.query("update Log set entityID = #{row[3].to_i} where id = #{row[0].to_i} limit 1;")
+        @db.query("update Log set entityID = ? where id = ? limit 1;",
+                  [row[3].to_i, row[0].to_i])
       else                      # multiplier entity is NULL
         entity = checkOverride(row[1])
         override = entity
@@ -86,7 +98,8 @@ class Multiplier
           entity = lookupEntity(@callDB[row[2]])
         end
         if entity
-          @db.query("update Log set entityID = #{entity.to_i} where id = #{row[0].to_i} limit 1;")
+          @db.query("update Log set entityID = ? where id = ? limit 1;",
+                    [entity.to_i, row[0].to_i])
         end
       end
     }
@@ -130,12 +143,14 @@ class Multiplier
 
   def markDiscentingQSOasRemoved(id, choice, name)
     qlist = Array.new
-    res = @db.query("select q.id from QSO as q where q.recvd_callID = #{id} and q.matchType='Bye' and q.recvd_multiplierID != #{choice};")
+    res = @db.query("select q.id from QSO as q where q.recvd_callID = ? and q.matchType='Bye' and q.recvd_multiplierID != ?;",
+                    [id, choice])
     res.each { |row|
       qlist << row[0].to_i
     }
     if not qlist.empty?
-      @db.query("update QSO set matchType='Removed', comment='Location mismatch #{name}' where id in (#{qlist.join(", ")});")
+      @db.query("update QSO set matchType='Removed', comment='Location mismatch ' + ' where id in (?);",
+                [name,qlist])
       return @db.affected_rows
     end
     0
@@ -156,10 +171,12 @@ class Multiplier
 
   def checkByeMultipliers
     print "Checking Bye multipliers\n"
-    res = @db.query("select c.id, c.basecall, count(*) as numQ from Callsign as c, QSO as q where q.logID in (#{@logs.join(", ")}) and q.matchType = 'Bye' and c.id = q.recvd_callID group by c.id having numQ > 1;")
+    res = @db.query("select c.id, c.basecall, count(*) as numQ from Callsign as c, QSO as q where q.logID in (?) and q.matchType = 'Bye' and c.id = q.recvd_callID group by c.id having numQ > 1;",
+                    [@logs])
     count = 0
     res.each { |row|
-      multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=#{row[0]} and q.recvd_multiplierID=m.id and q.matchType = 'Bye' group by m.id;")
+      multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=? and q.recvd_multiplierID=m.id and q.matchType = 'Bye' group by m.id;",
+                          [row[0]])
       if multres.count > 1
         count = count + resolveAmbiguous(row[0], multres)
       end

@@ -264,6 +264,15 @@ class ContestDatabase
     nil
   end
 
+  def contestTime(year)
+    start = Time.gm(year,10,1,16,0)
+    while not start.saturday?
+      start += (24 * 60 * 60) # one day in seconds
+    end
+    stop = start + (30 * 60 * 60) # thirty hours in seconds
+    return start, stop
+  end
+
   def addOrLookupContest(name, year, create=false)
     if name and year
       result = @db.query("select id from Contest where name=? and year = ? limit 1;", [name, year.to_i])
@@ -271,35 +280,22 @@ class ContestDatabase
         return row[0].to_i
       }
       if create
-        @db.query("insert into Contest (name, year) values (?, ?);", [name, year.to_i])
+        start_time, stop_time = contestTime(year.to_i)
+        @db.query("insert into Contest (name, year, start, end) values (?, ?, ?, ?);",
+                  [name, year.to_i, @db.formattime(start_time),
+                    @db.formattime(stop_time)])
         return @db.last_id
       end
     end
     nil
   end
 
-  def strOrNull(str)
-    if str
-      return "\"" + @db.escape(str) + "\""
-    else
-      return nil
-    end
-  end
-
   def capOrNull(str)
-    if str
-      return "\"" + @db.escape(str.upcase) + "\""
-    else
-      return nil
-    end
+    str ? str.upcase : nil
   end
 
   def numOrNull(num)
-    if num
-      return num.to_i.to_s
-    else
-      return nil
-    end
+    num ? num.to_i : nil
   end
 
   def markReceived(callID)
@@ -343,9 +339,9 @@ numOrNull(entID), name, club])
 
   def dateOrNull(date)
     if date
-      return "cast(" + date.strftime("\"%Y-%m-%d %H:%M:%S\"") + " as datetime)"
+      return @db.formattime(date)
     else
-      "NULL"
+      nil
     end
   end
 
@@ -363,35 +359,44 @@ numOrNull(entID), name, club])
     @db.query("insert into QSO (logID, frequency, band, fixedMode, time, " +
               (EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "sent" + f }.join(", ")) + ", " +
               (EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "recvd" + f}.join(", ")) +
-              ") values (#{numOrNull(logID)}, #{numOrNull(frequency)}, #{strOrNull(band)}, #{strOrNull(mode)}, #{dateOrNull(datetime)}, #{numOrNull(sentCallID)}, #{numOrNull(sentEntityID)}, #{numOrNull(sentMultID)}, #{numOrNull(sentExchange.serial)}, #{numOrNull(recvdCallID)}, #{numOrNull(recvdEntityID)}, #{numOrNull(recvdMultID)}, #{numOrNull(recvdExchange.serial)});")
+              ") values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+              [ numOrNull(logID), band, mode, dateOrNull(datetime),
+                numOrNull(sentCallID), numOrNull(sentEntityID), numOrNull(sentMultID),
+                numOrNull(sentExchange.serial),
+                numOrNull(recvdCallID), numOrNull(recvdEntityID), numOrNull(recvdMultID),
+                numOrNull(recvdExchange.serial) ])
     qsoID = @db.last_id
     @db.query("insert into QSOExtra (id, logID, mode, " +
               (EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "sent" + f }.join(", ")) + ", " +
               (EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "recvd" + f}.join(", ")) +
-              ", transmitterNum) values (#{numOrNull(qsoID)}, #{numOrNull(logID)}, #{capOrNull(roughMode)}, #{strOrNull(sentExchange.callsign)}, #{strOrNull(sentExchange.origqth)}, #{strOrNull(recvdExchange.callsign)}, #{strOrNull(recvdExchange.origqth)}, #{numOrNull(transNum)});")
+              ", transmitterNum) values (?, ?, ?, ?, ?, ?, ?, ?);",
+              [ numOrNull(qsoID), numOrNull(logID), capOrNull(roughMode),
+                sentExchange.callsign, sentExchange.origqth,
+                recvdExchange.callsign, recvdExchange.origqth,
+                numOrNull(transNum) ])
   end
 
   def removeContestQSOs(contestID)
     logs = logsForContest(contestID)
     if not logs.empty?
-      @db.query("delete from QSO where logID in (#{logs.join(", ")});")
-      @db.query("delete from QSOExtra where logID in (#{logs.join(", ")});")
+      @db.query("delete from QSO where logID in (?);", [logs])
+      @db.query("delete from QSOExtra where logID in (?));", [logs])
     end
     clearTeams(contestID)
-    @db.query("delete from Callsign where contestID = #{contestID};")
-    @db.query("delete from Log where contestID = #{contestID};")
+    @db.query("delete from Callsign where contestID = ?;" [ contestID ])
+    @db.query("delete from Log where contestID = ?;", [ contestID ])
   end
 
   def removeWholeContest(contestID)
     removeContestQSOs(contestID)
     removeOverrides(contestID)
     removePairs(contestID)
-    @db.query("delete from Contest where contestID = #{contestID} limit 1;")
+    @db.query("delete from Contest where contestID = ? limit 1;", [contestID])
   end
 
   def logsForContest(contestID)
     logs = Array.new
-    res = @db.query("select id from Log where contestID = #{contestID} order by id asc;")
+    res = @db.query("select id from Log where contestID = ? order by id asc;", [contestID])
     res.each { |row|
       logs << row[0].to_i
     }
@@ -400,16 +405,10 @@ numOrNull(entID), name, club])
 
   def logsByMultipliers(contestID, multipliers)
     logs = Array.new
-    if multipliers.is_a?(String)
-      multiplierConstraints = " = \"#{@db.escape(multipliers)}\""
-    else
-      if multipliers.empty?
-        return logs
-      else
-        multiplierConstraints = " in (#{multipliers.map { |x| "\"" + @db.escape(x.to_s) + "\"" }.join(", ")})"
-      end
+    if (not multipliers.is_a?(String)) and multipliers.empty?
+      return logs
     end
-    res = @db.query("select l.id from Log as l join Multiplier as m on l.multiplierID = m.id where l.contestID = #{contestID} and m.abbrev #{multiplierConstraints} order by l.verifiedscore desc, l.verifiedMultipliers desc, l.callsign asc")
+    res = @db.query("select l.id from Log as l join Multiplier as m on l.multiplierID = m.id where l.contestID = #{contestID} and m.abbrev in (?) order by l.verifiedscore desc, l.verifiedMultipliers desc, l.callsign asc;", [multipliers])
     res.each { |row|
       logs << row[0].to_i
     }
@@ -424,7 +423,7 @@ numOrNull(entID), name, club])
       multID = row[0].to_i
     }
     if multID
-      res = @db.query("select l.id from Log as l join Entity as e on e.id = l.entityID where l.contestID = #{contestID} and l.multiplierID = #{multID} and e.continent = \"#{continent}\" order by l.verifiedscore desc, l.verifiedMultipliers desc, l.callsign asc")
+      res = @db.query("select l.id from Log as l join Entity as e on e.id = l.entityID where l.contestID = ? and l.multiplierID = ? and e.continent = ? order by l.verifiedscore desc, l.verifiedMultipliers desc, l.callsign asc;", [contestID, multID, continent])
       res.each {  |row|
         result << row[0].to_i
       }
@@ -435,7 +434,7 @@ numOrNull(entID), name, club])
   def numBandChanges(logID)
     count = 0
     prev = nil
-    res = @db.query("select q.band from QSO as q where q.logID = #{logID.to_i} order by q.time asc, q.sent_serial asc, q.id asc;")
+    res = @db.query("select q.band from QSO as q where q.logID = #{logID.to_i} order by q.time asc, q.sent_serial asc, q.id asc;", [logID.to_i])
     res.each { |row|
       if row[0].to_s != prev
         count = count + 1
@@ -446,7 +445,7 @@ numOrNull(entID), name, club])
   end
 
   def qsosByBand(logID)
-    res = @db.query("select band, matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL') group by band, matchType order by band asc, matchType asc;")
+    res = @db.query("select band, matchType, count(*) from QSO where logID = ? and matchType in ('Full', 'Bye', 'NIL') group by band, matchType order by band asc, matchType asc;", [logID])
     results = Hash.new(0)
     res.each { |row|
       case row[1]
@@ -461,7 +460,7 @@ numOrNull(entID), name, club])
 
   def qsosByHour(logID)
     results = Array.new
-    cres = @db.query("select c.start, c.end from Contest as c join Log as l on l.contestID = c.id and l.id = #{logID} limit 1;")
+    cres = @db.query("select c.start, c.end from Contest as c join Log as l on l.contestID = c.id and l.id = ? limit 1;", [logID])
     cres.each { |crow|
       tstart = crow[0]
       tend = crow[1]
@@ -469,8 +468,9 @@ numOrNull(entID), name, club])
       numHours = (tend - tstart).to_i/3600
       results = Array.new(numHours, 0)
       numHours.times {  |i|
-        queryStr = "select matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL') and time between #{dateOrNull(prev)} and #{dateOrNull(tstart + 3600*(i+1) - 1)} order by matchType asc;"
-        res = @db.query(queryStr)
+        queryStr = "select matchType, count(*) from QSO where logID = ? and matchType in ('Full', 'Bye', 'NIL') and time between ? and ? order by matchType asc;"
+        res = @db.query(queryStr, [logID, @db.formattime(prev),
+                          @db.formattime(tstart+3600*(i+1)-1)])
         res.each { |row|
           case row[0]
           when 'Full', 'Bye'
@@ -498,11 +498,12 @@ numOrNull(entID), name, club])
 
   def logMultipliers(logID)
     multipliers = Set.new
-    res = @db.query("select distinct m.abbrev from QSO as q join Multiplier as m on m.id = q.recvd_multiplierID where q.logID = #{logID} and q.matchType in ('Full', 'Bye') and m.abbrev != 'DX';")
+    res = @db.query("select distinct m.abbrev from QSO as q join Multiplier as m on m.id = q.recvd_multiplierID where q.logID = ? and q.matchType in ('Full', 'Bye') and m.abbrev != 'DX';",
+                    [logID])
     res.each { |row|
       multipliers.add(row[0])
     }
-    res = @db.query("select distinct en.name from (QSO as q join Multiplier as m on m.id = q.recvd_multiplierID and m.abbrev='DX') join Entity as en on en.id = q.recvd_entityID where q.logID = #{logID} and q.matchType in ('Full', 'Bye') and en.continent = 'NA';")
+    res = @db.query("select distinct en.name from (QSO as q join Multiplier as m on m.id = q.recvd_multiplierID and m.abbrev='DX') join Entity as en on en.id = q.recvd_entityID where q.logID = ? and q.matchType in ('Full', 'Bye') and en.continent = 'NA';", [logID])
     res.each { |row|
       multipliers.add(row[0])
     }
@@ -510,7 +511,7 @@ numOrNull(entID), name, club])
   end
 
   def lookupTeam(contestID, logID)
-    @db.query("select t.name from TeamMember as m join Team as t on t.id = m.teamID where m.contestID = #{contestID} and m.logID = #{logID} limit 1;").each { |row|
+    @db.query("select t.name from TeamMember as m join Team as t on t.id = m.teamID where m.contestID = #{contestID} and m.logID = ? limit 1;", [logID]).each { |row|
       return row[0]
     }
 
@@ -518,7 +519,7 @@ numOrNull(entID), name, club])
   end
 
   def numStates(logID)
-    res = @db.query("select count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = #{logID} and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID where l.id = #{logID} group by l.id order by numstates desc, l.callsign asc limit 1;")
+    res = @db.query("select count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = ? and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID where l.id = ? group by l.id order by numstates desc, l.callsign asc limit 1;", [logID, logID])
     res.each { |row|
       return row[0]
     }
@@ -526,7 +527,7 @@ numOrNull(entID), name, club])
   end
 
   def baseCall(callID)
-    res = @db.query("select basecall from Callsign where id = #{callID} limit 1;")
+    res = @db.query("select basecall from Callsign where id = ? limit 1;", [callID])
     res.each { |row|
       return row[0]
     }
@@ -534,7 +535,7 @@ numOrNull(entID), name, club])
   end
 
   def logCallsign(logID)
-    res = @db.query("select callsign from Log where id = #{logID} limit 1;")
+    res = @db.query("select callsign from Log where id = ? limit 1;", [logID])
     res.each { |row|
       return row[0]
     }
@@ -542,7 +543,8 @@ numOrNull(entID), name, club])
   end
   
   def logInfo(logID)
-    res = @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedqsos, l.verifiedMultipliers, l.verifiedscore, l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = #{logID} limit 1;")
+    res = @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedqsos, l.verifiedMultipliers, l.verifiedscore, l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = ? limit 1;",
+                    [ logID ])
     res.each {|row|
       name = firstName(row[1])
       return row[0], name, row[2], row[3], lookupTeam(row[8], logID), row[4], row[5], row[6], row[7], numStates(logID)
@@ -551,7 +553,8 @@ numOrNull(entID), name, club])
   end
 
   def lostQSOs(logID)
-    res = @db.query("select sum(matchType in ('None','Unique','Partial','Dupe','OutsideContest','Removed')) as numremoved, sum(matchType = 'NIL') as numnil from QSO where logID = #{logID} group by logID;")
+    res = @db.query("select sum(matchType in ('None','Unique','Partial','Dupe','OutsideContest','Removed')) as numremoved, sum(matchType = 'NIL') as numnil from QSO where logID = ? group by logID;",
+                    [logID ] )
     res.each { |row|
       return row[0] + 2*row[1]
     }
@@ -559,12 +562,12 @@ numOrNull(entID), name, club])
 
   def topNumStates(contestID, num)
     logs = Array.new
-    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID group by l.id order by numstates desc, l.callsign asc limit #{num-1}, 1;")
+    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = ? and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID group by l.id order by numstates desc, l.callsign asc limit ?, 1;", [ contestID, num-1 ])
     limit = nil
     res.each { |row|
       limit = row[2]
     }
-    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID group by l.id  having numstates >= #{limit} order by numstates desc, l.callsign asc;")
+    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = ? and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID group by l.id  having numstates >= ? order by numstates desc, l.callsign asc;", [contestID, limit])
     res.each { |row|
       logs << [ row[1], row[2] ]
     }
@@ -574,23 +577,27 @@ numOrNull(entID), name, club])
   # In the case of ties, this can return more than num
   def topLogs(contestID, num, opclass=nil, criteria="l.verifiedscore")
     logs = Array.new
-    basicQuery = "select l.id, l.callsign, #{criteria} as reportcriteria from Log as l where l.contestID = #{contestID} " +
-      (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
-      "order by reportcriteria desc, l.callsign asc limit #{num-1}, 1;"
+    if opclass
+      res =@db.query("select l.id, l.callsign, #{criteria} as reportcriteria from Log as l where l.contestID = ? and l.opclass = ? order by reportcriteria desc, l.callsign asc limit ?, 1;",
+                [contestID, opclass, (num -1)])
+    else
+      res =@db.query("select l.id, l.callsign, #{criteria} as reportcriteria from Log as l where l.contestID = ? order by reportcriteria desc, l.callsign asc limit ?, 1;",
+                [contestID, (num -1)])
+    end
     # get score of last item on list
-    res = @db.query(basicQuery)
     limit = nil
     res.each { |row|
       limit = row[2]
     }
     if limit
-      res = @db.query("select l.id, l.callsign, #{criteria} as reportcriteria from Log as l where l.contestID = #{contestID} and #{criteria} >= #{limit} " +
+      res = @db.query("select l.id, l.callsign, #{criteria} as reportcriteria from Log as l where l.contestID = ? and #{criteria} >= ? " +
       (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
-      "order by reportcriteria desc, l.callsign asc;")
+      "order by reportcriteria desc, l.callsign asc;", [ contestID, limit ])
     else
-      res = @db.query("select l.id, l.callsign, l.#{criteria} from Log as l where l.contestID = #{contestID} " +
+      res = @db.query("select l.id, l.callsign, l.#{criteria} from Log as l where l.contestID = ? " +
       (opclass ? "and l.opclass = \"#{opclass}\" " : "") +
-                      "order by l.#{criteria} desc, l.callsign asc limit #{num};")
+                      "order by l.#{criteria} desc, l.callsign asc limit ?;",
+                      [contestID, num ])
     end
     res.each { |row|
       logs << [ row[1], row[2], numBandChanges(row[0]), lostQSOs(row[0]), qsosByHour(row[0])]
@@ -599,25 +606,28 @@ numOrNull(entID), name, club])
   end
 
   def clearTeams(cid)
-    @db.query("delete from TeamMember where contestID = #{cid};")
-    @db.query("delete from Team where contestID = #{cid};")
+    @db.query("delete from TeamMember where contestID = ?;", [cid])
+    @db.query("delete from Team where contestID = ?;", [cid])
   end
 
   def addTeam(name, managercall, manageremail, registertime, contestID)
-    @db.query("insert into Team (name, managercall, manageremail, registertime, contestID) values (\"#{@db.escape(name)}\", \"#{@db.escape(managercall)}\", #{strOrNull(manageremail)}, #{dateOrNull(registertime)}, #{contestID.to_i});")
+    @db.query("insert into Team (name, managercall, manageremail, registertime, contestID) values (?, ?, ?, ?, ?);",
+              [name, managercall, manageremail, dateOrNull(registertime), contestID.to_i])
     return @db.last_id
   end
 
   def addTeamMember(cid, teamID, logID)
-    @db.query("insert into TeamMember (teamID, logID, contestID) values (#{teamID.to_i}, #{logID.to_i}, #{cid.to_i});")
+    @db.query("insert into TeamMember (teamID, logID, contestID) values (?, ?, ?);",
+              [teamID.to_i, logID.to_i cid.to_i])
   end
 
   def reportTeams(cid)
     teams = Array.new
-    res = @db.query("select t.id, t.name, sum(l.verifiedscore) as score, count(l.id) as nummembers from (Team as t join Log as l) join TeamMember as tm on tm.teamID = t.id and tm.logID = l.id where l.contestID = #{cid} and t.contestID = #{cid} and tm.contestID = #{cid} group by t.id order by score desc;")
+    res = @db.query("select t.id, t.name, sum(l.verifiedscore) as score, count(l.id) as nummembers from (Team as t join Log as l) join TeamMember as tm on tm.teamID = t.id and tm.logID = l.id where l.contestID = ? and t.contestID = ? and tm.contestID = ? group by t.id order by score desc;", [cid, cid, cid])
     res.each { |row|
       memlist = Array.new
-      members = @db.query("select l.callsign, l.verifiedscore from Log as l join TeamMember as tm on l.id = tm.logID and tm.teamID = #{row[0]} order by l.verifiedscore desc, l.callsign desc;")
+      members = @db.query("select l.callsign, l.verifiedscore from Log as l join TeamMember as tm on l.id = tm.logID and tm.teamID = ? order by l.verifiedscore desc, l.callsign desc;",
+                          [row[0].to_i])
       members.each { |mrow|
         memlist << { "callsign" => mrow[0], "score" => mrow[1] }
       }
@@ -628,7 +638,8 @@ numOrNull(entID), name, club])
   
   def dupeQSOs(logID)
     dupes = Array.new
-    res = @db.query("select q.sent_serial, qe.recvd_callsign from QSO as q join QSOExtra as qe on q.id = qe.id where q.logID = #{logID} and q.matchType = 'Dupe' order by q.sent_serial asc;")
+    res = @db.query("select q.sent_serial, qe.recvd_callsign from QSO as q join QSOExtra as qe on q.id = qe.id where q.logID = ? and q.matchType = 'Dupe' order by q.sent_serial asc;",
+                    [logID])
     res.each { |row|
       dupes << { 'num' => row[0].to_i, 'callsign' => row[1].to_s }
     }
@@ -637,7 +648,7 @@ numOrNull(entID), name, club])
 
   def goldenLogs(contestID)
     golden = Array.new
-    res = @db.query("select l.id, l.callsign, l.verifiedQSOs, sum(q.matchType in ('Unique','Partial','NIL','OutsideContest','Removed')) as nongolden from Log as l join QSO as q on l.id = q.logID where l.contestID = #{contestID} group by l.id having nongolden = 0 order by l.verifiedQSOs desc, l.callsign asc;")
+    res = @db.query("select l.id, l.callsign, l.verifiedQSOs, sum(q.matchType in ('Unique','Partial','NIL','OutsideContest','Removed')) as nongolden from Log as l join QSO as q on l.id = q.logID where l.contestID = ? group by l.id having nongolden = 0 order by l.verifiedQSOs desc, l.callsign asc;", [contestID])
     res.each { |row|
       golden << { "callsign" => row[1], "numQSOs" => row[2] }
     }
@@ -645,7 +656,7 @@ numOrNull(entID), name, club])
   end
 
   def scoreSummary(logID)
-    res = @db.query("select count(*) as rawQSOs, sum(matchType='Dupe') as dupeQSOs, sum(matchType in ('Unique','Partial','Removed')) as bustedQSOs, sum(matchType = 'NIL') as penaltyQSOs, sum(matchType = 'OutsideContest') as outside from QSO where logID = #{logID} group by logID;")
+    res = @db.query("select count(*) as rawQSOs, sum(matchType='Dupe') as dupeQSOs, sum(matchType in ('Unique','Partial','Removed')) as bustedQSOs, sum(matchType = 'NIL') as penaltyQSOs, sum(matchType = 'OutsideContest') as outside from QSO where logID = ? group by logID;", [logID])
     res.each { |row|
       return row[0], row[1], row[2], row[3], row[4]
     }
@@ -653,7 +664,7 @@ numOrNull(entID), name, club])
   end
 
   def logEntity(logID)
-    res = @db.query("select e.name from Entity as e join Log as l on e.id = l.entityID where l.id = #{logID} limit 1;")
+    res = @db.query("select e.name from Entity as e join Log as l on e.id = l.entityID where l.id = ? limit 1;", [logID])
     res.each {  |row|
       return row[0]
     }
@@ -661,7 +672,7 @@ numOrNull(entID), name, club])
   end
 
   def logClockAdj(logID)
-    res = @db.query("select clockadj from Log where id = #{logID} limit 1;")
+    res = @db.query("select clockadj from Log where id = ? limit 1;", [logID])
     res.each {  |row|
       return row[0]
     }
@@ -670,7 +681,7 @@ numOrNull(entID), name, club])
   
   def qsosOutOfContest(logID)
     logs = Array.new
-    res = @db.query("select q.time, q.sent_serial from QSO as q join where q.logID = #{logID} and matchType = 'OutsideContest' order by q.sent_serial asc;")
+    res = @db.query("select q.time, q.sent_serial from QSO as q join where q.logID = ? and matchType = 'OutsideContest' order by q.sent_serial asc;", [logID])
     res.each { |row|
       logs << { 'time' => row[0], 'number' => row[1] }
     }

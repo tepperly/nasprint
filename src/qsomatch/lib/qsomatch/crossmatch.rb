@@ -219,7 +219,8 @@ class QSO
                    ContestDB.EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "q.recvd" + f }.join(", ") + " , " +
                    ContestDB.EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "qe.sent" + f}.join(", ") + ", " +
                    ContestDB.EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "qe.recvd" + f}.join(", ") +
-                   " from QSO as q join QSOExtra as qe where q.id = #{id} and qe.id = #{id} limit 1;")
+                   " from QSO as q join QSOExtra as qe where q.id = ? and qe.id = ? limit 1;",
+                   [id, id])
     res.each { |row|
       sent = Exchange.new(db.baseCall(row[5]), row[13], row[8], db.lookupMultiplierByID(row[7]),
                           row[14])
@@ -256,13 +257,13 @@ class Match
   end
 
   def record(db, time)
-    res = db.query("select count(*) from QSO where id in (#{@q1.id}, #{@q2.id}) and matchType = 'None' and matchID is NULL;")
+    res = db.query("select count(*) from QSO where id in (?, ?) and matchType = 'None' and matchID is NULL;", [@q1.id, @q2.id ])
     res.each { |row|
       if row[0].to_i == 2
         type1 = @q1.fullMatch?(@q2, time) ?  "Full" : "Partial"
         type2 = @q2.fullMatch?(@q1, time) ? "Full" : "Partial"
-        db.query("update QSO set matchID = #{@q2.id}, matchType = '#{type1}' where id = #{@q1.id} and matchType = 'None' and matchID is NULL limit 1;")
-        db.query("update QSO set matchID = #{@q1.id}, matchType = '#{type2}' where id = #{@q2.id} and matchType = 'None' and matchID is NULL limit 1;")
+        db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q2.id, type1, @q1.id])
+        db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q1.id, type2, @q2.id])
         return type1, type2
       end
     }
@@ -287,7 +288,7 @@ class CrossMatch
 
   def restartMatch
     @db.query("update QSO set matchID = NULL, matchType = 'None', comment = NULL where logID in #{logSet};")
-    @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where id in #{logSet};")
+    @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where id in (?);", [@logs])
   end
 
   def notMatched(qso)
@@ -337,7 +338,7 @@ class CrossMatch
                     " from QSO as q join QSOExtra as qe on qe.id = q.id, Callsign as cr, Callsign as cs, Multiplier as ms, Multiplier as mr where " +
                     linkCallsign("q.sent_","cs") + " and " + linkCallsign("q.recvd_", "cr") + " and " +
                     linkMultiplier("q.sent_","ms") + " and " + linkMultiplier("q.recvd_", "mr") + " and " +
-                    " q.id in (#{id1}, #{id2});"
+                    " q.id in (#{id1.to_i}, #{id2.to_i});"
     res = @db.query(queryStr)
     qsos = qsosFromDB(res)
     if qsos.length != 2
@@ -368,20 +369,21 @@ class CrossMatch
       print "linkQSOs #{match1} #{match2}\n"
     end
     matches.each { |row|
-      chk = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.id = #{row[0].to_i} and q2.id = #{row[1].to_i} and q1.matchID is null and q2.matchID is null and q1.matchType = 'None' and q2.matchType = 'None' limit 1;")
+      chk = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.id = ? and q2.id = ? and q1.matchID is null and q2.matchID is null and q1.matchType = 'None' and q2.matchType = 'None' limit 1;", [row[0].to_i, row[1].to_i])
       found = false
       chk.each { |chkrow|
         found = true
-        @db.query("update QSO set matchID = #{row[1].to_i}, matchType = '#{match1}' where id = #{row[0].to_i} and matchID is null and matchType = 'None' limit 1;")
+        @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None' limit 1;", [row[1].to_i, match1, row[0].to_i])
         count1 = count1 + 1
-        @db.query("update QSO set matchID = #{row[0].to_i}, matchType = '#{match2}' where id = #{row[1].to_i} and matchID is null and matchType = 'None' limit 1;")
+        @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None' limit 1;",
+                            [row[0].to_i, match2, row[1].to_i])
         if not quiet
           printDupeMatch(row[0].to_i, row[1].to_i)
         end
         count2 = count2 + 1
       }
       if not found
-        @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (#{row[0].to_i}, #{row[1].to_i}) limit 2;")
+        @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i])
         if not quiet
           printDupeMatch(row[0].to_i, row[1].to_i)
         end
@@ -452,25 +454,25 @@ class CrossMatch
   def resolveShifted
     num1 = 0
     num2 = 0
-    queryStr = "select q1.id, q1.matchType, q2.id, q2.matchType from QSO as q1, QSO as q2, Log as l1, Log as l2 where q1.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.matchID = q2.id and q1.id = q2.matchID and q2.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.id < q2.id and l1.id = q1.logID and l2.id = q2.logID and l1.contestID = #{@contestID} and l2.contestID = #{@contestID} and DATE_ADD(q1.time, interval l1.clockadj second) between DATE_SUB(DATE_ADD(q2.time, interval l2.clockadj second), interval #{PERFECT_TIME_MATCH} minute) and DATE_ADD(DATE_ADD(q2.time, interval l2.clockadj second), interval #{PERFECT_TIME_MATCH} minute) order by q1.id asc;"
-    res = @db.query(queryStr) 
+    queryStr = "select q1.id, q1.matchType, q2.id, q2.matchType from QSO as q1, QSO as q2, Log as l1, Log as l2 where q1.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.matchID = q2.id and q1.id = q2.matchID and q2.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.id < q2.id and l1.id = q1.logID and l2.id = q2.logID and l1.contestID = ? and l2.contestID = ? and DATE_ADD(q1.time, interval l1.clockadj second) between DATE_SUB(DATE_ADD(q2.time, interval l2.clockadj second), interval #{PERFECT_TIME_MATCH} minute) and DATE_ADD(DATE_ADD(q2.time, interval l2.clockadj second), interval #{PERFECT_TIME_MATCH} minute) order by q1.id asc;"
+    res = @db.query(queryStr, [contestID, contestID]) 
     res.each { |row|
       oneType, num1, num2 = chooseType(row[1], num1, num2)
       twoType, num1, num2 = chooseType(row[3], num1, num2)
-      @db.query("update QSO set matchType='#{oneType}' where id = #{row[0].to_i} limit 1;")
-      @db.query("update QSO set matchType='#{twoType}' where id = #{row[2].to_i} limit 1;")
+      @db.query("update QSO set matchType=? where id = ? limit 1;", [oneType, row[0].to_i])
+      @db.query("update QSO set matchType=? where id = ? limit 1;", [twoType, row[2].to_i])
     }
-    @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and logID in #{logSet};")
+    @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and logID in (?);", [@logs])
     num2 = num2 + @db.affected_rows
     return num1, num2
   end
 
   def ignoreDups
     count = 0
-    queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3 where q1.matchID is not null and q1.matchType in ('Partial', 'Full') and q1.logID in #{logSet} and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and q2.logID in #{logSet} and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and q2.sent_callID = q3.recvd_callID;"
-    res = @db.query(queryStr)
+    queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3 where q1.matchID is not null and q1.matchType in ('Partial', 'Full') and q1.logID in (?) and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and q2.logID in (?) and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and q2.sent_callID = q3.recvd_callID;"
+    res = @db.query(queryStr, [@logs, @logs])
     res.each { |row|
-      @db.query("update QSO set matchType = 'Dupe' where id = #{row[0].to_i} and matchType = 'None' and matchID is null limit 1;")
+      @db.query("update QSO set matchType = 'Dupe' where id = ? and matchType = 'None' and matchID is null limit 1;", [row[0].to_i])
       count = count + @db.affected_rows
     }
     count
@@ -478,10 +480,10 @@ class CrossMatch
   
   def markNIL
     count = 0
-    queryStr = "select q.id from QSO as q, Callsign as c where q.matchID is null and q.matchType = 'None' and q.logID in #{logSet} and q.recvd_callID = c.id and c.logrecvd;"
-    res = @db.query(queryStr)
+    queryStr = "select q.id from QSO as q, Callsign as c where q.matchID is null and q.matchType = 'None' and q.logID in (?) and q.recvd_callID = c.id and c.logrecvd;"
+    res = @db.query(queryStr, [@logs])
     res.each { |row|
-      @db.query("update QSO set matchType = 'NIL' where id = #{row[0].to_i} and matchType = 'None' and matchID is null limit 1;")
+      @db.query("update QSO set matchType = 'NIL' where id = ? and matchType = 'None' and matchID is null limit 1;", [ row[0].to_i] )
       count = count + @db.affected_rows
     }
     count
@@ -527,7 +529,8 @@ class CrossMatch
     line1, line2 = m.qsoLines
     line1 = @db.escape(line1)
     line2 = @db.escape(line2)
-    res = @db.query("select ismatch from Pairs where (line1 = \"#{line1}\" and line2 = \"#{line2}\") or (line1 = \"#{line2}\" and line2 = \"#{line1}\") limit 1;")
+    res = @db.query("select ismatch from Pairs where (line1 = ? and line2 = ?) or (line1 = ? and line2 = ?) limit 1;",
+                    [line1, line2, line2, line1])
     res.each { |row|
       return row[0] == 1 ? "YES" : "NO"
     }
@@ -536,7 +539,8 @@ class CrossMatch
 
   def recordPair(m, matched)
     line1, line2 = m.qsoLines
-    @db.query("insert into Pairs (contestID, line1, line2, ismatch) values (#{@contestID}, \"#{@db.escape(line1)}\", \"#{@db.escape(line2)}\", #{matched ? 1 : 0});")
+    @db.query("insert into Pairs (contestID, line1, line2, ismatch) values (?, ?, ?, ?)",
+              [@contestID, line1, line2, matched ? 1 : 0])
   end
 
   def probMatch
