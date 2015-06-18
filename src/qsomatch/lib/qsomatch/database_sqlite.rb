@@ -5,6 +5,14 @@
 
 require 'sqlite3'
 
+module Mysql2
+  class Error
+    def error_number
+      1062
+    end
+  end
+end
+
 class DatabaseSQLite
   AUTOINCREMENT="autoincrement"
 

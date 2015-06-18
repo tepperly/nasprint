@@ -359,8 +359,8 @@ numOrNull(entID), name, club])
     @db.query("insert into QSO (logID, frequency, band, fixedMode, time, " +
               (EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "sent" + f }.join(", ")) + ", " +
               (EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "recvd" + f}.join(", ")) +
-              ") values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-              [ numOrNull(logID), band, mode, dateOrNull(datetime),
+              ") values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+              [ numOrNull(logID), frequency, band, mode, dateOrNull(datetime),
                 numOrNull(sentCallID), numOrNull(sentEntityID), numOrNull(sentMultID),
                 numOrNull(sentExchange.serial),
                 numOrNull(recvdCallID), numOrNull(recvdEntityID), numOrNull(recvdMultID),
@@ -618,7 +618,7 @@ numOrNull(entID), name, club])
 
   def addTeamMember(cid, teamID, logID)
     @db.query("insert into TeamMember (teamID, logID, contestID) values (?, ?, ?);",
-              [teamID.to_i, logID.to_i cid.to_i])
+              [teamID.to_i, logID.to_i, cid.to_i])
   end
 
   def reportTeams(cid)

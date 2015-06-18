@@ -3,6 +3,8 @@
 require 'getoptlong'
 require 'database'
 require 'contestdb'
+require 'addlog'
+require 'cabrillo'
 
 $year = nil
 $name = nil
@@ -50,6 +52,15 @@ end
 
 dbopts.merge!(cmddbopts)
 
+def loadFiles(args, cdb, contestID)
+  args.each { |filename|
+    cab = Cabrillo.new(filename)
+    if cab
+      addLog(cdb, contestID, cab)
+    end
+  }
+end
+
 if $name and $year
   begin
     db = makeDB(dbopts)
@@ -59,6 +70,10 @@ if $name and $year
       print "Unknown contest #{$name} #{$year}\n"
       db.close
       exit 2
+    end
+    case $action
+    when :load
+      loadFiles(ARGV, cdb, contestID)
     end
   ensure
     db.close
