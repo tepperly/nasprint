@@ -63,7 +63,7 @@ class Multiplier
           @db.query("update QSO set recvd_entityID = ?, recvd_multiplierID = ? where recvd_callID = ?;",
                     [entity, @hawaiiID, row[0]])
           @db.query("update QSO set sent_entityID = ?, sent_multiplierID = ? where sent_callID = ?;",
-                    [entity, @hawaiiID, row[0]]))
+                    [entity, @hawaiiID, row[0]])
         else
           if override
             @db.query("update QSO set recvd_entityID = ? where recvd_callID = ?;",

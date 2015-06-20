@@ -41,7 +41,7 @@ class CalcTimeAdj
         rowcount = 0
         res.each { |row|
           out.write("A[#{rowcount},#{@idtovar[row[0]]}] = 1\nA[#{rowcount},#{@idtovar[row[2]]}] = -1\n")
-          out.write("b[#{rowcount}] = #{row[3].to_i-row[1].to_i}\n")
+          out.write("b[#{rowcount}] = #{@db.toTimeDate(row[3]).to_i-@db.toTimeDate(row[1]).to_i}\n")
           rowcount = rowcount + 1
         }
         @numvars.times { |i|

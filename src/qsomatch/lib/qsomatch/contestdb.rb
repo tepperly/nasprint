@@ -683,7 +683,7 @@ numOrNull(entID), name, club])
     logs = Array.new
     res = @db.query("select q.time, q.sent_serial from QSO as q join where q.logID = ? and matchType = 'OutsideContest' order by q.sent_serial asc;", [logID])
     res.each { |row|
-      logs << { 'time' => row[0], 'number' => row[1] }
+      logs << { 'time' => @db.toDateTime(row[0]), 'number' => row[1] }
     }
     logs
   end

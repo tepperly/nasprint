@@ -11,6 +11,13 @@ class DatabaseMysql
     @db = Mysql2::Client.new(opts)
   end
 
+  def toDateTime(obj)
+    obj                         # MySQL already has it as a date
+  end
+
+  def timediff(units, time1, time2)
+    "timestampdiff(" + units + ", " + time1 + ", " + time2 + ")"
+
   def autoincrement
     return AUTOINCREMENT
   end

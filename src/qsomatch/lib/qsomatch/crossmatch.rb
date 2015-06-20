@@ -226,7 +226,8 @@ class QSO
                           row[14])
       recvd = Exchange.new(db.baseCall(row[9]), row[15], row[14], db.lookupMultiplierByID(row[11]),
                            row[16])
-      return QSO.new(id, row[0].to_i, row[1], row[2], row[3], row[4]+timeadj,
+      return QSO.new(id, row[0].to_i, row[1].to_i, row[2], row[3], 
+                     db.toDateTime(row[4])+timeadj,
                      sent, recvd)
     }
     nil
@@ -296,7 +297,8 @@ class CrossMatch
   end
 
   def timeMatch(t1, t2, timediff)
-    return "(abs(timestampdiff(MINUTE," + t1 + ", " + t2 + ")) <= " + timediff.to_s + ")"
+    return "(abs(" +
+      @db.timediff("MINUTE", t1, t2) + ") <= " + timediff.to_s + ")"
   end
 
   def qsoExactMatch(q1,q2)
@@ -327,7 +329,7 @@ class CrossMatch
       s = Exchange.new(row[6], row[7], row[8], row[9], row[10]) 
       r = Exchange.new(row[11], row[12], row[13], row[14], row[15])
       qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
-                    row[5], s, r)
+                    @db.toDateTime(row[5]), s, r)
       qsos << qso
     }
     qsos
@@ -406,7 +408,8 @@ class CrossMatch
       notMatched("q1") + " and " + notMatched("q2") + " and " +
       qsoMatch("q1", "q2", timediff) +
       " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.recvd_serial)) asc" +
-      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+      ", abs(" +
+      @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
     print queryStr + "\n"
     @db.query("explain " + queryStr).each { |row|
       print row.join(", ") + "\n"
@@ -429,7 +432,8 @@ class CrossMatch
       " and " + qsoMatch("q1", "q2", timediff) + " and " +
       exchangeMatch("q1.recvd", "q2.sent") +
       " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
-      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+      ", abs(" +
+      @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
     print "Partial match test phase 1: #{Time.now.to_s}\n"
     print queryStr + "\n"
     @db.query("explain " + queryStr).each { |row|
@@ -499,7 +503,8 @@ class CrossMatch
                     " (qe1.sent_callsign = qe2.recvd_callsign or q1.sent_callID = q2.recvd_callID) and " +
                     " (q2.sent_callID = q1.recvd_callID or qe2.sent_callsign = qe1.recvd_callsign) " +
                     " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
-      ", abs(timestampdiff(MINUTE,q1.time, q2.time)) asc;"
+      ", abs(" +
+      @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
     return linkQSOs(@db.query(queryStr), 'Partial', 'Partial', true)
   end
 
@@ -557,7 +562,7 @@ class CrossMatch
       s = Exchange.new(row[6], row[7], row[8], row[9], row[10])
       r = Exchange.new(row[11], row[12], row[13], row[14], row[15])
       qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
-                    row[5], s, r)
+                    @db.toDateTime(row[5]), s, r)
       qsos << qso
     }
     res = nil

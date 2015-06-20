@@ -35,8 +35,9 @@ def fillInComment(db, contestID)
     if row[2] != row[10]
       comments << "mode mismatch #{row[10]}"
     end
-    if ((row[3] + row[4]) - (row[11] + row[12])).abs > 15*60
-      comments << "time mismatch #{(row[11]+row[12]).to_s}"
+    if ((db.toDateTime(row[3]) + row[4]) - 
+        (db.toDateTime(row[11]) + row[12])).abs > 15*60
+      comments << "time mismatch #{(db.toDateTime(row[11])+row[12]).to_s}"
     end
     if (row[6] - row[14]).abs > 1
       comments << "serial # #{row[14]}"
@@ -54,7 +55,7 @@ def fillInComment(db, contestID)
   }
   res = db.query("select q.id, e.name, e.continent from QSO as q join Multiplier as m on (q.recvd_multiplierID = m.id and m.abbrev = 'DX') join Entity as e on e.id = q.recvd_entityID where q.matchType in ('Full', 'Bye');")
   res.each { |row|
-    db.query("update QSO set comment = ('DX=' + ? + " (" + ? + ")") where id = ? limit 1;",
+    db.query("update QSO set comment = ('DX=' + ? + ' (' + ? + ')') where id = ? limit 1;",
              [row[1].to_s, row[2].to_s, row[0].to_i])
   }
 end

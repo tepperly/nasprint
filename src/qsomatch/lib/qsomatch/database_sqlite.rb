@@ -4,6 +4,7 @@
 # Build a SQL database to do log crossing checking & scoring
 
 require 'sqlite3'
+require 'time'
 
 module Mysql2
   class Error
@@ -35,6 +36,22 @@ class DatabaseSQLite
   def affected_rows
     @db.changes
   end
+
+  DIFF_DIVISOR = {
+    "MINUTE" => "60.0",
+    "SECOND" => "1",
+    "HOUR" => "(60.0*60.0)"
+  }
+
+  def timediff(units, time1, time2)
+    "((" + time1 + " - " + time2 + ")/" +
+      DIFF_DIVISOR[units] + ")"
+  end
+
+  def toDateTime(obj)
+    obj.kind_of?(String) ? Time.iso8601(obj) : obj
+  end
+
 
   def autoincrement
     return AUTOINCREMENT
