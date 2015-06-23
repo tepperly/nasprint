@@ -14,62 +14,64 @@
 #define MAX_CALLSIGN_CHARS   12
 #define MAX_MULTIPLIER_CHARS 20
 
+/* order must agree with s_bandName */
 enum Band_t {
-  b_TwoFortyOneG,
-  b_OneFortyTwoG,
-  b_OneNineteenG,
-  b_SeventyFiveG,
-  b_FortySevenG,
-  b_TwentyFourG,
-  b_TenG,
-  b_FivePointSevenG,
-  b_ThreePointFourG,
-  b_TwoPointThreeG,
   b_OnePointTwoG,
-  b_NineZeroTwoM,
-  b_FourThirtyTwoM,
-  b_TwoTwentyTwoM,
-  b_TwoM,
-  b_SixM,
+  b_TenG,
   b_TenM,
+  b_OneNineteenG,
+  b_OneFortyTwoG,
   b_FifteenM,
-  b_TwentyM,
-  b_FortyM,
-  b_EightyM,
   b_OneSixtyM,
+  b_TwoPointThreeG,
+  b_TwentyM,
+  b_TwoTwentyTwoM,
+  b_TwoFortyOneG,
+  b_TwentyFourG,
+  b_TwoM,
+  b_ThreePointFourG,
+  b_FortyM,
+  b_FourThirtyTwoM,
+  b_FortySevenG,
+  b_FivePointSevenG,
+  b_SixM,
+  b_SeventyFiveG,
+  b_EightyM,
+  b_NineZeroTwoM,
   b_Unknown
 };
 
+#define MAX_BAND_NAME 8
 /* order must match ordering of enum above */
 static const char * const s_bandNames[] = {
-  "241G",
-  "142G",
-  "119G",
-  "75G",
-  "47G",
-  "24G",
-  "10G",
-  "5.7G",
-  "3.4G",
-  "2.3G",
   "1.2G",
-  "902",
-  "432",
-  "222",
-  "2m",
-  "6m",
+  "10G",
   "10m",
+  "119G",
+  "142G",
   "15m",
-  "20m",
-  "40m",
-  "80m",
   "160m",
+  "2.3G",
+  "20m",
+  "222",
+  "241G",
+  "24G",
+  "2m",
+  "3.4G",
+  "40m",
+  "432",
+  "47G",
+  "5.7G",
+  "6m",
+  "75G",
+  "80m",
+  "902",
   "unknown"
 };
 
 struct StringMap_t {
-  const char * const d_bandName;
-  const int        d_bandNum;
+  const char d_bandName[MAX_BAND_NAME];
+  const int  d_bandNum;
 };
 
 static struct StringMap_t s_bandMap[] = {
@@ -259,6 +261,15 @@ freed_qso(void)
   rb_raise(rb_eQSOError, "deallocated QSO");
 }
 
+static VALUE
+qso_s_allocate(VALUE klass)
+{
+  struct QSO_t *qsop;
+  VALUE result =  TypedData_Make_Struct(klass, struct QSO_t,
+					&qso_type, qsop);
+  memset(qsop, 0, sizeof(struct QSO_t));
+}
+
 #define GetQSO(obj, qsop) do {\
   TypedData_Get_Struct((obj), struct QSO_t, &qso_type, (qsop));\
   if ((qsop) == 0) freed_qso();\
@@ -378,31 +389,31 @@ qso_datetime(VALUE obj)
 static VALUE
 qso_exchange_basecall(const struct Exchange_t *e)
 {
-  return rb_str_new2(e->d_basecall);
+  return e->d_basecall[0] ? rb_str_new2(e->d_basecall) : Qnil;
 }
 
 static VALUE
 qso_exchange_callsign(const struct Exchange_t *e)
 {
-  return rb_str_new2(e->d_callsign);
+  return e->d_callsign[0] ? rb_str_new2(e->d_callsign) : Qnil;
 }
 
 static VALUE
 qso_exchange_serial(const struct Exchange_t *e)
 {
-  return INT2FIX(e->d_serial);
+  return (e->d_serial >= 0) ? INT2FIX(e->d_serial) : Qnil;
 }
 
 static VALUE
 qso_exchange_multiplier(const struct Exchange_t *e)
 {
-  return rb_str_new2(e->d_multiplier);
+  return e->d_multiplier[0] ? rb_str_new2(e->d_multiplier) : Qnil;
 }
 
 static VALUE
 qso_exchange_location(const struct Exchange_t *e)
 {
-  return rb_str_new2(e->d_location);
+  return e->d_location[0] ? rb_str_new2(e->d_location) : Qnil;
 }
 
 /*
@@ -547,7 +558,7 @@ qso_sent_location(VALUE obj)
 
 /*
  * call-seq:
- *     qso.baseLine
+ *     qso.basicLine
  *
  * Return a string that holds the QSO in a Cabrillo line format.
  */
@@ -688,6 +699,7 @@ toCW(const char *src, char *dest)
     }
     ++src;
   }
+  *dest = '\0';
   return result;
 }
 
@@ -791,11 +803,178 @@ qso_exchange_probability(const struct Exchange_t * const sent,
   }
 }
 
+static
+enum Band_t
+qso_lookupBand(VALUE band)
+{
+  if (T_STRING == TYPE(band)) {
+    if ((RSTRING_LEN(band) >= 2) &&
+	(RSTRING_LEN(band) < MAX_BAND_NAME)) {
+      char bandbuf[MAX_BAND_NAME];
+      int l=0, u=sizeof(s_bandMap)/sizeof(struct StringMap_t), m, cmp;
+      memcpy(bandbuf, RSTRING_PTR(band), RSTRING_LEN(band));
+      bandbuf[RSTRING_LEN(band)] = '\0';
+      while (l < u) {		/* binary search */
+	m = (l+u) >> 1;
+	cmp = strcmp(bandbuf, s_bandMap[m].d_bandName);
+	if (cmp > 0) l = m + 1;
+	else if (cmp < 0) u = m;
+	else
+	  return s_bandMap[m].d_bandNum;
+      }
+    }
+  }
+  rb_raise(rb_eQSOError, "Illegal QSO band");
+  return b_Unknown;
+}
 
+static
+enum Mode_t
+qso_lookupMode(VALUE mode)
+{
+  if (T_STRING == TYPE(mode)) {
+    if (2 == RSTRING_LEN(mode)) {
+      char modebuf[3];
+      int l=0, u=sizeof(s_modeMap)/sizeof(struct StringMap_t), m, cmp;
+      memcpy(modebuf, RSTRING_PTR(mode), 2);
+      modebuf[2] = '\0';
+      while (l < u) {		/* binary search */
+	m = (l+u) >> 1;
+	cmp = strcmp(modebuf, s_modeMap[m].d_bandName);
+	if (cmp > 0) l = m + 1;
+	else if (cmp < 0) u = m;
+	else
+	  return s_modeMap[m].d_bandNum;
+      }
+    }
+  }
+  rb_raise(rb_eQSOError, "Illegal mode error");
+  return m_RTTY;
+}
+
+static ID s_cToI;
+
+static
+time_t
+qso_convertTime(VALUE datetime)
+{
+  VALUE time = rb_funcall(datetime, s_cToI, 0);
+  return (time_t)NUM2LONG(time);
+}
 
 static void
-qso_initialize()
+qso_copystr(char *dest, VALUE str, const int maxchars, const char *field)
 {
-  
+  if (T_STRING == TYPE(str)) {
+    if (maxchars > RSTRING_LEN(str)) {
+      memcpy(dest, RSTRING_PTR(str), RSTRING_LEN(str));
+      dest[RSTRING_LEN(str)] = '\0';
+    }
+    else {
+      memcpy(dest, RSTRING_PTR(str), maxchars - 1);
+      dest[maxchars-1] = '\0';
+    }
+  }
+  else {
+    rb_raise(rb_eQSOError, "Incorrect argument for %s\n", field);
+  }
+}
+
+static
+void
+fillOutExchange(struct Exchange_t *exch,
+		VALUE basecall, VALUE call,
+		VALUE serial, VALUE multiplier, VALUE location)
+{
+  if (NIL_P(basecall)) {
+    exch->d_basecall[0] = '\0';	/* zero length string indicates NIL */
+  }
+  else {
+    qso_copystr(exch->d_basecall, basecall, MAX_CALLSIGN_CHARS,"basecall");
+  }
+  if (NIL_P(call)) {
+    exch->d_callsign[0] = '\0';	/* zero length string indicates NIL */
+  }
+  else {
+    qso_copystr(exch->d_callsign, call, MAX_CALLSIGN_CHARS,"callsign");
+  }
+  if (NIL_P(serial)) {
+    exch->d_serial = -1;	/* negative number indicates NIL */
+  }
+  else {
+    exch->d_serial = (int32_t)NUM2LONG(serial);
+  }
+  if (NIL_P(multiplier)) {
+    exch->d_multiplier[0] = '\0'; /* zero length string indicates NIL */
+  }
+  else {
+    qso_copystr(exch->d_multiplier, multiplier, MAX_MULTIPLIER_CHARS, "multiplier");
+  }
+  if (NIL_P(location)) {
+    exch->d_location[0] = '\0';
+  }
+  else {
+    qso_copystr(exch->d_location, location, MAX_MULTIPLIER_CHARS, "location");
+  }
+}
+
+/*
+ * call-seq:
+ *      QSO.new(id, logID, frequency, band, mode, datetime,
+ *              sent_basecall, sent_call, sent_serial, sent_multiplier, sent_location,
+ *              recvd_basecall, recvd_call, recvd_serial, recvd_multiplier, recvd_location)
+ *
+ * Initialize a new QSO object.
+ */
+static VALUE
+qso_initialize(VALUE obj,	/* self pointer */
+	       VALUE id, VALUE logID, VALUE frequency, VALUE band, VALUE mode,
+	       VALUE datetime,
+	       VALUE sent_basecall, VALUE sent_call, VALUE sent_serial,
+	       VALUE sent_multiplier, VALUE sent_location,
+	       VALUE recvd_basecall, VALUE recvd_call, VALUE recvd_serial,
+	       VALUE recvd_multiplier, VALUE recvd_location)
+{
+  struct QSO_t *qsop;
+  GetQSO(obj, qsop);
+  qsop->d_qsoID = (int32_t)NUM2LONG(id);
+  qsop->d_logID = (int32_t)NUM2LONG(logID);
+  qsop->d_frequency = (int32_t)NUM2LONG(frequency);
+  qsop->d_band = qso_lookupBand(band);
+  qsop->d_mode = qso_lookupMode(mode);
+  qsop->d_datetime = qso_convertTime(datetime);
+  fillOutExchange(&(qsop->d_sent),
+		  sent_basecall, sent_call, sent_serial,
+		  sent_multiplier, sent_location);
+  fillOutExchange(&(qsop->d_recvd),
+		  recvd_basecall, recvd_call, recvd_serial,
+		  recvd_multiplier, recvd_location);
 }
 	       
+void
+Init_qsomatch(void)
+{
+  rb_cQSO = rb_define_class("QSO", rb_cObject);
+  rb_eQSOError = rb_define_class("QSOError", rb_eException);
+  s_cToI = rb_intern("to_i");
+  rb_define_method(rb_cQSO, "initialize", qso_initialize, 16);
+  rb_define_method(rb_cQSO, "id", qso_id, 0);
+  rb_define_method(rb_cQSO, "logID", qso_logID, 0);
+  rb_define_method(rb_cQSO, "freq", qso_freq, 0);
+  rb_define_method(rb_cQSO, "band", qso_band, 0);
+  rb_define_method(rb_cQSO, "mode", qso_mode, 0);
+  rb_define_method(rb_cQSO, "datetime", qso_datetime, 0);
+  rb_define_method(rb_cQSO, "recvd_basecall", qso_recvd_basecall, 0);
+  rb_define_method(rb_cQSO, "recvd_callsign", qso_recvd_callsign, 0);
+  rb_define_method(rb_cQSO, "recvd_serial", qso_recvd_serial, 0);
+  rb_define_method(rb_cQSO, "recvd_multiplier", qso_recvd_multiplier, 0);
+  rb_define_method(rb_cQSO, "recvd_location", qso_recvd_location, 0);
+  rb_define_method(rb_cQSO, "sent_basecall", qso_sent_basecall, 0);
+  rb_define_method(rb_cQSO, "sent_callsign", qso_sent_callsign, 0);
+  rb_define_method(rb_cQSO, "sent_serial", qso_sent_serial, 0);
+  rb_define_method(rb_cQSO, "sent_multiplier", qso_sent_multiplier, 0);
+  rb_define_method(rb_cQSO, "sent_location", qso_sent_location, 0);
+  rb_define_method(rb_cQSO, "basicLine", qso_basicLine, 0);
+  rb_define_method(rb_cQSO, "to_s", qso_to_s, -1);
+  rb_define_method(rb_cQSO, "fullmatch?", qso_fullmatch, 2);
+}

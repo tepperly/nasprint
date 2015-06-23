@@ -532,8 +532,6 @@ class CrossMatch
 
   def alreadyPaired?(m)
     line1, line2 = m.qsoLines
-    line1 = @db.escape(line1)
-    line2 = @db.escape(line2)
     res = @db.query("select ismatch from Pairs where (line1 = ? and line2 = ?) or (line1 = ? and line2 = ?) limit 1;",
                     [line1, line2, line2, line1])
     res.each { |row|
