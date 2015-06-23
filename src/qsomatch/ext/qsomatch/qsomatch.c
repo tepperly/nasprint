@@ -268,6 +268,7 @@ qso_s_allocate(VALUE klass)
   VALUE result =  TypedData_Make_Struct(klass, struct QSO_t,
 					&qso_type, qsop);
   memset(qsop, 0, sizeof(struct QSO_t));
+  return result;
 }
 
 #define GetQSO(obj, qsop) do {\
@@ -565,19 +566,21 @@ qso_sent_location(VALUE obj)
 static VALUE
 qso_basicLine(VALUE obj)
 {
-  char buffer[65+4*(MAX_CALLSIGN_CHARS)+4*(MAX_MULTIPLIER_CHARS)];
+  char buffer[71+4*(MAX_CALLSIGN_CHARS)+4*(MAX_MULTIPLIER_CHARS)];
   struct QSO_t *qsop;
   struct tm result;
   GetQSO(obj, qsop);
   gmtime_r(&(qsop->d_datetime), &result);
   snprintf(buffer,sizeof(buffer),
-	   "%5d %-4s %-2s %04d-%02d-%02d %-7s %-7s %4d %-4s %-4s %-7s %-7s %4d %-4s %-4s",
+	   "%5d %-4s %-2s %04d-%02d-%02d %02d%02d %-7s %-7s %4d %-4s %-4s %-7s %-7s %4d %-4s %-4s",
 	   qsop->d_frequency,
 	   s_bandNames[qsop->d_band],
 	   s_modeNames[qsop->d_mode],
 	   1900+result.tm_year,
 	   1+result.tm_mon,
 	   result.tm_mday,
+	   result.tm_hour,
+	   result.tm_min,
 	   qsop->d_sent.d_basecall,
 	   qsop->d_sent.d_callsign,
 	   qsop->d_sent.d_serial,
@@ -597,11 +600,11 @@ q_to_s(const struct QSO_t *qsop,
      const struct Exchange_t *left,
      const struct Exchange_t *right)
 {
-  char buffer[82+4*(MAX_CALLSIGN_CHARS)+4*(MAX_MULTIPLIER_CHARS)];
+  char buffer[88+4*(MAX_CALLSIGN_CHARS)+4*(MAX_MULTIPLIER_CHARS)];
   struct tm result;
   gmtime_r(&(qsop->d_datetime), &result);
   snprintf(buffer,sizeof(buffer),
-	   "%7d %5d %5d %-4s %-2s %04d-%02d-%02d %-7s %-7s %4d %-4s %-4s %-7s %-7s %4d %-4s %-4s",
+	   "%7d %5d %5d %-4s %-2s %04d-%02d-%02d %02d%02d %-7s %-7s %4d %-4s %-4s %-7s %-7s %4d %-4s %-4s",
 	   qsop->d_qsoID,
 	   qsop->d_logID,
 	   qsop->d_frequency,
@@ -610,6 +613,8 @@ q_to_s(const struct QSO_t *qsop,
 	   1900+result.tm_year,
 	   1+result.tm_mon,
 	   result.tm_mday,
+	   result.tm_hour,
+	   result.tm_min,
 	   left->d_basecall,
 	   left->d_callsign,
 	   left->d_serial,
@@ -641,10 +646,10 @@ qso_to_s(int argc, VALUE* argv, VALUE obj)
     isReversed = RTEST(reversed);
   }
   if (isReversed) {
-    return q_to_s(qsop, &(qsop->d_sent), &(qsop->d_recvd));
+    return q_to_s(qsop, &(qsop->d_recvd), &(qsop->d_sent));
   }
  else {
-    return q_to_s(qsop, &(qsop->d_recvd), &(qsop->d_sent));
+    return q_to_s(qsop, &(qsop->d_sent), &(qsop->d_recvd));
  }
 }
 
@@ -661,12 +666,12 @@ static VALUE
 qso_fullmatch(VALUE obj, VALUE qso, VALUE time)
 {
   if (((T_FIXNUM == TYPE(time)) || (T_BIGNUM == TYPE(time))) &&
-      (T_OBJECT == TYPE(qso))) {
+      (T_DATA == TYPE(qso))) {
     const struct QSO_t *selfp, *qsop;
     const long tolerance = NUM2LONG(time);
     GetQSO(obj, selfp);
     GetQSO(qso, qsop);
-    return ((selfp == qsop) ||
+    return ((selfp != qsop) &&
 	    ((selfp->d_band == qsop->d_band) &&
 	     (selfp->d_mode == qsop->d_mode) &&
 	     (labs((long)(selfp->d_datetime - qsop->d_datetime)) <=
@@ -686,12 +691,16 @@ static int
 toCW(const char *src, char *dest)
 {
   int result = 0;
+  const size_t maxIndex = (char)(sizeof(s_CW_MAPPING)/sizeof(char *));
   while (*src) {
-    if (*src >= 0 && *src < (sizeof(s_CW_MAPPING)/sizeof(char *)) &&
-	s_CW_MAPPING[*src]) {
-      const int newlen = (int)strlen(s_CW_MAPPING[*src]);
-      strcpy(dest, src);
-      dest += newlen;
+    const size_t index = (size_t)*src;
+    if (index >= 0 && (index < maxIndex)) {
+      const char * const asCW = s_CW_MAPPING[index];
+      if (*asCW) {
+	const size_t newlen = strlen(asCW);
+	strcpy(dest, asCW);
+	dest += newlen;
+      }
     }
     else {
       *dest = ' ';
@@ -765,7 +774,7 @@ serialNumberCmp(const int sent, const int recvd, const int isCW)
 					   (1.0*SERIAL_NONE-SERIAL_FULL))))
     : 1.0;
   len1 = snprintf(buffer1, sizeof(buffer1), "%d", sent) - 1;
-  len2 = spprintf(buffer2, sizeof(buffer2), "%d", recvd) - 1;
+  len2 = snprintf(buffer2, sizeof(buffer2), "%d", recvd) - 1;
   tmp = jw_distance(buffer1, len1, buffer2, len2, opt);
   if (tmp > result) result = tmp;
   if (isCW) {
@@ -927,37 +936,56 @@ fillOutExchange(struct Exchange_t *exch,
  * Initialize a new QSO object.
  */
 static VALUE
-qso_initialize(VALUE obj,	/* self pointer */
-	       VALUE id, VALUE logID, VALUE frequency, VALUE band, VALUE mode,
-	       VALUE datetime,
-	       VALUE sent_basecall, VALUE sent_call, VALUE sent_serial,
-	       VALUE sent_multiplier, VALUE sent_location,
-	       VALUE recvd_basecall, VALUE recvd_call, VALUE recvd_serial,
-	       VALUE recvd_multiplier, VALUE recvd_location)
+qso_initialize(int argc, VALUE *argv, VALUE obj)
 {
-  struct QSO_t *qsop;
-  GetQSO(obj, qsop);
-  qsop->d_qsoID = (int32_t)NUM2LONG(id);
-  qsop->d_logID = (int32_t)NUM2LONG(logID);
-  qsop->d_frequency = (int32_t)NUM2LONG(frequency);
-  qsop->d_band = qso_lookupBand(band);
-  qsop->d_mode = qso_lookupMode(mode);
-  qsop->d_datetime = qso_convertTime(datetime);
-  fillOutExchange(&(qsop->d_sent),
-		  sent_basecall, sent_call, sent_serial,
-		  sent_multiplier, sent_location);
-  fillOutExchange(&(qsop->d_recvd),
-		  recvd_basecall, recvd_call, recvd_serial,
-		  recvd_multiplier, recvd_location);
+  if (16 == argc) {
+    VALUE id = argv[0];
+    VALUE logID = argv[1];
+    VALUE frequency = argv[2];
+    VALUE band = argv[3];
+    VALUE mode = argv[4];
+    VALUE datetime = argv[5];
+    VALUE sent_basecall = argv[6];
+    VALUE sent_call = argv[7];
+    VALUE sent_serial = argv[8];
+    VALUE sent_multiplier = argv[9];
+    VALUE sent_location = argv[10];
+    VALUE recvd_basecall = argv[11];
+    VALUE recvd_call = argv[12];
+    VALUE recvd_serial = argv[13];
+    VALUE recvd_multiplier = argv[14];
+    VALUE recvd_location = argv[15];
+    struct QSO_t *qsop;
+    GetQSO(obj, qsop);
+    qsop->d_qsoID = (int32_t)NUM2LONG(id);
+    qsop->d_logID = (int32_t)NUM2LONG(logID);
+    qsop->d_frequency = (int32_t)NUM2LONG(frequency);
+    qsop->d_band = qso_lookupBand(band);
+    qsop->d_mode = qso_lookupMode(mode);
+    qsop->d_datetime = qso_convertTime(datetime);
+    fillOutExchange(&(qsop->d_sent),
+		    sent_basecall, sent_call, sent_serial,
+		    sent_multiplier, sent_location);
+    fillOutExchange(&(qsop->d_recvd),
+		    recvd_basecall, recvd_call, recvd_serial,
+		    recvd_multiplier, recvd_location);
+    return obj;
+  }
+  else {
+    rb_raise(rb_eArgError, "Wrong number of arguments %d expected 16.",
+	     argc);
+  }
+  return Qnil;
 }
 	       
 void
 Init_qsomatch(void)
 {
   rb_cQSO = rb_define_class("QSO", rb_cObject);
+  rb_define_alloc_func(rb_cQSO, qso_s_allocate);
   rb_eQSOError = rb_define_class("QSOError", rb_eException);
   s_cToI = rb_intern("to_i");
-  rb_define_method(rb_cQSO, "initialize", qso_initialize, 16);
+  rb_define_method(rb_cQSO, "initialize", qso_initialize, -1);
   rb_define_method(rb_cQSO, "id", qso_id, 0);
   rb_define_method(rb_cQSO, "logID", qso_logID, 0);
   rb_define_method(rb_cQSO, "freq", qso_freq, 0);
