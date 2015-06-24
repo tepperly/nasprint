@@ -812,6 +812,46 @@ qso_exchange_probability(const struct Exchange_t * const sent,
   }
 }
 
+static double
+timePenalty(time_t t1, time_t t2)
+{
+  const long diff = labs(t1 - t2);
+  return (diff <= 15*60) ? 1.0 :
+    ((diff >= (2*24*60*60)) ? 0.0 :
+     (1.0 - (diff/(2.0*24*60*60))));
+  
+}
+
+static VALUE
+qso_probablymatch(VALUE obj, VALUE qso)
+{
+  const struct QSO_t *selfp, *qsop;
+  double callOne, exchangeOne;
+  double callTwo, exchangeTwo;
+  VALUE result = rb_array_new2(2);
+  int isCW;
+  GetQSO(obj, selfp);
+  GetQSO(qso, qsop);
+  isCW = ((m_CW == qsop->d_mode) && (m_CW == selfp->d_mode));
+  if ((selfp == qsop) ||
+      (selfp->d_logID == qsop->d_logID)) {
+    rb_ary_store(result, 0, INT2VAL(0));
+    rb_ary_store(result, 1, INT2VAL(1));
+  }
+  else {
+    qso_exchange_probablity(&(qsop->d_sent), &(selfp->d_recvd), isCW,
+			    &exchangeOne, &callOne);
+    qso_exchange_probablity(&(qsop->d_recvd), &(selfp->d_sent), isCW,
+			    &exchangeTwo, &callTwo);
+    rb_ary_store(result, 1, callOne*callTwo);
+    rb_ary_store(result, 0, exchangeOne*exchangeTwo*
+		 ((selfp->d_band == qsop->d_band) ? 1.0 : 0.9) *
+		 ((selfp->d_mode == qsop->d_mode) ? 1.0 : 0.9) *
+		 timePenalty(selfp->d_datetime, qsop->d_datetime));
+  }
+  return result;
+}
+
 static
 enum Band_t
 qso_lookupBand(VALUE band)
