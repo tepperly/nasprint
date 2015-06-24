@@ -828,26 +828,28 @@ qso_probablymatch(VALUE obj, VALUE qso)
   const struct QSO_t *selfp, *qsop;
   double callOne, exchangeOne;
   double callTwo, exchangeTwo;
-  VALUE result = rb_array_new2(2);
+  VALUE result = rb_ary_new2(2);
   int isCW;
   GetQSO(obj, selfp);
   GetQSO(qso, qsop);
   isCW = ((m_CW == qsop->d_mode) && (m_CW == selfp->d_mode));
   if ((selfp == qsop) ||
       (selfp->d_logID == qsop->d_logID)) {
-    rb_ary_store(result, 0, INT2VAL(0));
-    rb_ary_store(result, 1, INT2VAL(1));
+    rb_ary_store(result, 0, INT2FIX(0));
+    rb_ary_store(result, 1, INT2FIX(0));
   }
   else {
-    qso_exchange_probablity(&(qsop->d_sent), &(selfp->d_recvd), isCW,
-			    &exchangeOne, &callOne);
-    qso_exchange_probablity(&(qsop->d_recvd), &(selfp->d_sent), isCW,
-			    &exchangeTwo, &callTwo);
-    rb_ary_store(result, 1, callOne*callTwo);
-    rb_ary_store(result, 0, exchangeOne*exchangeTwo*
-		 ((selfp->d_band == qsop->d_band) ? 1.0 : 0.9) *
-		 ((selfp->d_mode == qsop->d_mode) ? 1.0 : 0.9) *
-		 timePenalty(selfp->d_datetime, qsop->d_datetime));
+    qso_exchange_probability(&(qsop->d_sent), &(selfp->d_recvd), isCW,
+			     &exchangeOne, &callOne);
+    qso_exchange_probability(&(qsop->d_recvd), &(selfp->d_sent), isCW,
+			     &exchangeTwo, &callTwo);
+    rb_ary_store(result, 1, 
+		 rb_float_new(callOne*callTwo));
+    rb_ary_store(result, 0, 
+		 rb_float_new(exchangeOne*exchangeTwo*
+			      ((selfp->d_band == qsop->d_band) ? 1.0 : 0.9) *
+			      ((selfp->d_mode == qsop->d_mode) ? 1.0 : 0.9) *
+			      timePenalty(selfp->d_datetime, qsop->d_datetime)));
   }
   return result;
 }
@@ -1045,4 +1047,5 @@ Init_qsomatch(void)
   rb_define_method(rb_cQSO, "basicLine", qso_basicLine, 0);
   rb_define_method(rb_cQSO, "to_s", qso_to_s, -1);
   rb_define_method(rb_cQSO, "fullmatch?", qso_fullmatch, 2);
+  rb_define_method(rb_cQSO, "probablyMatch", qso_probablymatch, 1);
 }

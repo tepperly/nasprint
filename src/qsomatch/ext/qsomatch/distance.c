@@ -35,13 +35,13 @@ jw_Option jw_option_new(void)
   return opt;
 }
 
-static inline
+static inline int
 jw_imax(int i, int j)
 {
   return (i >= j) ? i : j;
 }
 
-static inline
+static inline int
 jw_imin(int i, int j)
 {
   return (i <= j) ? i : j;
@@ -80,7 +80,7 @@ jw_distance(const char *s1, int s1_byte_len, const char *s2, int s2_byte_len, jw
 	  }
 	}
 	else {
-	  if(opt.adj_table && adj_matrix_find(adj_matrix_default(), s1[i], s2[j])) {
+	  if(opt.adj_table && jw_adj_matrix_find(jw_adj_matrix_default(), s1[i], s2[j])) {
 	    sim_matched = 1;
 	  }
 	}
