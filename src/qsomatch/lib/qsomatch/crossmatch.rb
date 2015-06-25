@@ -5,84 +5,8 @@
 #
 
 require_relative 'contestdb'
+require 'qsomatch'
 require 'jaro_winkler'
-
-CW_MAPPING = {
-  "A" => ".-",
-  "B" => "-...",
-  "C" => "-.-.",
-  "D" => "-..",
-  "E" => ".",
-  "F" => "..-.",
-  "G" => "--.",
-  "H" => "...",
-  "I" => "..",
-  "J" => ".---",
-  "K" => "-.-",
-  "L" => ".-..",
-  "M" => "--",
-  "N" => "-.",
-  "O" => "---",
-  "P" => ".--.",
-  "Q" => "--.-",
-  "R" => ".-.",
-  "S" => "...",
-  "T" => "-",
-  "U" => "..-",
-  "V" => "...-",
-  "W" => ".--",
-  "X" => "-..-",
-  "Y" => "-.--",
-  "Z" => "--..",
-  " " => "  ",
-  "1" => ".----",
-  "2" => "..---",
-  "3" => "...--",
-  "4" => "....-",
-  "5" => ".....",
-  "6" => "-....",
-  "7" => "--...",
-  "8" => "---..",
-  "9" => "----.",
-  "0" => "-----",
-  "." => ".-.-.-",
-  "?" => "..--..",
-  "," => "--..--",
-  ":" => "---...",
-  "'" => ".----.",
-  "-" => "-....-",
-  "/" => "-..-.",
-  "@" => ".--.-.",
-  "=" => "-...-"
-}
-CW_MAPPING.default = " "
-
-def toCW(str)
-  result = ""
-  space = false
-  str.upcase.each_char { |char|
-    if space
-      result << " "
-    end
-    result << CW_MAPPING[char]
-  }
-  result
-end
-
-class StringSpace
-  def initialize
-    @space = Hash.new
-  end
-
-  def register(str)
-    if @space.has_key?(str)
-      return @space[str]
-    else
-      @space[str] = str
-    end
-    return str
-  end
-end
 
 def hillFunc(value, full, none)
   value = value.abs
@@ -90,149 +14,26 @@ def hillFunc(value, full, none)
     ((value >= none) ? 0 : (1.0 - ((value.to_f - full)/(none.to_f - full))))
 end
 
-class Exchange
-  @@stringspace = StringSpace.new
 
-  def initialize(basecall, callsign, serial, mult, location)
-    @basecall = @@stringspace.register(basecall)
-    @callsign = @@stringspace.register(callsign)
-    @serial = serial.to_i
-    @mult = @@stringspace.register(mult)
-    @location = @@stringspace.register(location)
-  end
-
-  attr_reader :basecall, :callsign, :serial, :mult, :location
-
-  def crossProbs(l1, l2, isCW)
-    result = Array.new
-    l1.each { |s1|
-      l2.each { |s2|
-        result << JaroWinkler.distance(s1, s2)
-        if isCW
-          result << JaroWinkler.distance(toCW(s1),toCW(s2))
-        end
-      }
-    }
-    result.max
-  end
-
-  def probablyMatch(exch, isCW = false)
-    cp = callProb(exch, isCW)
-    if @mult == @location
-      m1 = [ @mult ]
-    else
-      m1 = [ @mult, @location ]
-    end
-    if exch.mult == exch.location
-      m2 = [ exch.mult ]
-    else
-      m2 = [ exch.mult, exch.location ]
-    end
-     return cp*
-      [ hillFunc(@serial-exch.serial, 1, 10),
-      JaroWinkler.distance(@serial.to_s,exch.serial.to_s),
-      isCW ? JaroWinkler.distance(toCW(@serial.to_s),toCW(exch.serial.to_s)) : 0].max *
-      crossProbs(m1, m2, isCW), cp
-  end
-
-  def fullMatch?(exch)
-    @basecall == exch.basecall and 
-      ((@serial - exch.serial).abs <= 1) and
-      @mult == exch.mult
-  end
-
-  def callProb(exch, isCW=false)
-    if @basecall == @callsign
-      l1 = [ @basecall ]
-    else
-      l1 = [ @basecall, @callsign ]
-    end
-    if exch.basecall == exch.callsign
-      l2 = [ exch.basecall ]
-    else
-      l2 = [ exch.basecall, exch.callsign ]
-    end
-    return crossProbs(l1, l2, isCW)
-  end
-
-  def to_s
-    "%-6s %-7s %4d %-4s %-4s" % [@basecall, @callsign, @serial,
-                                  @mult, @location]
-  end
-
-end
-
-class QSO
-  def initialize(id, logID, freq, band, mode, datetime, sent, recvd)
-    @id = id
-    @logID = logID
-    @freq = freq
-    @band = band
-    @mode = mode
-    @datetime = datetime
-    @sent = sent
-    @recvd = recvd
-  end
-
-  attr_reader :id, :logID, :freq, :band, :mode, :datetime, :sent, :recvd
-
-  def probablyMatch(qso)
-    sp, scp = @sent.probablyMatch(qso.recvd)
-    rp, rcp = @recvd.probablyMatch(qso.sent)
-    return ((qso.logID == @logID) ? 0 :
-            ( sp * rp *
-              ((@band == qso.band) ? 1.0 : 0.90) *
-              ((@mode == qso.mode) ? 1.0 : 0.90) *
-              hillFunc(@datetime - qso.datetime, 15*60, 24*60*60))), scp*rcp
-  end
-
-  def callProbability(qso)
-    isCW = (("CW" == @mode) or ("CW" == qso.mode))
-    return @sent.callProb(qso.recvd, isCW) *
-        @recvd.callProb(qso.sent, isCW)
-  end
-
-  def fullMatch?(qso, time)
-    @band == qso.band and @mode == qso.mode and 
-      @mode == qso.mode and
-      (qso.datetime >= (@datetime - 60*time) and
-       qso.datetime <= (@datetime + 60*time)) and
-      @recvd.fullMatch?(qso.sent)
-  end
-
-  def to_s(reversed = false)
-    ("%7d %5d %5d %-4s %-2s %s " % [@id, @logID, @freq, @band, @mode,
-                                  @datetime.strftime("%Y-%m-%d %H%M")]) +
-      (reversed ?  (@recvd.to_s + " " + @sent.to_s):
-       (@sent.to_s + " " + @recvd.to_s))
-  end
-
-  def basicLine
-    ("%5d %-4s %-2s %s " % [@freq, @band, @mode,
-                                  @datetime.strftime("%Y-%m-%d %H%M")]) +
-      @sent.to_s + " " + @recvd.to_s
-  end
-
-  def self.lookupQSO(db, id, timeadj=0)
-    res = db.query("select q.logID, q.frequency, q.band, q.fixedMode, q.time, " +
-                   ContestDB.EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "q.sent" + f }.join(", ") + ", " +
-                   ContestDB.EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "q.recvd" + f }.join(", ") + " , " +
-                   ContestDB.EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "qe.sent" + f}.join(", ") + ", " +
-                   ContestDB.EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "qe.recvd" + f}.join(", ") +
-                   " from QSO as q join QSOExtra as qe where q.id = ? and qe.id = ? limit 1;",
-                   [id, id])
+def lookupQSO(db, id, timeadj=0)
+  res = db.query("select q.logID, q.frequency, q.band, q.fixedMode, q.time, " +
+                 ContestDB.EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "q.sent" + f }.join(", ") + ", " +
+                 ContestDB.EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "q.recvd" + f }.join(", ") + " , " +
+                 ContestDB.EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "qe.sent" + f}.join(", ") + ", " +
+                 ContestDB.EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "qe.recvd" + f}.join(", ") +
+                 " from QSO as q join QSOExtra as qe where q.id = ? and qe.id = ? limit 1;",
+                 [id, id])
     res.each { |row|
-      sent = Exchange.new(db.baseCall(row[5]), row[13], row[8], db.lookupMultiplierByID(row[7]),
-                          row[14])
-      recvd = Exchange.new(db.baseCall(row[9]), row[15], row[14], db.lookupMultiplierByID(row[11]),
-                           row[16])
       return QSO.new(id, row[0].to_i, row[1].to_i, row[2], row[3], 
                      db.toDateTime(row[4])+timeadj,
-                     sent, recvd)
+                     db.baseCall(row[5]), row[13], row[8], db.lookupMultiplierByID(row[7]),
+                     row[14],
+                     db.baseCall(row[9]), row[15], row[14], db.lookupMultiplierByID(row[11]),
+                     row[16])
     }
     nil
   end
-end
+
 
 class Match
   include Comparable
@@ -326,10 +127,10 @@ class CrossMatch
 
   def qsosFromDB(res, qsos = Array.new)
     res.each { |row|
-      s = Exchange.new(row[6], row[7], row[8], row[9], row[10]) 
-      r = Exchange.new(row[11], row[12], row[13], row[14], row[15])
       qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
-                    @db.toDateTime(row[5]), s, r)
+                    @db.toDateTime(row[5]),
+                    row[6], row[7], row[8], row[9], row[10],
+                    row[11], row[12], row[13], row[14], row[15])
       qsos << qso
     }
     qsos
@@ -557,10 +358,10 @@ class CrossMatch
     res = @db.query(queryStr)
     qsos = Array.new
     res.each { |row|
-      s = Exchange.new(row[6], row[7], row[8], row[9], row[10])
-      r = Exchange.new(row[11], row[12], row[13], row[14], row[15])
       qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
-                    @db.toDateTime(row[5]), s, r)
+                    @db.toDateTime(row[5]),
+                    row[6], row[7], row[8], row[9], row[10],
+                    row[11], row[12], row[13], row[14], row[15])
       qsos << qso
     }
     res = nil
