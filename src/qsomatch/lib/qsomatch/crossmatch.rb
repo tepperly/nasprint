@@ -73,6 +73,48 @@ class Match
   end
 end
 
+class LogSet
+  def initialize(list)
+    @logs = list.map { |i| i.to_i }
+    @isContiguous, @min, @max = testContiguous
+  end
+
+  def testContiguous
+    sum = 0
+    max = nil
+    min = nil
+    @logs.each { |i|
+      if max.nil? or i > max
+        max = i
+      end
+      if min.nil? or i < min
+        min = i
+      end
+      sum += i
+    }
+    print "testContiguous " + min.to_s + " " + max.to_s + " " + sum.to_s + "\n"
+    return ((not (min.nil? or max.nil?)) and
+            (sum == (max*(max+1)/2 - min*(min-1)/2))), min, max
+    
+  end
+
+  def membertest(id)
+    if @isContiguous
+      return "(" + id + " between " + @min.to_s + " and " + @max.to_s + ")"
+    else
+      if not (@min.nil? or @max.nil?)
+        return "(" + id + " in (" + @logs.join(", ") + "))"
+      else
+        # no logs
+        return "(" + id + " < -10000)"
+      end
+    end
+  end
+
+  attr_reader :logs
+
+end
+
 class CrossMatch
   PERFECT_TIME_MATCH = 15       # in minutes
   MAXIMUM_TIME_MATCH = 24*60    # one day in minutes
@@ -81,16 +123,12 @@ class CrossMatch
     @db = db
     @cdb = cdb
     @contestID = contestID.to_i
-    @logs = cdb.logsForContest(contestID)
-  end
-
-  def logSet
-    return "(" + @logs.join(",") + ")"
+    @logs = LogSet.new(cdb.logsForContest(contestID))
   end
 
   def restartMatch
-    @db.query("update QSO set matchID = NULL, matchType = 'None', comment = NULL where logID in #{logSet};")
-    @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where id in (?);", [@logs])
+    @db.query("update QSO set matchID = NULL, matchType = 'None', comment = NULL where #{@logs.memberTest("logID")};")
+    @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where #{@logs.memberText("id")});")
   end
 
   def notMatched(qso)
@@ -202,7 +240,8 @@ class CrossMatch
       exchangeExactMatch("q2.recvd", "q1.sent") + " and " +
       qsoExactMatch("q1", "q2") +
       ") where " +
-      "q1.logID in " + logSet + " and q2.logID in " + logSet + " and " +
+      @logs.membertest("q1.logID") + " and " +
+      @logs.membertest("q2.logID") + " and " +
       "q1.logID != q2.logID and q1.id < q2.id and " +
       exchangeMatch("q1.recvd", "q2.sent") + " and " +
       exchangeMatch("q2.recvd", "q1.sent") + " and " +
@@ -212,9 +251,11 @@ class CrossMatch
       ", abs(" +
       @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
     print queryStr + "\n"
-    @db.query("explain " + queryStr).each { |row|
-      print row.join(", ") + "\n"
-    }
+    if $explain
+      @db.query("explain " + queryStr).each { |row|
+        print row.join(", ") + "\n"
+      }
+    end
     $stdout.flush
     num1, num2 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
     num1 = num1 + num2
@@ -228,8 +269,9 @@ class CrossMatch
       qsoExactMatch("q1", "q2") + " and q2.recvd_callID = q1.sent_callID )" +
       "where " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
-      "q1.logID in " + logSet + " and q2.logID in " + logSet +
-      " and q1.logID != q2.logID " +
+      @logs.membertest("q1.logID") + " and " +
+      @logs.membertest("q2.logID") + " and " +
+      " q1.logID != q2.logID " +
       " and " + qsoMatch("q1", "q2", timediff) + " and " +
       exchangeMatch("q1.recvd", "q2.sent") +
       " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
@@ -237,9 +279,11 @@ class CrossMatch
       @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
     print "Partial match test phase 1: #{Time.now.to_s}\n"
     print queryStr + "\n"
-    @db.query("explain " + queryStr).each { |row|
-      print row.join(", ") + "\n"
-    }
+    if $explain
+      @db.query("explain " + queryStr).each { |row|
+        print row.join(", ") + "\n"
+      }
+    end
     $stdout.flush
     full1, partial1 = linkQSOs(@db.query(queryStr), fullType, partialType, true)
     print "Partial match end: #{Time.now.to_s}\n"
@@ -259,7 +303,14 @@ class CrossMatch
   def resolveShifted
     num1 = 0
     num2 = 0
-    queryStr = "select q1.id, q1.matchType, q2.id, q2.matchType from QSO as q1, QSO as q2, Log as l1, Log as l2 where q1.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.matchID = q2.id and q1.id = q2.matchID and q2.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.id < q2.id and l1.id = q1.logID and l2.id = q2.logID and l1.contestID = ? and l2.contestID = ? and DATE_ADD(q1.time, interval l1.clockadj second) between DATE_SUB(DATE_ADD(q2.time, interval l2.clockadj second), interval #{PERFECT_TIME_MATCH} minute) and DATE_ADD(DATE_ADD(q2.time, interval l2.clockadj second), interval #{PERFECT_TIME_MATCH} minute) order by q1.id asc;"
+    queryStr = "select q1.id, q1.matchType, q2.id, q2.matchType from QSO as q1, QSO as q2, Log as l1, Log as l2 where q1.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.matchID = q2.id and q1.id = q2.matchID and q2.matchType in ('TimeShiftFull', 'TimeShiftPartial') and q1.id < q2.id and l1.id = q1.logID and l2.id = q2.logID and l1.contestID = ? and l2.contestID = ? and " +
+      @db.dateAdd("q1.time", "l1.clockadj", "second") +
+      " between " +
+      @db.dateSub(@db.dateAdd("q2.time", "l2.clockadj", "second"),
+                  PERFECT_TIME_MATCH, "minute") + " and " +
+      @db.dateAdd(@db.dateAdd("q2.time" "l2.clockadj", "second"),
+                  PERFECT_TIME_MATCH, "minute") +
+      " order by q1.id asc;"
     res = @db.query(queryStr, [contestID, contestID]) 
     res.each { |row|
       oneType, num1, num2 = chooseType(row[1], num1, num2)
@@ -267,15 +318,20 @@ class CrossMatch
       @db.query("update QSO set matchType=? where id = ? limit 1;", [oneType, row[0].to_i])
       @db.query("update QSO set matchType=? where id = ? limit 1;", [twoType, row[2].to_i])
     }
-    @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and logID in (?);", [@logs])
+    @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and " +
+              @logs.membertest("logID") + ";")
     num2 = num2 + @db.affected_rows
     return num1, num2
   end
 
   def ignoreDups
     count = 0
-    queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3 where q1.matchID is not null and q1.matchType in ('Partial', 'Full') and q1.logID in (?) and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and q2.logID in (?) and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and q2.sent_callID = q3.recvd_callID;"
-    res = @db.query(queryStr, [@logs, @logs])
+    queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3 where q1.matchID is not null and q1.matchType in ('Partial', 'Full') and " +
+      @logs.membertest("q1.logID") +
+      " and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and " +
+      @logs.membertest("q2.logID") +
+      " and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and q2.sent_callID = q3.recvd_callID;"
+    res = @db.query(queryStr)
     res.each { |row|
       @db.query("update QSO set matchType = 'Dupe' where id = ? and matchType = 'None' and matchID is null limit 1;", [row[0].to_i])
       count = count + @db.affected_rows
@@ -285,8 +341,10 @@ class CrossMatch
   
   def markNIL
     count = 0
-    queryStr = "select q.id from QSO as q, Callsign as c where q.matchID is null and q.matchType = 'None' and q.logID in (?) and q.recvd_callID = c.id and c.logrecvd;"
-    res = @db.query(queryStr, [@logs])
+    queryStr = "select q.id from QSO as q, Callsign as c where q.matchID is null and q.matchType = 'None' and " +
+      @logs.membertest("q.logID") +
+      " and q.recvd_callID = c.id and c.logrecvd;"
+    res = @db.query(queryStr)
     res.each { |row|
       @db.query("update QSO set matchType = 'NIL' where id = ? and matchType = 'None' and matchID is null limit 1;", [ row[0].to_i] )
       count = count + @db.affected_rows
@@ -297,9 +355,10 @@ class CrossMatch
 
   def basicMatch(timediff = PERFECT_TIME_MATCH)
     queryStr = "select q1.id, q2.id from QSO as q1 join QSOExtra as qe1 on q1.id = qe1.id, QSO as q2 join QSOExtra as qe2 on q2.id = qe2.id where " +
-                    notMatched("q1") + " and " + notMatched("q2") + " and " +
-                    "q1.logID in " + logSet + " and q2.logID in " + logSet +
-                    " and q1.logID < q2.logID " +
+      notMatched("q1") + " and " + notMatched("q2") + " and " +
+      @logs.membertest("q1.logID") + " and " +
+      @logs.membertest("q2.logID") + " and " +
+      "q1.logID < q2.logID " +
                     " and " + qsoMatch("q1", "q2", timediff) + " and " +
                     " (qe1.sent_callsign = qe2.recvd_callsign or q1.sent_callID = q2.recvd_callID) and " +
                     " (q2.sent_callID = q1.recvd_callID or qe2.sent_callsign = qe1.recvd_callsign) " +
@@ -353,8 +412,10 @@ class CrossMatch
       linkCallsign("q.sent","cs") + " and " + linkCallsign("q.recvd", "cr") + " and " +
       linkMultiplier("q.sent","ms") + " and " + linkMultiplier("q.recvd", "mr") + " and " +
       notMatched("q") + " and " +
-      "q.logID in " + logSet + " " +
-      "order by q.id asc;"
+      @logs.membertest("q.logID") +
+      " order by q.id asc;"
+    print "Probability match read start: #{Time.now.to_s}\n"
+    $stdout.flush
     res = @db.query(queryStr)
     qsos = Array.new
     res.each { |row|
@@ -365,7 +426,7 @@ class CrossMatch
       qsos << qso
     }
     res = nil
-    print "#{qsos.length} unmatched QSOs read in\n"
+    print "#{qsos.length} unmatched QSOs read in: #{Time.now.to_s}\n"
     print "Starting probability-based cross match: #{Time.now.to_s}\n"
     $stdout.flush
     matches = Array.new

@@ -20,9 +20,11 @@ enum Band_t {
   b_TenG,
   b_TenM,
   b_OneNineteenG,
+  b_TwelveM,
   b_OneFortyTwoG,
   b_FifteenM,
   b_OneSixtyM,
+  b_SeventeenM,
   b_TwoPointThreeG,
   b_TwentyM,
   b_TwoTwentyTwoM,
@@ -30,6 +32,7 @@ enum Band_t {
   b_TwentyFourG,
   b_TwoM,
   b_ThreePointFourG,
+  b_ThirtyM,
   b_FortyM,
   b_FourThirtyTwoM,
   b_FortySevenG,
@@ -48,9 +51,11 @@ static const char * const s_bandNames[] = {
   "10G",
   "10m",
   "119G",
+  "12m",
   "142G",
   "15m",
   "160m",
+  "17m",
   "2.3G",
   "20m",
   "222",
@@ -58,6 +63,7 @@ static const char * const s_bandNames[] = {
   "24G",
   "2m",
   "3.4G",
+  "30m",
   "40m",
   "432",
   "47G",
@@ -79,9 +85,11 @@ static struct StringMap_t s_bandMap[] = {
   { "10G",  b_TenG},
   { "10m",  b_TenM},
   { "119G", b_OneNineteenG},
+  { "12m",  b_TwelveM},
   { "142G", b_OneFortyTwoG},
   { "15m",  b_FifteenM},
   { "160m", b_OneSixtyM},
+  { "17m",  b_SeventeenM},
   { "2.3G", b_TwoPointThreeG},
   { "20m",  b_TwentyM},
   { "222",  b_TwoTwentyTwoM},
@@ -89,6 +97,7 @@ static struct StringMap_t s_bandMap[] = {
   { "24G",  b_TwentyFourG},
   { "2m",   b_TwoM},
   { "3.4G", b_ThreePointFourG},
+  { "30m",  b_ThirtyM},
   { "40m",  b_FortyM},
   { "432",  b_FourThirtyTwoM},
   { "47G",  b_FortySevenG},
@@ -874,8 +883,8 @@ qso_lookupBand(VALUE band)
 	  return s_bandMap[m].d_bandNum;
       }
     }
+    rb_raise(rb_eQSOError, "Illegal QSO band '%s'", StringValueCStr(band) );
   }
-  rb_raise(rb_eQSOError, "Illegal QSO band");
   return b_Unknown;
 }
 
@@ -1046,6 +1055,6 @@ Init_qsomatch(void)
   rb_define_method(rb_cQSO, "sent_location", qso_sent_location, 0);
   rb_define_method(rb_cQSO, "basicLine", qso_basicLine, 0);
   rb_define_method(rb_cQSO, "to_s", qso_to_s, -1);
-  rb_define_method(rb_cQSO, "fullmatch?", qso_fullmatch, 2);
+  rb_define_method(rb_cQSO, "fullMatch?", qso_fullmatch, 2);
   rb_define_method(rb_cQSO, "probablyMatch", qso_probablymatch, 1);
 }

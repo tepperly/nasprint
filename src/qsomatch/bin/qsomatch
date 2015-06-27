@@ -17,6 +17,7 @@ require 'dumplog'
 
 $year = nil
 $name = nil
+$explain = false
 $totallydestroy = false
 $restart = false
 $create = false

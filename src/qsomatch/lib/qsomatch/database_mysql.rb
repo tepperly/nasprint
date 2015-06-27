@@ -15,6 +15,17 @@ class DatabaseMysql
     obj                         # MySQL already has it as a date
   end
 
+  def dateAdd(starttime, adjustment, units)
+    return "date_add(" + starttime + ", INTERVAL " +
+      adjustment.to_s + " " + units + ")"
+  end
+
+  def dateSub(starttime, adjustment, units)
+    return "date_sub(" + starttime + ", INTERVAL " +
+      adjustment.to_s + " " + units + ")"
+  end
+
+
   def timediff(units, time1, time2)
     "timestampdiff(" + units + ", " + time1 + ", " + time2 + ")"
 

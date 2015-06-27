@@ -66,7 +66,15 @@ class CalcTimeAdj
 
   def markOutOfContest
     count = 0
-    res = @db.query("select distinct q.id from QSO as q, Log as l, Contest as c where l.contestID = #{@contestID} and q.logID=l.id and (DATE_ADD(q.time, interval l.clockadj second) < DATE_SUB(c.start, interval 4 minute) or DATE_ADD(q.time, interval l.clockadj second) > DATE_ADD(c.end, interval 5 minute) and matchType != 'OutsideContest');")
+    res = @db.query("select distinct q.id from QSO as q, Log as l, Contest as c where l.contestID = #{@contestID} and q.logID=l.id and (" +
+                    @db.dateAdd("q.time", "l.clockadj", "second") +
+                    " < " +
+                    @db.dateSub("c.start", 4, "minute") +
+                    " or " +
+                    @db.dateAdd("q.time", "l.clockadj", "second") +
+                    " > " +
+                    @db.dateAdd("c.end", 5, "minute") +
+                    ") and matchType != 'OutsideContest';")
     res.each { |row|
       @db.query("update QSO set matchType = 'OutsideContest' where id = ? limit 1;", [row[0].to_i])
       count = count + @db.affected_rows

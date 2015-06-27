@@ -52,6 +52,18 @@ class DatabaseSQLite
     obj.kind_of?(String) ? Time.iso8601(obj) : obj
   end
 
+  def dateAdd(starttime, adjustment, units)
+    return "datetime(" + starttime + ", \"" +
+      ((adjustment > 0) ? "+" : "-") + adjustment.to_s +
+      " " + units + "\")"
+  end
+
+  def dateSub(starttime, adjustment, units)
+    return "datetime(" + starttime + ", \"" +
+      ((adjustment > 0) ? "-" : "+") + adjustment.to_s +
+      " " + units + "\")"
+  end
+
 
   def autoincrement
     return AUTOINCREMENT
