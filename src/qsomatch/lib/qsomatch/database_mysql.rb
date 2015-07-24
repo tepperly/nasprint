@@ -52,6 +52,21 @@ class DatabaseMysql
   def affected_rows
     @db.affected_rows
   end
+
+  def begin_transaction
+    @db.query("set autocommit = 0;")
+    @db.query("start transaction;")
+  end
+
+  def rollback
+    @db.query("rollback;")
+    @db.query("set autocommit = 1;")
+  end
+
+  def end_transaction
+    @db.query("commit;")
+    @db.query("set autocommit = 1;")
+  end
   
   def tables
     results = Array.new

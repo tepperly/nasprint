@@ -32,6 +32,7 @@ opts = GetoptLong.new(
                       [ '--qrzuser', '-u', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--qrzpwd', '-p', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--sqlite', '-S', GetoptLong::REQUIRED_ARGUMENT],
+                      [ '--reset', '-R', GetoptLong::NO_ARGUMENT],
                       [ '--name', '-n', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--year', '-y', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--load', '-l', GetoptLong::NO_ARGUMENT],
@@ -56,6 +57,8 @@ opts.each { |opt, arg|
     $action = :load
   when '--score'
     $action = :score
+  when '--reset'
+    $restart = true
   when '--name'
     $name = arg
   when '--year'
@@ -102,42 +105,63 @@ def checkCallsigns(db, cid, user, pwd)
   }
 end
 
+NUMSECS=5
+NUMDOTS=3
+def restartContest(cm)
+  print "Restarting in 5 seconds: "
+  NUMSECS.times { |i|
+    print (NUMSECS-i).to_s
+    NUMDOTS.times { 
+      sleep (1.0/NUMDOTS)
+      print "."
+      $stdout.flush
+    }
+  }
+  print "0  Done.\n"
+  $stdout.flush
+  cm.restartMatch
+end
+
+
 def scoreContest(db, contestID, contestDB)
   cm = CrossMatch.new(db, contestID, contestDB)
+  if $restart
+    restartContest(cm)
+  end
   checkCallsigns(db, contestID, $qrzuser, $qrzpwd)
-  num1 = cm.perfectMatch
-  print "Perfect matches: #{num1}\n"
-  $stdout.flush
-  num3, partial = cm.partialMatch
-  print "Full matches partial: #{num3}\n"
-  print "Partial matches full: #{partial}\n"
-  $stdout.flush
-  num1 = cm.perfectMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull')
-  print "Time shifted perfect matches: #{num1}\n"
-  $stdout.flush
-  num3, partial = cm.partialMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull', 'TimeShiftPartial')
-  print "Time shifted full matches partial: #{num3}\n"
-  print "Time shifted partial matches full: #{partial}\n"
-  $stdout.flush
-  p1, p2 = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
-  print "Basic QSO matches within 24 hours: #{p1+p2}\n"
-  $stdout.flush
-  cm.probMatch
-  print "Calculating clock drift\n"
-  ct = CalcTimeAdj.new(db, contestID)
-  ct.buildVariables
-  ct.buildMatrix
-  timeviolation = ct.markOutOfContest
-  print "QSOs outside contest time period: #{timeviolation}\n"
-  $stdout.flush
-  num1, num2 = cm.resolveShifted
-  print "Time shift resolved #{num1} full and #{num2} partial\n"
-  $stdout.flush
-  d1 = cm.ignoreDups
-  print "Duplicates of matches: #{d1}\n"
-  ct = nil
-  nil1 = cm.markNIL
-  print "Not In Log penalties: #{nil1}\n"
+  # num1 = cm.perfectMatch
+  # print "Perfect matches: #{num1}\n"
+  # $stdout.flush
+  # num3, partial = cm.partialMatch
+  # print "Full matches partial: #{num3}\n"
+  # print "Partial matches full: #{partial}\n"
+  # $stdout.flush
+  # num1 = cm.perfectMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull')
+  # print "Time shifted perfect matches: #{num1}\n"
+  # $stdout.flush
+  # num3, partial = cm.partialMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull', 'TimeShiftPartial')
+  # print "Time shifted full matches partial: #{num3}\n"
+  # print "Time shifted partial matches full: #{partial}\n"
+  # $stdout.flush
+  # p1, p2 = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
+  # print "Basic QSO matches within 24 hours: #{p1+p2}\n"
+  # $stdout.flush
+  # cm.probMatch
+  # print "Calculating clock drift\n"
+  # ct = CalcTimeAdj.new(db, contestID)
+  # ct.buildVariables
+  # ct.buildMatrix
+  # timeviolation = ct.markOutOfContest
+  # print "QSOs outside contest time period: #{timeviolation}\n"
+  # $stdout.flush
+  # num1, num2 = cm.resolveShifted
+  # print "Time shift resolved #{num1} full and #{num2} partial\n"
+  # $stdout.flush
+  # d1 = cm.ignoreDups
+  # print "Duplicates of matches: #{d1}\n"
+  # ct = nil
+  # nil1 = cm.markNIL
+  # print "Not In Log penalties: #{nil1}\n"
   singles = ResolveSingletons.new(db, contestID, contestDB)
   print "Resolving singletons\n"
   $stdout.flush
@@ -145,8 +169,11 @@ def scoreContest(db, contestID, contestDB)
   num = singles.finalDupeCheck
   print "#{num} Dupe QSOs identified during final check\n."
   m = Multiplier.new(db, contestID, contestDB)
+  print "Resolving DX\n"
   m.resolveDX
+  print "Resolving bye multipliers\n"
   m.checkByeMultipliers
+  print "Filling in comments\n"
   fillInComment(db, contestID)
   r = Report.new(db, contestID)
   print "Making report\n"
@@ -174,6 +201,13 @@ if $name and $year
     when :score
       scoreContest(db, contestID, cdb)
     end
+    print "Done...shutting down\n"
+    $stdout.flush
+  rescue
+    print "Exception thrown"
+    $stdout.flush
+    $stderr.print "Exception: " + $!.to_s + "\n"
+    $stderr.print $!.backtrace.join("\n")
   ensure
     db.close
   end

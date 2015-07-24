@@ -18,7 +18,13 @@ class DatabaseSQLite
   AUTOINCREMENT="autoincrement"
 
   def initialize(opts)
+    @in_transaction = false
     @db = SQLite3::Database.new(opts["filename"])
+    @db.busy_timeout(500)
+    @db.trace { |sql|
+      print "SQLite3 Statement #{Time.now.to_s} (#{@in_transaction ? 1 : 0}): #{sql}\n"
+      $stdout.flush
+    }
   end
 
   def true
@@ -31,6 +37,23 @@ class DatabaseSQLite
 
   def has_enum?
     false
+  end
+
+  def begin_transaction
+    @db.query("begin transaction;")
+    @in_transaction = true
+  end
+
+  def end_transaction
+    if @in_transaction
+      @db.query("commit transaction;")
+      @in_transaction = false
+    end
+  end
+
+  def rollback
+    @in_transaction = false
+    @db.query("rollback transaction;")
   end
 
   def affected_rows
@@ -52,16 +75,39 @@ class DatabaseSQLite
     obj.kind_of?(String) ? Time.iso8601(obj) : obj
   end
 
+  def toSecs(value, units)
+    case units
+    when 'second','seconds'
+      return value
+    when 'minute', 'minutes'
+      return "(60*(" + value + "))"
+    when 'hour', 'hours'
+      return "(3600*(" + value + "))"
+    when 'day', 'days'
+      return "(86400*(" + value + "))"
+    end
+  end
+
   def dateAdd(starttime, adjustment, units)
-    return "datetime(" + starttime + ", \"" +
-      ((adjustment > 0) ? "+" : "-") + adjustment.to_s +
-      " " + units + "\")"
+    if adjustment.kind_of?(Numeric)
+      return "datetime(" + starttime + ", \"" +
+        ((adjustment > 0) ? "+" : "-") +
+        adjustment.abs.to_s + " " + units + "\")"
+    else
+      return "datetime(strftime('%s'," + starttime + ") + " +
+        toSecs(adjustment, units) + ", 'unixepoch')"
+    end
   end
 
   def dateSub(starttime, adjustment, units)
-    return "datetime(" + starttime + ", \"" +
-      ((adjustment > 0) ? "-" : "+") + adjustment.to_s +
-      " " + units + "\")"
+    if adjustment.kind_of?(Numeric)
+      return "datetime(" + starttime + ", \"" +
+        ((adjustment > 0) ? "-" : "+") +
+        adjustment.abs.to_s + " " + units + "\")"
+    else
+      return "datetime(strftime('%s'," + starttime + ") - " +
+        toSecs(adjustment, units) + ", 'unixepoch')"
+    end
   end
 
 

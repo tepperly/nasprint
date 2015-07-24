@@ -59,17 +59,23 @@ class Match
   end
 
   def record(db, time)
-    res = db.query("select count(*) from QSO where id in (?, ?) and matchType = 'None' and matchID is NULL;", [@q1.id, @q2.id ])
-    res.each { |row|
-      if row[0].to_i == 2
-        type1 = @q1.fullMatch?(@q2, time) ?  "Full" : "Partial"
-        type2 = @q2.fullMatch?(@q1, time) ? "Full" : "Partial"
-        db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q2.id, type1, @q1.id])
+    type1 = @q1.fullMatch?(@q2, time) ?  "Full" : "Partial"
+    type2 = @q2.fullMatch?(@q1, time) ? "Full" : "Partial"
+    begin
+      db.begin_transaction
+      db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q2.id, type1, @q1.id])
+      if 1 == db.affected_rows
         db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q1.id, type2, @q2.id])
-        return type1, type2
+        if 1 == db.affected_rows
+          return type1, type2
+        else
+          db.rollback
+          return nil
+        end
       end
-    }
-    return nil
+    ensure
+      db.end_transaction
+    end
   end
 end
 
@@ -127,8 +133,14 @@ class CrossMatch
   end
 
   def restartMatch
-    @db.query("update QSO set matchID = NULL, matchType = 'None', comment = NULL where #{@logs.memberTest("logID")};")
-    @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where #{@logs.memberText("id")});")
+    begin
+      @db.begin_transaction
+      @db.query("update QSO set matchID = NULL, matchType = 'None' where #{@logs.membertest("logID")};")
+      @db.query("update QSOExtra set comment = NULL where #{@logs.membertest("logID")};")
+      @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where #{@logs.membertest("id")};")
+    ensure
+      @db.end_transaction
+    end
   end
 
   def notMatched(qso)
@@ -210,31 +222,36 @@ class CrossMatch
       print "linkQSOs #{match1} #{match2}\n"
     end
     matches.each { |row|
-      chk = @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where q1.id = ? and q2.id = ? and q1.matchID is null and q2.matchID is null and q1.matchType = 'None' and q2.matchType = 'None' limit 1;", [row[0].to_i, row[1].to_i])
-      found = false
-      chk.each { |chkrow|
-        found = true
+      begin
+        @db.begin_transaction
+        found = false
         @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None' limit 1;", [row[1].to_i, match1, row[0].to_i])
-        count1 = count1 + 1
-        @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None' limit 1;",
-                            [row[0].to_i, match2, row[1].to_i])
-        if not quiet
-          printDupeMatch(row[0].to_i, row[1].to_i)
+        if 1 == @db.affected_rows
+          @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None' limit 1;",
+                    [row[0].to_i, match2, row[1].to_i])
+          if 1 != @db.affected_rows
+            @db.rollback
+          else
+            count1 += 1
+            count2 += 1
+            found = true
+          end
         end
-        count2 = count2 + 1
-      }
-      if not found
-        @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i])
-        if not quiet
-          printDupeMatch(row[0].to_i, row[1].to_i)
+        if not found
+          @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i])
         end
+      ensure
+        @db.end_transaction
+      end
+      if not quiet
+        printDupeMatch(row[0].to_i, row[1].to_i)
       end
     }
     return count1, count2
   end
 
   def perfectMatch(timediff = PERFECT_TIME_MATCH, matchType="Full")
-    print "Staring perfect match test phase 1: #{Time.now.to_s}\n"
+    print "Staring perfect match test phase 1 (#{timediff} minute tolerance): #{Time.now.to_s}\n"
     queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 " +
       " on (" +  exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
       exchangeExactMatch("q2.recvd", "q1.sent") + " and " +
@@ -277,7 +294,7 @@ class CrossMatch
       " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(" +
       @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
-    print "Partial match test phase 1: #{Time.now.to_s}\n"
+    print "Partial match test phase 1 (#{timediff} min tolerance): #{Time.now.to_s}\n"
     print queryStr + "\n"
     if $explain
       @db.query("explain " + queryStr).each { |row|
@@ -308,10 +325,10 @@ class CrossMatch
       " between " +
       @db.dateSub(@db.dateAdd("q2.time", "l2.clockadj", "second"),
                   PERFECT_TIME_MATCH, "minute") + " and " +
-      @db.dateAdd(@db.dateAdd("q2.time" "l2.clockadj", "second"),
+      @db.dateAdd(@db.dateAdd("q2.time", "l2.clockadj", "second"),
                   PERFECT_TIME_MATCH, "minute") +
       " order by q1.id asc;"
-    res = @db.query(queryStr, [contestID, contestID]) 
+    res = @db.query(queryStr, [@contestID, @contestID]) 
     res.each { |row|
       oneType, num1, num2 = chooseType(row[1], num1, num2)
       twoType, num1, num2 = chooseType(row[3], num1, num2)
@@ -325,18 +342,19 @@ class CrossMatch
   end
 
   def ignoreDups
-    count = 0
     queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3 where q1.matchID is not null and q1.matchType in ('Partial', 'Full') and " +
       @logs.membertest("q1.logID") +
       " and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and " +
       @logs.membertest("q2.logID") +
       " and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and q2.sent_callID = q3.recvd_callID;"
     res = @db.query(queryStr)
+    list = Array.new
     res.each { |row|
-      @db.query("update QSO set matchType = 'Dupe' where id = ? and matchType = 'None' and matchID is null limit 1;", [row[0].to_i])
-      count = count + @db.affected_rows
+      list << row[0].to_i
     }
-    count
+    
+    @db.query("update QSO set matchType = 'Dupe' where id in (#{list.join(",")}) and matchType = 'None' and matchID is null limit 1;")
+    return @db.affected_rows
   end
   
   def markNIL
@@ -457,7 +475,11 @@ class CrossMatch
         if answer
           if "YES" == answer
             matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
-            print matchtypes.join(" ") + "\n\n"
+            if (matchtypes)
+              print matchtypes.join(" ") + "\n\n"
+            else
+              print "Not a match.\n"
+            end
           else
             print "Not a match.\n"
           end
