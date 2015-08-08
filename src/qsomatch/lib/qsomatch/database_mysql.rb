@@ -82,6 +82,14 @@ class DatabaseMysql
   end
 
   def query(queryStr, values = [ ])
-    @db.xquery(queryStr, values, :as => :array)
+    res = @db.xquery(queryStr, values, :as => :array)
+    if block_given?
+      res.each { |row|
+        yield row
+      }
+      nil
+    else
+      return res
+    end
   end
 end

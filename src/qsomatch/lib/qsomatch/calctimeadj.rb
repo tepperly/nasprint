@@ -19,8 +19,7 @@ class CalcTimeAdj
     @numvars = 0
     @idtovar = Hash.new
     @vartoid = Hash.new
-    res = @db.query("select distinct l.id from Log as l, QSO as q where q.logID = l.id and q.matchID is not null and l.contestID= ? order by l.id asc;", [@contestID])
-    res.each { |row|
+    @db.query("select distinct l.id from Log as l, QSO as q where q.logID = l.id and q.matchID is not null and l.contestID= ? order by l.id asc;", [@contestID]) { |row|
       @idtovar[row[0].to_i] = @numvars
       @vartoid[@numvars] = row[0].to_i
       @numvars = @numvars + 1
@@ -33,17 +32,15 @@ class CalcTimeAdj
     logs = LogSet.new(@idtovar.keys)
     
     numrows = nil
-    res = @db.query("select count(*) from QSO as q where #{logs.membertest("q.logID")} and q.matchID is not null and q.id < q.matchID;")
-    res.each { |row|
+    @db.query("select count(*) from QSO as q where #{logs.membertest("q.logID")} and q.matchID is not null and q.id < q.matchID;") { |row|
       numrows = row[0]
     }
     if numrows and numrows > 0
       open("/tmp/calcadj.py","w") { |out|
         numrows = numrows + @numvars
         out.write("#!/usr/bin/env python\nimport numpy\nimport numpy.linalg\nA = numpy.zeros((#{numrows}, #{@numvars}))\nb = numpy.zeros((#{numrows},))\n")
-        res = @db.query("select q1.logID, q1.time, q2.logID, q2.time from QSO as q1, QSO as q2 where #{logs.membertest("q1.logID")} and #{logs.membertest("q2.logID")} and q1.matchID is not null and q1.matchID = q2.id and q1.id < q2.id;")
         rowcount = 0
-        res.each { |row|
+        @db.query("select q1.logID, q1.time, q2.logID, q2.time from QSO as q1, QSO as q2 where #{logs.membertest("q1.logID")} and #{logs.membertest("q2.logID")} and q1.matchID is not null and q1.matchID = q2.id and q1.id < q2.id;") { |row|
           out.write("A[#{rowcount},#{@idtovar[row[0]]}] = 1\nA[#{rowcount},#{@idtovar[row[2]]}] = -1\n")
           out.write("b[#{rowcount}] = #{@db.toDateTime(row[3]).to_i-@db.toDateTime(row[1]).to_i}\n")
           rowcount = rowcount + 1
@@ -63,7 +60,7 @@ class CalcTimeAdj
         begin
           @db.begin_transaction
           res.each { |line|
-            @db.query("update Log set clockadj = ? where id = ? limit 1;", [line.to_f, @vartoid[rowcount]])
+            @db.query("update Log set clockadj = ? where id = ? limit 1;", [line.to_f, @vartoid[rowcount]]) { }
             rowcount = rowcount + 1
           }
         ensure
@@ -84,11 +81,10 @@ class CalcTimeAdj
                     @db.dateAdd("q.time", "l.clockadj", "second") +
                     " > " +
                     @db.dateAdd("c.end", 5, "minute") +
-                    ") and matchType != 'OutsideContest';")
-    res.each { |row|
+                    ") and matchType != 'OutsideContest';") { |row|
       ids << row[0].to_i
     }
-    @db.query("update QSO set matchType = 'OutsideContest' where id in (#{ids.join(",")}) limit 1;")
+    @db.query("update QSO set matchType = 'OutsideContest' where id in (#{ids.join(",")}) limit 1;") { }
     count = count + @db.affected_rows
     count
   end

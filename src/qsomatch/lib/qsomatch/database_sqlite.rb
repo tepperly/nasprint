@@ -21,10 +21,12 @@ class DatabaseSQLite
     @in_transaction = false
     @db = SQLite3::Database.new(opts["filename"])
     @db.busy_timeout(500)
-    @db.trace { |sql|
-      print "SQLite3 Statement #{Time.now.to_s} (#{@in_transaction ? 1 : 0}): #{sql}\n"
-      $stdout.flush
-    }
+    if $verbose
+      @db.trace { |sql|
+        print "SQLite3 Statement #{Time.now.to_s} (#{@in_transaction ? 1 : 0}): #{sql}\n"
+        $stdout.flush
+      }
+    end
   end
 
   def true
@@ -40,20 +42,20 @@ class DatabaseSQLite
   end
 
   def begin_transaction
-    @db.query("begin transaction;")
+    @db.execute("begin transaction;")
     @in_transaction = true
   end
 
   def end_transaction
     if @in_transaction
-      @db.query("commit transaction;")
+      @db.execute("commit transaction;")
       @in_transaction = false
     end
   end
 
   def rollback
     @in_transaction = false
-    @db.query("rollback transaction;")
+    @db.execute("rollback transaction;")
   end
 
   def affected_rows
@@ -129,7 +131,14 @@ class DatabaseSQLite
   end
 
   def query(queryStr, values = [ ])
-    @db.execute(queryStr, values)
+    if block_given?
+      @db.execute(queryStr, values) { |row|
+        yield row
+      }
+      nil
+    else
+      return @db.execute(queryStr, values)
+    end
   end
 
   def close
