@@ -39,6 +39,10 @@ struct jw_AdjMatrix_t {
   char            *d_colindex;	/* there are d_capacity of these */
 };
 
+extern const char *jw_DEFAULT_ADJ_TABLE[];
+extern const char *jw_HAM_ADJ_TABLE[];
+extern const char *jw_CW_ADJ_TABLE[];
+
 typedef struct jw_AdjMatrix_t jw_AdjMatrix;
 
 jw_AdjMatrix* jw_adj_matrix_new        (unsigned int capacity);
@@ -52,6 +56,6 @@ void         jw_adj_matrix_add_multiple(jw_AdjMatrix *matrix,
 				        unsigned int num);
 char          jw_adj_matrix_find        (const jw_AdjMatrix *matrix, char x, char y);
 void          jw_adj_matrix_free        (jw_AdjMatrix *matrix);
-jw_AdjMatrix* jw_adj_matrix_default     (void);
+jw_AdjMatrix* jw_adj_matrix_create      (const char *array[]);
 
 #endif /* ADJ_MATRIX_H */

@@ -80,7 +80,8 @@ jw_distance(const char *s1, int s1_byte_len, const char *s2, int s2_byte_len, jw
 	  }
 	}
 	else {
-	  if(opt.adj_table && jw_adj_matrix_find(jw_adj_matrix_default(), s1[i], s2[j])) {
+	  if(opt.adj_table &&
+	     jw_adj_matrix_find(opt.adj_table, s1[i], s2[j])) {
 	    sim_matched = 1;
 	  }
 	}

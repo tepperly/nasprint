@@ -23,9 +23,11 @@
 #ifndef DISTANCE_H
 #define DISTANCE_H 1
 
+struct jw_AdjMatrix_t;
+
 typedef struct{
   double weight, threshold;
-  char adj_table;
+  struct jw_AdjMatrix_t *adj_table;
 } jw_Option;
 
 double jw_distance(const char *s1, int s1_byte_len,

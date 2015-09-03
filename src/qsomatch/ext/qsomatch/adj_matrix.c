@@ -25,11 +25,93 @@
 #include <string.h>
 #include "adj_matrix.h"
 
-const char *DEFAULT_ADJ_TABLE[] = {
+const char *jw_DEFAULT_ADJ_TABLE[] = {
   "A","E", "A","I", "A","O", "A","U", "B","V", "E","I", "E","O", "E","U", "I","O", "I","U", "O","U",
   "I","Y", "E","Y", "C","G", "E","F", "W","U", "W","V", "X","K", "S","Z", "X","S", "Q","C", "U","V",
   "M","N", "L","I", "Q","O", "P","R", "I","J", "2","Z", "5","S", "8","B", "1","I", "1","L", "0","O",
-  "0","Q", "C","K", "G","J", "E"," ", "Y"," ", "S"," "
+  "0","Q", "C","K", "G","J", "E"," ", "Y"," ", "S"," ", 0, 0
+};
+
+
+/**
+ * These values are based on the most common transpositions in the
+ * California QSO Party 2012-2014.
+ */
+const char *jw_CW_ADJ_TABLE[] = {
+  "0", "O",
+  "3", "2",
+  "4", "3",
+  "5", "4",
+  "5", "H",
+  "7", "6",
+  "8", "6",
+  "8", "7",
+  "9", "0",
+  "9", "8",
+  "D", "B",
+  "I", "E",
+  "N", "K",
+  "O", "M",
+  "P", "G",
+  "Q", "G",
+  "Q", "O",
+  "R", "A",
+  "R", "L",
+  "R", "N",
+  "S", "H",
+  "S", "I",
+  "U", "A",
+  "V", "U",
+  "W", "K",
+  "W", "N",
+  "X", "O",
+  "Y", "C",
+  "Y", "K",
+  "Y", "T",
+  "Z", "G",
+  "Z", "M",
+  "Z", "Q",
+  0, 0
+};
+
+/**
+ * These values are based on the most common transpositions in the
+ * California QSO Party 2012-2014.
+ */
+const char *jw_HAM_ADJ_TABLE[] = {
+  "0", "O",
+  "3", "2",
+  "4", "3",
+  "5", "4",
+  "7", "6",
+  "8", "6",
+  "8", "7",
+  "9", "0",
+  "9", "8",
+  "D", "A",
+  "D", "B",
+  "E", "A",
+  "G", "C",
+  "G", "D",
+  "I", "E",
+  "J", "G",
+  "N", "K",
+  "O", "A",
+  "O", "M",
+  "P", "A",
+  "Q", "K",
+  "Q", "O",
+  "S", "H",
+  "S", "I",
+  "T", "E",
+  "U", "A",
+  "V", "U",
+  "W", "K",
+  "W", "N",
+  "X", "E",
+  "Y", "U",
+  "Z", "N",
+  0, 0
 };
 
 
@@ -144,24 +226,30 @@ void jw_adj_matrix_free(jw_AdjMatrix *matrix){
   }
 }
 
-jw_AdjMatrix* jw_adj_matrix_default(){
-  static char first_time = 1;
-  static jw_AdjMatrix *ret_matrix;
-  if(first_time){
-    const unsigned int length = sizeof(DEFAULT_ADJ_TABLE)/sizeof(char*)/2;
-    char 
-      *x = malloc(sizeof(char)*length), 
-      *y = malloc(sizeof(char)*length);
-    unsigned i;
-    ret_matrix = jw_adj_matrix_new(length);
-    for(i = 0; i < length; ++i){
-      x[i] = DEFAULT_ADJ_TABLE[i << 1][0];
-      y[i] = DEFAULT_ADJ_TABLE[(i << 1) + 1][0];
-    }
-    jw_adj_matrix_add_multiple(ret_matrix, x, y, length);
-    free(x);
-    free(y);
-    first_time = 0;
+static unsigned int countLen(const char *array[])
+{
+  unsigned int result = 0;
+  int i = 0;
+  while (array[i] && array[i+1]) {
+    i += 2;
   }
+  return i >> 1;
+}
+
+jw_AdjMatrix* jw_adj_matrix_create(const char *array[])
+{
+  const unsigned int length = countLen(array);
+  char 
+    *x = malloc(sizeof(char)*length), 
+    *y = malloc(sizeof(char)*length);
+  unsigned i;
+  jw_AdjMatrix* ret_matrix = jw_adj_matrix_new(length);
+  for(i = 0; i < length; ++i){
+    x[i] = array[i << 1][0];
+    y[i] = array[(i << 1) + 1][0];
+  }
+  jw_adj_matrix_add_multiple(ret_matrix, x, y, length);
+  free(x);
+  free(y);
   return ret_matrix;
 }
