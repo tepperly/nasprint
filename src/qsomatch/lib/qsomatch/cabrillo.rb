@@ -59,7 +59,7 @@ end
 
 UNPRINTABLE=/[\000\001\002\003\004\005\006\007\010\013\016\017\020\022\023\024\025\026\027\030\031\032\033\034\035\036\037\177]/
 
-class QSO
+class QSOr
 
   def initialize
     @origmode = nil
@@ -255,7 +255,7 @@ class Cabrillo
 
   def startQSO(freq, mode, date, time, sentcall)
     trans(2,2)
-    qso = QSO.new
+    qso = QSOr.new
     qso.freq = freq.to_i
     qso.mode = mode.to_s
     qso.datetime = parseTime(date, time)

@@ -16,14 +16,13 @@ end
 
 
 def lookupQSO(db, id, timeadj=0)
-  res = db.query("select q.logID, q.frequency, q.band, q.fixedMode, q.time, " +
+  db.query("select q.logID, q.frequency, q.band, q.fixedMode, q.time, " +
                  ContestDB.EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "q.sent" + f }.join(", ") + ", " +
                  ContestDB.EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "q.recvd" + f }.join(", ") + " , " +
                  ContestDB.EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "qe.sent" + f}.join(", ") + ", " +
                  ContestDB.EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "qe.recvd" + f}.join(", ") +
                  " from QSO as q join QSOExtra as qe where q.id = ? and qe.id = ? limit 1;",
-                 [id, id])
-    res.each { |row|
+           [id, id]) { |row|
       return QSO.new(id, row[0].to_i, row[1].to_i, row[2], row[3], 
                      db.toDateTime(row[4])+timeadj,
                      db.baseCall(row[5]), row[13], row[8], db.lookupMultiplierByID(row[7]),
@@ -63,9 +62,9 @@ class Match
     type2 = @q2.fullMatch?(@q1, time) ? "Full" : "Partial"
     begin
       db.begin_transaction
-      db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q2.id, type1, @q1.id])
+      db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q2.id, type1, @q1.id]) { }
       if 1 == db.affected_rows
-        db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q1.id, type2, @q2.id])
+        db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q1.id, type2, @q2.id]) { }
         if 1 == db.affected_rows
           return type1, type2
         else
@@ -135,9 +134,9 @@ class CrossMatch
   def restartMatch
     begin
       @db.begin_transaction
-      @db.query("update QSO set matchID = NULL, matchType = 'None' where #{@logs.membertest("logID")};")
-      @db.query("update QSOExtra set comment = NULL where #{@logs.membertest("logID")};")
-      @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where #{@logs.membertest("id")};")
+      @db.query("update QSO set matchID = NULL, matchType = 'None' where #{@logs.membertest("logID")};") { }
+      @db.query("update QSOExtra set comment = NULL where #{@logs.membertest("logID")};") { }
+      @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where #{@logs.membertest("id")};") { }
     ensure
       @db.end_transaction
     end
@@ -175,15 +174,12 @@ class CrossMatch
     return serialCmp(e1 + "_serial", e2 + "_serial", 1)
   end
 
-  def qsosFromDB(res, qsos = Array.new)
-    res.each { |row|
+  def qsoFromDBRow(row, qsos = Array.new)
       qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
                     @db.toDateTime(row[5]),
                     row[6], row[7], row[8], row[9], row[10],
                     row[11], row[12], row[13], row[14], row[15])
       qsos << qso
-    }
-    qsos
   end
 
   def printDupeMatch(id1, id2)
@@ -191,9 +187,11 @@ class CrossMatch
                     " from QSO as q join QSOExtra as qe on qe.id = q.id, Callsign as cr, Callsign as cs, Multiplier as ms, Multiplier as mr where " +
                     linkCallsign("q.sent_","cs") + " and " + linkCallsign("q.recvd_", "cr") + " and " +
                     linkMultiplier("q.sent_","ms") + " and " + linkMultiplier("q.recvd_", "mr") + " and " +
-                    " q.id in (#{id1.to_i}, #{id2.to_i});"
-    res = @db.query(queryStr)
-    qsos = qsosFromDB(res)
+      " q.id in (#{id1.to_i}, #{id2.to_i});"
+    qsos = Array.new
+    @db.query(queryStr) { |row|
+      qsoFromDBRow(row, qsos)
+    }
     if qsos.length != 2
       ids = [id1, id2]
       qsos.each { |q|
@@ -202,8 +200,11 @@ class CrossMatch
       queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, qe.sent_callsign, q.sent_serial, 'NULL', qe.sent_location, cr.basecall, qe.recvd_callsign, q.recv_serial, 'NULL', qe.recvd_location " +
                     " from QSO as q, Callsign as cr, Callsign as cs where " +
                     linkCallsign("q.sent_","cs") + " and " + linkCallsign("q.recvd_", "cr") + " and " +
-                    " q.id in (#{ids.join(',')});"
-      qsos = qsosFromDB(@db.query(queryStr), qsos)
+        " q.id in (#{ids.join(',')});"
+      qsos = Array.new
+      @db.query(queryStr) { |row|
+        qsoFromDBRow(row, qsos)
+      }
       if qsos.length != 2
         print "query #{queryStr}\n"
         print "Match of QSOs #{id1} #{id2} produced #{qsos.length} results\n"
@@ -215,20 +216,20 @@ class CrossMatch
     print m.to_s + "\n"
   end
  
-  def linkQSOs(matches, match1, match2, quiet=true)
+  def linkQSOs(queryStr, match1, match2, quiet=true)
     count1 = 0
     count2 = 0
     if not quiet
       print "linkQSOs #{match1} #{match2}\n"
     end
-    matches.each { |row|
+    @db.query(queryStr).each { |row|
       begin
         @db.begin_transaction
         found = false
-        @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None' limit 1;", [row[1].to_i, match1, row[0].to_i])
+        @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None' limit 1;", [row[1].to_i, match1, row[0].to_i]) { }
         if 1 == @db.affected_rows
           @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None' limit 1;",
-                    [row[0].to_i, match2, row[1].to_i])
+                    [row[0].to_i, match2, row[1].to_i]) { }
           if 1 != @db.affected_rows
             @db.rollback
           else
@@ -238,7 +239,7 @@ class CrossMatch
           end
         end
         if not found
-          @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i])
+          @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i]) { }
         end
       ensure
         @db.end_transaction
@@ -269,12 +270,12 @@ class CrossMatch
       @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
     print queryStr + "\n"
     if $explain
-      @db.query("explain " + queryStr).each { |row|
+      @db.query("explain " + queryStr) { |row|
         print row.join(", ") + "\n"
       }
     end
     $stdout.flush
-    num1, num2 = linkQSOs(@db.query(queryStr), matchType, matchType, true)
+    num1, num2 = linkQSOs(queryStr, matchType, matchType, true)
     num1 = num1 + num2
     print "Ending perfect match test: #{Time.now.to_s}\n"
     return num1
@@ -297,12 +298,12 @@ class CrossMatch
     print "Partial match test phase 1 (#{timediff} min tolerance): #{Time.now.to_s}\n"
     print queryStr + "\n"
     if $explain
-      @db.query("explain " + queryStr).each { |row|
+      @db.query("explain " + queryStr) { |row|
         print row.join(", ") + "\n"
       }
     end
     $stdout.flush
-    full1, partial1 = linkQSOs(@db.query(queryStr), fullType, partialType, true)
+    full1, partial1 = linkQSOs(queryStr, fullType, partialType, true)
     print "Partial match end: #{Time.now.to_s}\n"
     return full1, partial1
   end
@@ -328,15 +329,14 @@ class CrossMatch
       @db.dateAdd(@db.dateAdd("q2.time", "l2.clockadj", "second"),
                   PERFECT_TIME_MATCH, "minute") +
       " order by q1.id asc;"
-    res = @db.query(queryStr, [@contestID, @contestID]) 
-    res.each { |row|
+    @db.query(queryStr, [@contestID, @contestID])  { |row|
       oneType, num1, num2 = chooseType(row[1], num1, num2)
       twoType, num1, num2 = chooseType(row[3], num1, num2)
       @db.query("update QSO set matchType=? where id = ? limit 1;", [oneType, row[0].to_i])
       @db.query("update QSO set matchType=? where id = ? limit 1;", [twoType, row[2].to_i])
     }
     @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and " +
-              @logs.membertest("logID") + ";")
+              @logs.membertest("logID") + ";") { }
     num2 = num2 + @db.affected_rows
     return num1, num2
   end
@@ -347,13 +347,12 @@ class CrossMatch
       " and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and " +
       @logs.membertest("q2.logID") +
       " and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and q2.sent_callID = q3.recvd_callID;"
-    res = @db.query(queryStr)
     list = Array.new
-    res.each { |row|
+    @db.query(queryStr) { |row|
       list << row[0].to_i
     }
     
-    @db.query("update QSO set matchType = 'Dupe' where id in (#{list.join(",")}) and matchType = 'None' and matchID is null limit 1;")
+    @db.query("update QSO set matchType = 'Dupe' where id in (#{list.join(",")}) and matchType = 'None' and matchID is null limit 1;") { }
     return @db.affected_rows
   end
   
@@ -362,9 +361,8 @@ class CrossMatch
     queryStr = "select q.id from QSO as q, Callsign as c where q.matchID is null and q.matchType = 'None' and " +
       @logs.membertest("q.logID") +
       " and q.recvd_callID = c.id and c.logrecvd;"
-    res = @db.query(queryStr)
-    res.each { |row|
-      @db.query("update QSO set matchType = 'NIL' where id = ? and matchType = 'None' and matchID is null limit 1;", [ row[0].to_i] )
+    @db.query(queryStr) { |row|
+      @db.query("update QSO set matchType = 'NIL' where id = ? and matchType = 'None' and matchID is null limit 1;", [ row[0].to_i] ) { }
       count = count + @db.affected_rows
     }
     count
@@ -383,7 +381,7 @@ class CrossMatch
                     " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(" +
       @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
-    return linkQSOs(@db.query(queryStr), 'Partial', 'Partial', true)
+    return linkQSOs(queryStr, 'Partial', 'Partial', true)
   end
 
   def hillFunc(quantity, fullrange, zerorange)
@@ -410,9 +408,8 @@ class CrossMatch
 
   def alreadyPaired?(m)
     line1, line2 = m.qsoLines
-    res = @db.query("select ismatch from Pairs where (line1 = ? and line2 = ?) or (line1 = ? and line2 = ?) limit 1;",
-                    [line1, line2, line2, line1])
-    res.each { |row|
+    @db.query("select ismatch from Pairs where (line1 = ? and line2 = ?) or (line1 = ? and line2 = ?) limit 1;",
+                    [line1, line2, line2, line1]) { |row|
       return row[0] == 1 ? "YES" : "NO"
     }
     return nil
@@ -421,7 +418,7 @@ class CrossMatch
   def recordPair(m, matched)
     line1, line2 = m.qsoLines
     @db.query("insert into Pairs (contestID, line1, line2, ismatch) values (?, ?, ?, ?)",
-              [@contestID, line1, line2, matched ? 1 : 0])
+              [@contestID, line1, line2, matched ? 1 : 0]) { }
   end
 
   def probMatch
@@ -434,9 +431,8 @@ class CrossMatch
       " order by q.id asc;"
     print "Probability match read start: #{Time.now.to_s}\n"
     $stdout.flush
-    res = @db.query(queryStr)
     qsos = Array.new
-    res.each { |row|
+    res = @db.query(queryStr) { |row|
       qso = QSO.new(row[0].to_i, row[1].to_i, row[2].to_i, row[3], row[4],
                     @db.toDateTime(row[5]),
                     row[6], row[7], row[8], row[9], row[10],

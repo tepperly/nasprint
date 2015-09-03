@@ -70,8 +70,7 @@ class Report
   end
 
   def lookupMultiplier(id)
-    res = @db.query("select m.abbrev, q.recvd_entityID from Multiplier as m, QSO as q where q.id = #{id} and  q.recvd_multiplierID = m.id limit 1;")
-    res.each { |row|
+    @db.query("select m.abbrev, q.recvd_entityID from Multiplier as m, QSO as q where q.id = #{id} and  q.recvd_multiplierID = m.id limit 1;") { |row|
       return row[0], row[1]
     }
     return nil, nil
@@ -81,9 +80,8 @@ class Report
     abbrev, entity = lookupMultiplier(qsoID)
     if "DX" == abbrev
       if entity
-        res = @db.query("select name, continent from Entity where id = ? limit 1;",
-                        [entity])
-        res.each { |row|
+        @db.query("select name, continent from Entity where id = ? limit 1;",
+                        [entity]) { |row|
           if "NA" == row[1]     # it's a NA DX entity
             log.addMultiplier(row[0])
           end
@@ -99,8 +97,7 @@ class Report
   end
 
   def scoreLog(id, log)
-    res = @db.query("select q.matchType, q.id from QSO as q where q.logID = ? order by q.time asc;", [id])
-    res.each { |row|
+    @db.query("select q.matchType, q.id from QSO as q where q.logID = ? order by q.time asc;", [id]) { |row|
       log.incCount(row[0])
       if ["Full", "Bye"].include?(row[0]) # QSO counts for credit
         addMultiplier(log, row[1])
@@ -110,12 +107,11 @@ class Report
 
   def makeReport(out = $stdout)
     logs = Array.new
-    res = @db.query("select callsign, email, opclass, id from Log where contestID = ? order by callsign asc;", [contestID])
-    res.each { |row|
+    @db.query("select callsign, email, opclass, id from Log where contestID = ? order by callsign asc;", [contestID]) { |row|
       log = Log.new(row[0], row[1], row[2])
       scoreLog(row[3],log)
       @db.query("update Log set verifiedscore = #{log.score}, verifiedQSOs = ?, verifiedMultipliers = ? where id = ? limit 1;",
-                [log.numqsos, log.nummultipliers, row[3]])
+                [log.numqsos, log.nummultipliers, row[3]]) { }
       logs << log
     }
     out.write("\"Callsign\",\"Email\",\"Operator Class\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"WAS?\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
