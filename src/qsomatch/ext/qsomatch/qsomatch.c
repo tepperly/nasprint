@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include "ruby.h"
 #include "distance.h"
+#include "adj_matrix.h"
 
 #define MAX_CALLSIGN_CHARS   12
 #define MAX_MULTIPLIER_CHARS 20
@@ -251,6 +252,9 @@ const char * const s_CW_MAPPING[] = {
 };
 
 static VALUE rb_cQSO, rb_eQSOError;
+
+static jw_AdjMatrix *s_CW_adj = 0;
+static jw_AdjMatrix *s_Normal_adj = 0;
 
 static void
 free_qso(void *ptr);
@@ -751,29 +755,19 @@ max_match(const char * const left[],  const int left_len,
 	  const char * const right[], const int right_len,
 	  const int isCW)
 {
-  char buffer1[MAX_MULTIPLIER_CHARS*8 + 1];
-  char buffer2[MAX_MULTIPLIER_CHARS*8 + 1];
   double result = 0;
   jw_Option opt = jw_option_new();
   int i;
+  opt.adj_table = (isCW ? s_CW_adj : s_Normal_adj);
   for(i = 0; i < left_len; ++i) {
     const int length_left = (int)strlen(left[i]);
-    const int length_left_cw = (isCW ? toCW(left[i], buffer1) : 0);
     int j;
     for(j = 0; j < right_len; ++j) {
       const int length_right = (int)strlen(right[j]);
-      const int length_right_cw = (isCW ? toCW(right[j], buffer2) : 0);
       double tmp = jw_distance(left[i], length_left,
 			       right[j], length_right, opt);
       if (tmp > result) {
 	result = tmp;
-      }
-      if (isCW) {
-	tmp = jw_distance(buffer1, length_left_cw,
-			  buffer2, length_right_cw, opt);
-	if (tmp > result) {
-	  result = tmp;
-	}
       }
     }
   }
@@ -807,17 +801,11 @@ serialNumberCmp(const int sent, const int recvd, const int isCW)
     ? ((diff >= SERIAL_NONE) ? 0 : (1.0 - ((1.0*diff - SERIAL_FULL)/
 					   (1.0*SERIAL_NONE-SERIAL_FULL))))
     : 1.0;
+  opt.adj_table = (isCW ? s_CW_adj : s_Normal_adj);
   len1 = snprintf(buffer1, sizeof(buffer1), "%d", sent) - 1;
   len2 = snprintf(buffer2, sizeof(buffer2), "%d", recvd) - 1;
   tmp = jw_distance(buffer1, len1, buffer2, len2, opt);
   if (tmp > result) result = tmp;
-  if (isCW) {
-    char cw_buffer1[78], cw_buffer2[78];
-    len1 = toCW(buffer1, cw_buffer1);
-    len2 = toCW(buffer2, cw_buffer2);
-    tmp = jw_distance(cw_buffer1, len1, cw_buffer2, len2, opt);
-    if (tmp > result) result = tmp;
-  }
   return result;
 }
 
@@ -1057,6 +1045,8 @@ qso_initialize(int argc, VALUE *argv, VALUE obj)
 void
 Init_qsomatch(void)
 {
+  s_CW_adj = jw_adj_matrix_create(jw_CW_ADJ_TABLE);
+  s_Normal_adj = jw_adj_matrix_create(jw_HAM_ADJ_TABLE);
   rb_cQSO = rb_define_class("QSO", rb_cObject);
   rb_define_alloc_func(rb_cQSO, qso_s_allocate);
   rb_define_singleton_method(rb_cQSO, "toCW", qso_toCW, 1);
