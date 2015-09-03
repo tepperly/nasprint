@@ -7,6 +7,7 @@
 require_relative 'contestdb'
 require 'qsomatch'
 require 'jaro_winkler'
+require 'set'
 
 def hillFunc(value, full, none)
   value = value.abs
@@ -421,6 +422,236 @@ class CrossMatch
               [@contestID, line1, line2, matched ? 1 : 0]) { }
   end
 
+  def serialMetric(sent, recvd)
+    if sent
+      if recvd
+        return (sent - recvd).abs
+      else
+        return sent.abs
+      end
+    else
+      return 0
+    end
+  end
+
+  def strMetric(sentStr, recvdStr, isCW)
+    jw = JaroWinkler.distance(sentStr, recvdStr)
+    if isCW
+      sentStr = QSO.toCW(sentStr)
+      recvdStr = QSO.toCW(recvdStr)
+      jwcw = JaroWinkler.distance(sentStr, recvdStr)
+      if jwcw > jw
+        return jwcw
+      end
+    end
+    return jw
+  end
+
+  def serialStrMetric(q1, q2)
+    isCW = ("CW" == q1.mode and "CW" == q2.mode)
+    return strMetric(q1.sent_serial.to_s, q2.recvd_serial.to_s, isCW) *
+      strMetric(q2.sent_serial.to_s, q1.sent_serial.to_s, isCW)
+  end
+
+  def qthMetric(q1, q2)
+    isCW = ("CW" == q1.mode and "CW" == q2.mode)
+    return strMetric(q1.sent_multiplier, q2.recvd_multiplier, isCW) *
+      strMetric(q2.sent_multiplier, q1.sent_multiplier, isCW)
+  end
+
+  def locationMetric(q1, q2)
+    isCW = ("CW" == q1.mode and "CW" == q2.mode)
+    return strMetric(q1.sent_location, q2.sent_location, isCW) *
+      strMetric(q2.sent_location, q1.sent_location, isCW)
+  end
+
+  def greenInfo(id)
+    @db.query("select status, score, uniqueQSO, correctQTH, correctNum, correctMode, correctBand, correctCall, NILqso, isDUPE, comment from QSOGreen where id = ? limit 1;", [id]) { |row|
+      return {'status' => row[0], 'score' => row[1], 'uniqueQSO' => row[2],
+        'correctQTH' => row[3], 'correctNum' => row[4],
+        'correctMode' => row[5], 'correctBand' => row[6],
+        'correctCall' => row[7], 'NILqso' => row[8],
+        'isDUPE' => row[9], 'comment' => row[10] }
+    }
+    nil
+  end
+
+  GREEN_MATCH = { 'FullMatch' => true,
+    'MatchZero' => true,
+    'MatchOne' => true,
+    'MatchTwo' => true,
+    'Dupe' => true }.freeze
+
+  def greenScore?(g)
+    GREEN_MATCH[g["score"]] and
+      (not g["NILqso"] or (g["NILqso"].to_i == 0)) and
+      (not g["uniqueQSO"] or (g["uniqueQSO"].to_i == 0))
+  end
+
+  GREEN_NOMATCH = { 'Bye' => true,
+    'Unscored' => true
+  }
+
+  def possibleRecvdCallsigns(q, gi)
+    result = Set.new
+    if q.recvd_basecall
+      result << q.recvd_basecall
+    end
+    if q.recvd_callsign
+      result << q.recvd_callsign
+    end
+    if gi.has_key?("correctCall")
+      result << gi["correctCall"]
+    end
+  end
+
+  def possibleRecvdSerial(q, gi)
+    result = Set.new
+    if q.recvd_serial
+      result << q.recvd_serial
+    end
+    if gi.has_key?("correctNum")
+      result << gi["correctNum"].to_i
+    end
+  end
+
+  def possibleSentCallsigns(q, gi)
+    result = Set.new
+    if q.sent_basecall
+      result << q.sent_basecall
+    end
+    if q.sent_callsign
+      result << q.sent_callsign
+    end
+    result
+  end
+
+  def possibleMode(q, g)
+    result = Result.new
+    if q.mode
+      result << q.mode.upcase
+    end
+    if g.has_key?("correctMode")
+      result << g["correctMode"].upcase
+    end
+    result
+  end
+
+  def possibleBand(q, g)
+    result = Result.new
+    if q.band
+      result << q.band
+    end
+    if g.has_key?("correctBand")
+      result << (g["correctBand"] + "m")
+    end
+    result
+  end
+
+  def possibleSentMult(q, g)
+    result = Set.new
+    if q.sent_multiplier
+      result << q.sent_multiplier
+    end
+    if q.sent_location
+      result << q.sent_location
+    end
+    result
+  end
+
+  def possibleRecvdMult(q, g)
+    result = Set.new
+    if q.recvd_multiplier
+      result << q.recvd_multiplier
+    end
+    if q.recvd_location
+      result << q.recvd_location
+    end
+    if g.has_key?("correctQTH")
+      result << g["correctQTH"]
+    end
+    result
+  end
+
+  def greenCallMatch(q1, g1, q2, g2)
+    possibleSentCallsigns(q1, g1).intersect?(possibleRecvdCallsigns(q2, g2)) and
+      possibleSentCallsigns(q2, g2).intersect?(possibleRecvdCallsigns(q1, g1))
+  end
+
+  def greenSerialMatch(q1, g1, q2, g2)
+    ((not q1.sent_serial) or
+      (possibleRecvdSerial(q2, g2).include?(q1.sent_serial))) and
+      ((not q2.sent_serial) or (possibleRecvdSerial(q1, g1).include?(q2.sent_serial)))
+  end
+
+  def greenQTHMatch(q1, g1, q2, g2)
+    possibleSentMult(q1, g1).intersect?(possibleRecvdMult(q2, g2)) and
+      possibleSentMult(q2, g2).intersect?(possibleRecvdMult(q1, g1))
+  end
+
+  def greenBandMatch(q1, g1, q2, g2)
+    possibleBand(q1, g1).intersect?(possibleBand(q2, g2))
+  end
+
+  def greenModeMatch(q1, g1, q2, g2)
+    possibleMode(q1, g1).intersect?(possibleMode(q2, g2))
+  end
+
+  def printGreenInfo(g)
+    print "STATUS=#{g['status']}; SCORE=#{g['score']}; "
+    [ 'correctQTH', 'correctNum', 'correctMode',
+      'correctBand', 'correctCall' ].each { |f|
+      if g.has_key?(f)
+        print "Err_" + f.gsub(/^correct/, "").downcase + "=" + g[f].to_s + "; "
+      end
+    }
+    [ 'uniqueQSO', 'NILqso', 'isDUPE' ].each { |f|
+      if g.has_key?(f)
+        print f + "=" + g[f].to_s + "; "
+      end
+    }
+    if g.has_key?('comment')
+      print "COMMENT=#{g['comment']};"
+    end
+    print "\n"
+  end
+
+  def greenMatch?(q1, q2, m1, m2)
+    result = "No"
+    g1 = greenInfo(q1.id)
+    if not GREEN_NOMATCH[g1['score']]
+      g2 = greenInfo(q2.id)
+      if not GREEN_NOMATCH[g2['score']]
+        if greenScore?(g1) and greenScore?(g2) and
+            greenCallMatch(q1, g1, q2, g2) and
+            greenSerialMatch(q1, g1, q2, g2) and
+            greenQTHMatch(q1, g1, q2, g2) and
+            greenBandMatch(q1, g1, q2, g2) and
+            greenModeMatch(q1, g1, q2, g2)
+          result = "Yes"
+        end
+      end
+    end
+    if "No" == result and m1 >= 0.5 and m2 >= 0.5
+      m = Match.new(q1, q2, m1, m2)
+      print m.to_s + "\n"
+      if not g1
+        g1 = greenInfo(q1.id)
+      end
+      if not g2
+        g2 = greenInfo(q2.id)
+      end
+      printGreenInfo(g1)
+      printGreenInfo(g2)
+      print "Is this a match (y/n): "
+      answer = STDIN.gets
+      if [ "Y", "YES"].include?(answer.strip.upcase)
+        return "Yes"
+      end
+    end
+    return result
+  end
+
   def probMatch
     queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, qe.sent_callsign, q.sent_serial, ms.abbrev, qe.sent_location, cr.basecall, qe.recvd_callsign, q.recvd_serial, mr.abbrev, qe.recvd_location " +
       " from QSO as q join QSOExtra qe on q.id = qe.id, Callsign as cr, Callsign as cs, Multiplier as ms, Multiplier as mr where " +
@@ -444,15 +675,41 @@ class CrossMatch
     print "Starting probability-based cross match: #{Time.now.to_s}\n"
     $stdout.flush
     matches = Array.new
-    qsos.each { |q1|
-      qsos.each { |q2|
-        break if (q2.id >= q1.id)
-        if (q1.logID != q2.logID)
-          metric, cp = q1.probablyMatch(q2)
-          if metric > 0.20
-            matches << Match.new(q1, q2, metric, cp)
+    metrics = Array.new(14)
+    matched = Hash.new
+    open("machine_learning.csv", "w:ascii") { |out|
+      qsos.each { |q1|
+        qsos.each { |q2|
+          break if ((q2.id >= q1.id) or matched.has_key?(q1.id) or matched.has_key?(q2.id))
+          if (q1.logID != q2.logID)
+            metric, cp = q1.probablyMatch(q2)
+            greenMatch = greenMatch?(q1, q2, metric, cp)
+            if "Yes" == greenMatch
+              matched[q1.id] = true
+              matched[q2.id] = true
+            end
+            metrics[0] = q1.id
+            metrics[1] = q2.id
+            metrics[2] = (q1.band == q2.band) ? 1 : 0
+            metrics[3] = (q1.mode == q2.mode) ? 1 : 0
+            metrics[4] = (q1.datetime - q2.datetime).abs
+            metrics[5] = (q1.freq - q2.freq).abs
+            metrics[6] = serialMetric(q1.sent_serial, q2.recvd_serial) + serialMetric(q2.sent_serial, q1.recvd_serial)
+            metrics[7] = serialStrMetric(q1, q2)
+            metrics[8] = qthMetric(q1, q2)
+            metrics[9] = locationMetric(q1,q2)
+            metrics[10] = (JaroWinkler.distance(q1.sent_basecall, q2.recvd_basecall) *
+              JaroWinkler.distance(q2.sent_basecall, q1.recvd_basecall))
+            metrics[11] = ((q1.mode == "CW" ? 1 : 0) +
+              (q2.mode == "CW" ? 1 : 0))
+            metrics[12] = cp
+            metrics[13] = greenMatch
+            out.write(metrics.join(",") + "\n")
+            if metric > 0.20
+              matches << Match.new(q1, q2, metric, cp)
+            end
           end
-        end
+        }
       }
     }
     print "Done ranking potential matches: #{Time.now.to_s}\n"

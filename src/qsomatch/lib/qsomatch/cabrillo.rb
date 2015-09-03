@@ -69,6 +69,7 @@ class QSOr
     @sentExch = Exchange.new
     @recdExch = Exchange.new
     @transceiver = nil
+    @greenattrib = Hash.new
   end
 
   attr_reader :mode, :freq, :datetime, :sentExch, :recdExch, :transceiver,
@@ -89,6 +90,33 @@ class QSOr
     else
       raise ArgumentError, "Unknown QSO mode #{str}"
     end
+  end
+
+  def hasGreenInfo?
+    return not(@greenattrib.empty?)
+  end
+
+  def greenattrib
+    @greenattrib
+  end
+
+
+  def processGreen(greenText)
+    greenText.scan(/([A-Z][A-Z_]*)\s*=\s*([^;]*);/i) { |attrib,value|
+      value = value.strip.gsub(/\s{2,}/, " ")
+      if not value.empty?
+        case attrib
+        when "DUPE"
+          greenattrib[attrib] = ("D" == value)
+        when "Err_NIL","Err_unique"
+          greenattrib[attrib] = ("1" == value)
+        when "Err_nr"
+          greenattrib[attrib] = value.to_i
+        else
+          greenattrib[attrib] = value
+        end
+      end
+    }
   end
 end
 
@@ -470,7 +498,7 @@ class Cabrillo
     when /\Asoapbox:\s*(.*)/i
       trans(1, 1)
       @soapbox << $1.strip
-    when /\Aqso: +(\d+) +([a-z]{2,3}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+)( +(\d+) *| *)(\{.*\})?$/i
+    when /\Aqso: +(\d+) +([a-z]{2,3}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+)( +(\d+) *| *)(\{GP(.*)GP\})?$/i
       qso = startQSO($1, $2, $3, $4, $5)
       qso.sentExch.serial = $8
       qso.sentExch.origqth = $9.upcase.strip
@@ -484,6 +512,9 @@ class Cabrillo
       qso.recdExch.qth = normalizeMult($14)
       if ($16)
         qso.transceiver = $16.strip.to_i
+      end
+      if ($18)
+        qso.processGreen($18)
       end
       @qsos << qso
     else

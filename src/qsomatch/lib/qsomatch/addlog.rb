@@ -56,9 +56,12 @@ end
 
 def addQSOs(db, contestID, logID, qsos)
   qsos.each { |qso|
-    db.insertQSO(contestID, logID, qso.freq, band(qso.freq),
+    id = db.insertQSO(contestID, logID, qso.freq, band(qso.freq),
                  qso.origmode, qso.mode, qso.datetime,
-                 qso.sentExch, qso.recdExch, qso.transceiver)
+                      qso.sentExch, qso.recdExch, qso.transceiver)
+    if id and qso.hasGreenInfo?
+      db.insertGreenInfo(id, logID, qso.greenattrib)
+    end
   }
 end
 
@@ -74,7 +77,7 @@ def addLog(db, cID, cab)
                         multID, entID, cab.name, cab.club)
       addQSOs(db, cID, logID, cab.qsos)
     else
-      print "!!Can't add a log with no location\n"
+      print "!!Can't add a log for #{cab.logcall} with no location\n"
     end
   else
     print "!!Can't add a log without a callsign\n"

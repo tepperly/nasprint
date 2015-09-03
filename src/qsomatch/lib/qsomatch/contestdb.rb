@@ -41,7 +41,7 @@ class ContestDatabase
     if not (tables.include?("Callsign") and tables.include?("Log"))
       createLogTable
     end
-    if not (tables.include?("QSOExtra") and tables.include?("QSO"))
+    if not (tables.include?("QSOExtra") and tables.include?("QSO") and tables.include?("QSOGreen"))
       createQSOTable
     end
     if not tables.include?("Overrides")
@@ -210,11 +210,13 @@ class ContestDatabase
                 exchangeFields(EXCHANGE_FIELD_TYPES, "sent") + ", " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "recvd") +
                 ", matchID integer, matchType enum('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None');") { }
+      @db.query("create table if not exists QSOGreen (id integer primary key, logID integer not null, status enum('Automatic', 'Unscored', 'Manual', 'Override', 'BadDupe') not null default 'Unscored', score enum('Bye', 'FullMatch', 'MatchZero', 'MatchOne', 'MatchTwo', 'Dupe', 'Unscored') not null default 'Unscored',  uniqueQSO bool not null default false, correctQTH char(4),  correctNum integer, correctMode enum('CW', 'PH'),  correctBand char(4), correctCall varchar(14), NILqso bool not null default false, isDUPE bool not null default false, comment varchar(100));") { }
     else
       @db.query("create table if not exists QSO (id integer primary key #{@db.autoincrement}, logID integer not null, frequency integer, band char(7) default 'unknown', fixedMode char(2), time datetime, " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "sent") + ", " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "recvd") +
                 ", matchID integer, matchType char(17) not null default 'None');") { }
+      @db.query("create table if not exists QSOGreen (id integer primary key, logID integer not null, status char(9) not null default 'Unscored', score char(9) not null default 'Unscored', uniqueQSO bool not null default false, correctQTH char(4), correctNum integer, correctMode char(2), correctBand char(4), correctCall varchar(14), NILqso bool not null default false, isDUPE bool not null default false, comment varchar(100));") { }
     end
     @db.query("create index if not exists matchind on QSO (matchType);") { }
     @db.query("create index if not exists bandind on QSO (band);") { }
@@ -230,6 +232,7 @@ class ContestDatabase
               exchangeFields(EXCHANGE_EXTRA_FIELD_TYPES, "recvd") +
               ");") { }
     @db.query("create index if not exists logind on QSOExtra (logID);")  { }
+    @db.query("create index if not exists logind on QSOGreen (logID);")  { }
   end
 
   def addOrLookupCall(callsign, contestIDVar=nil)
@@ -367,6 +370,57 @@ class ContestDatabase
                 sentExchange.callsign, sentExchange.origqth,
                 recvdExchange.callsign, recvdExchange.origqth,
                 numOrNull(transNum) ]) { }
+    qsoID
+  end
+
+  def translateStatus(grStat)
+    case grStat
+    when 'G'
+      return "Automated"
+    when 'M'
+      return "Manual"
+    when 'O'
+      return "Override"
+    when 'XD'
+      return "BadDupe"
+    else
+      return "Unscored"
+    end
+  end
+
+  def translateScore(grScore)
+    case grScore
+    when "OK"
+      return 'FullMatch'
+    when "BYE"
+      return 'Bye'
+    when "D1"
+      return 'MatchOne'
+    when "D2"
+      return 'MatchTwo'
+    when "D0"
+      return 'MatchZero'
+    when "DU"
+      return 'Dupe'
+    else
+      return 'Unscored'
+    end
+  end
+
+  def insertGreenInfo(id, logID, green)
+    @db.query("insert into QSOGreen (id, logID, status, score, uniqueQSO, correctQTH, correctNum, correctMode, correctBand, correctCall, NILqso, isDUPE, comment) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+              [ numOrNull(id), numOrNull(logID),
+                translateStatus(green["STATUS"]),
+                translateScore(green["SCORE"]),
+                ((green.has_key?("Err_unique") and (1 == green["Err_unique"])) ? 1 : 0),
+                green["Err_qth"],
+                numOrNull(green["Err_nr"]),
+                green["Err_mode"],
+                green["Err_band"],
+                green["Err_call"],
+                ((green.has_key?("Err_NIL") and (1 == green["Err_NIL"])) ? 1 : 0),
+                ((green.has_key?("DUPE") and ("D" ==  green["DUPE"])) ? 1 : 0),
+                green["COMMENT"]]) { }
   end
 
   def removeContestQSOs(contestID)
@@ -374,6 +428,7 @@ class ContestDatabase
     if not logs.empty?
       @db.query("delete from QSO where logID in (?);", [logs]) { }
       @db.query("delete from QSOExtra where logID in (?));", [logs]) { }
+      @db.query("delete from QSOGreen where logID in (?));", [logs]) { }
     end
     clearTeams(contestID)
     @db.query("delete from Callsign where contestID = ?;" [ contestID ]) { }

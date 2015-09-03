@@ -12,10 +12,10 @@ require 'getoptlong'
 require 'net/imap'
 require 'tempfile'
 
-
 $userID = nil
 $password = nil
 $server="www15.website-server.net"
+
 
 def htmlToPlain(str)
   file = Tempfile.new('cqp_html_txt', :encoding => Encoding::UTF_8)
@@ -74,11 +74,19 @@ opts = GetoptLong.new(
                       [ '--user', '-u', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--password', '-p', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--server', '-s', GetoptLong::REQUIRED_ARGUMENT],
+                      [ '--download', '-d', GetoptLong::NO_ARGUMENT],
+                      [ '--email', '-e', GetoptLong::NO_ARGUMENT],
                       [ '--help', '-h', GetoptLong::NO_ARGUMENT]
                       )
 
+$action = :download
+
 opts.each { |opt,arg|
   case opt
+  when '--download'
+    $action = :download
+  when '--email'
+    $action = :email
   when '--user'
     $userID = arg.strip
   when '--password'
@@ -103,6 +111,7 @@ def extractLogFromMail(mailMsg)
   end
 end
 
+
 if $userID and $password
   imap = Net::IMAP.new($server.to_s, 993, true)
   print "Connected\n"
@@ -111,7 +120,8 @@ if $userID and $password
   print "Authenticated\n"
   imap.examine("INBOX")
   print "Switched folder\n"
-  msgs = imap.uid_search(["SUBJECT", "Log Submission for"])
+  msgs = imap.uid_search([ "SUBJECT", "Log Submission for",
+                           "SINCE", Net::IMAP.format_datetime(Time.utc(2015,2,1,0,0,0))])
   print "Done searching\n"
 
   msgs.each { |msgUID|
