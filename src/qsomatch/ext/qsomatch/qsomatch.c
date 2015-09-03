@@ -8,6 +8,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <time.h>
+#include <ctype.h>
 #include "ruby.h"
 #include "distance.h"
 
@@ -699,26 +700,50 @@ qso_fullmatch(VALUE obj, VALUE qso, VALUE time)
 static int
 toCW(const char *src, char *dest)
 {
+  char c;
   int result = 0;
   const size_t maxIndex = (char)(sizeof(s_CW_MAPPING)/sizeof(char *));
   while (*src) {
-    const size_t index = (size_t)*src;
+    const size_t index = (size_t)toupper(*src);
     if (index >= 0 && (index < maxIndex)) {
       const char * const asCW = s_CW_MAPPING[index];
       if (*asCW) {
 	const size_t newlen = strlen(asCW);
 	strcpy(dest, asCW);
 	dest += newlen;
+	result += newlen;
       }
     }
     else {
-      *dest = ' ';
-      ++dest;
+      *(dest++) = ' ';
+      ++result;
     }
     ++src;
+    if (*src) {
+      *(dest++) = ' ';
+      ++result;
+    }
   }
   *dest = '\0';
   return result;
+}
+
+static VALUE
+qso_toCW(VALUE cls, VALUE arg)
+{
+  if (T_STRING == TYPE(arg)) {
+    const char *content = RSTRING_PTR(arg);
+    const size_t len = RSTRING_LEN(arg);
+    if (len <= 16) {
+      char *buffer = malloc(8*len + 2);
+      int resultLen = toCW(content, buffer);
+      VALUE rresult = rb_str_new(buffer, resultLen);
+      free(buffer);
+      return rresult;
+    }
+  }
+  rb_raise(rb_eTypeError, "Incorrect arguments to toCW (string required).");
+  return Qnil;
 }
 
 static double
@@ -1034,6 +1059,7 @@ Init_qsomatch(void)
 {
   rb_cQSO = rb_define_class("QSO", rb_cObject);
   rb_define_alloc_func(rb_cQSO, qso_s_allocate);
+  rb_define_singleton_method(rb_cQSO, "toCW", qso_toCW, 1);
   rb_eQSOError = rb_define_class("QSOError", rb_eException);
   s_cToI = rb_intern("to_i");
   rb_define_method(rb_cQSO, "initialize", qso_initialize, -1);
