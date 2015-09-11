@@ -8,10 +8,13 @@ class Log
            MN MO MS MT NC ND NE NH NJ NM NV NY OH OK OR PA RI SC SD TN TX 
            UT VA VT WA WI WV WY ).freeze
 
-  def initialize(call, email, opclass)
+  def initialize(call, email, opclass, location, entity, continent)
     @call = call
     @email = email
     @opclass = opclass
+    @location = location
+    @entity = entity
+    @continent = continent
     @numFull = 0
     @numBye = 0
     @numUnique = 0
@@ -59,7 +62,7 @@ class Log
   end
 
   def to_s
-    "\"#{@call}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",#{@numFull},#{@numBye},#{@numUnique},#{@numDupe},#{@numPartial+@numRemoved},#{@numNIL},#{@numOutsideContest},#{was? ? 1 : 0},#{@numFull+@numBye-@numNIL},#{@multipliers.size},#{(@numFull+@numBye-@numNIL)*@multipliers.size},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{@location}\",\"#{@entity}\",\"#{@continent}\",#{@numFull},#{@numBye},#{@numUnique},#{@numDupe},#{@numPartial+@numRemoved},#{@numNIL},#{@numOutsideContest},#{was? ? 1 : 0},#{@numFull+@numBye-@numNIL},#{@multipliers.size},#{(@numFull+@numBye-@numNIL)*@multipliers.size},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -109,14 +112,14 @@ class Report
 
   def makeReport(out = $stdout)
     logs = Array.new
-    res = @db.query("select callsign, email, opclass, id from Log where contestID = #{@contestID} order by callsign asc;")
+    res = @db.query("select l.callsign, l.email, l.opclass, l.id, m.abbrev, e.name, e.continent from Log as l, Multiplier as m, Entity as e where contestID = #{@contestID} and l.multiplierID = m.id  and e.id = l.entityID order by callsign asc;")
     res.each(:as => :array) { |row|
-      log = Log.new(row[0], row[1], row[2])
+      log = Log.new(row[0], row[1], row[2], row[4], row[5], row[6])
       scoreLog(row[3],log)
       @db.query("update Log set verifiedscore = #{log.score}, verifiedQSOs = #{log.numqsos}, verifiedMultipliers = #{log.nummultipliers} where id = #{row[3]} limit 1;")
       logs << log
     }
-    out.write("\"Callsign\",\"Email\",\"Operator Class\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"WAS?\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
+    out.write("\"Callsign\",\"Email\",\"Operator Class\",\"Location\",\"Entity\",\"Continent\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"WAS?\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
     logs.each { |log|
       out.write(log.to_s + "\r\n")
     }

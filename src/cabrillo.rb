@@ -7,8 +7,8 @@
 require 'csv'
 require 'time'
 
-CONTEST_START=Time.utc(2015,2,1, 00, 00)
-CONTEST_END=Time.utc(2015,2,1,04,00)
+CONTEST_START=Time.utc(2015,8,30, 00, 00)
+CONTEST_END=Time.utc(2015,8,30,04,00)
 
 def mySplit(str, pattern)
   result = [ ]
@@ -519,6 +519,12 @@ class Cabrillo
       end
     }
     count
+  end
+
+  def each
+    @qsos.each { |qso|
+      yield qso
+    }
   end
 
   def sigReportSet(sym, value)
