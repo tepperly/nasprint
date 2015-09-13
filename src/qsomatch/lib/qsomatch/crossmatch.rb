@@ -44,7 +44,7 @@ class Match
     @metric2 = metric2
   end
 
-  attr_reader :metric, :metric2
+  attr_reader :metric, :metric2, :q1, :q2
 
   def qsoLines 
     return @q1.basicLine, @q2.basicLine
@@ -479,7 +479,6 @@ class CrossMatch
   GREEN_MATCH = { 'FullMatch' => true,
     'MatchZero' => true,
     'MatchOne' => true,
-    'MatchTwo' => true,
     'Dupe' => true }.freeze
 
   def greenScore?(g)
@@ -500,9 +499,10 @@ class CrossMatch
     if q.recvd_callsign
       result << q.recvd_callsign
     end
-    if gi.has_key?("correctCall")
+    if gi.has_key?("correctCall") and gi["correctCall"]
       result << gi["correctCall"]
     end
+    return result
   end
 
   def possibleRecvdSerial(q, gi)
@@ -510,9 +510,10 @@ class CrossMatch
     if q.recvd_serial
       result << q.recvd_serial
     end
-    if gi.has_key?("correctNum")
+    if gi.has_key?("correctNum") and gi["correctNum"]
       result << gi["correctNum"].to_i
     end
+    return result
   end
 
   def possibleSentCallsigns(q, gi)
@@ -523,26 +524,26 @@ class CrossMatch
     if q.sent_callsign
       result << q.sent_callsign
     end
-    result
+    return result
   end
 
   def possibleMode(q, g)
-    result = Result.new
+    result = Set.new
     if q.mode
       result << q.mode.upcase
     end
-    if g.has_key?("correctMode")
+    if g.has_key?("correctMode") and g["correctMode"]
       result << g["correctMode"].upcase
     end
     result
   end
 
   def possibleBand(q, g)
-    result = Result.new
+    result = Set.new
     if q.band
       result << q.band
     end
-    if g.has_key?("correctBand")
+    if g.has_key?("correctBand") and g["correctBand"]
       result << (g["correctBand"] + "m")
     end
     result
@@ -567,7 +568,7 @@ class CrossMatch
     if q.recvd_location
       result << q.recvd_location
     end
-    if g.has_key?("correctQTH")
+    if g.has_key?("correctQTH") and g["correctQTH"]
       result << g["correctQTH"]
     end
     result
@@ -619,8 +620,8 @@ class CrossMatch
   def greenMatch?(q1, q2, m1, m2)
     result = "No"
     g1 = greenInfo(q1.id)
+    g2 = greenInfo(q2.id)
     if not GREEN_NOMATCH[g1['score']]
-      g2 = greenInfo(q2.id)
       if not GREEN_NOMATCH[g2['score']]
         if greenScore?(g1) and greenScore?(g2) and
             greenCallMatch(q1, g1, q2, g2) and
@@ -632,21 +633,19 @@ class CrossMatch
         end
       end
     end
-    if "No" == result and m1 >= 0.5 and m2 >= 0.5
-      m = Match.new(q1, q2, m1, m2)
-      print m.to_s + "\n"
-      if not g1
-        g1 = greenInfo(q1.id)
-      end
-      if not g2
-        g2 = greenInfo(q2.id)
-      end
-      printGreenInfo(g1)
-      printGreenInfo(g2)
+    m = Match.new(q1, q2, m1, m2)
+    print m.to_s + "\n"
+    printGreenInfo(g1)
+    printGreenInfo(g2)
+    print "Green data suggests " + result + "\n"
+    if (("No" == result and m1 >= 0.5) or
+        ("Yes" == result and m1 <= 0.4))
       print "Is this a match (y/n): "
       answer = STDIN.gets
       if [ "Y", "YES"].include?(answer.strip.upcase)
         return "Yes"
+      else
+        return "No"
       end
     end
     return result
@@ -675,46 +674,59 @@ class CrossMatch
     print "Starting probability-based cross match: #{Time.now.to_s}\n"
     $stdout.flush
     matches = Array.new
+    qsos.each { |q1|
+      qsos.each { |q2|
+        break if q1.impossibleMatch?(q2)
+        metric, cp = q1.probablyMatch(q2)
+        if metric > 0.1
+          matches << Match.new(q1, q2, metric, cp)
+        end
+      }
+    }
+    print matches.length.to_s + " potential matches to evaluate\n"
+    $stdout.flush
+    matches.sort! { |a,b| b <=> a }
+    confirmed = Array.new
     metrics = Array.new(14)
     matched = Hash.new
     open("machine_learning.csv", "w:ascii") { |out|
-      qsos.each { |q1|
-        qsos.each { |q2|
-          break if ((q2.id >= q1.id) or matched.has_key?(q1.id) or matched.has_key?(q2.id))
-          if (q1.logID != q2.logID)
-            metric, cp = q1.probablyMatch(q2)
-            greenMatch = greenMatch?(q1, q2, metric, cp)
-            if "Yes" == greenMatch
-              matched[q1.id] = true
-              matched[q2.id] = true
-            end
-            metrics[0] = q1.id
-            metrics[1] = q2.id
-            metrics[2] = (q1.band == q2.band) ? 1 : 0
-            metrics[3] = (q1.mode == q2.mode) ? 1 : 0
-            metrics[4] = (q1.datetime - q2.datetime).abs
-            metrics[5] = (q1.freq - q2.freq).abs
-            metrics[6] = serialMetric(q1.sent_serial, q2.recvd_serial) + serialMetric(q2.sent_serial, q1.recvd_serial)
-            metrics[7] = serialStrMetric(q1, q2)
-            metrics[8] = qthMetric(q1, q2)
-            metrics[9] = locationMetric(q1,q2)
-            metrics[10] = (JaroWinkler.distance(q1.sent_basecall, q2.recvd_basecall) *
-              JaroWinkler.distance(q2.sent_basecall, q1.recvd_basecall))
-            metrics[11] = ((q1.mode == "CW" ? 1 : 0) +
-              (q2.mode == "CW" ? 1 : 0))
-            metrics[12] = cp
-            metrics[13] = greenMatch
-            out.write(metrics.join(",") + "\n")
-            if metric > 0.20
-              matches << Match.new(q1, q2, metric, cp)
-            end
+      matches.each { |m|
+        q1 = m.q1
+        q2 = m.q2
+        metric = m.metric
+        cp = m.metric2
+        if not matched.include?(q1.id) and not matched.include?(q2.id)
+          greenMatch = greenMatch?(q1, q2, metric, cp)
+          if "Yes" == greenMatch
+            matched[q1.id] = true
+            matched[q2.id] = true
+            confirmed << m
           end
-        }
+          metrics[0] = q1.id
+          metrics[1] = q2.id
+          metrics[2] = (q1.band == q2.band) ? 1 : 0
+          metrics[3] = (q1.mode == q2.mode) ? 1 : 0
+          metrics[4] = (q1.datetime - q2.datetime).abs
+          metrics[5] = (q1.freq - q2.freq).abs
+          metrics[6] = serialMetric(q1.sent_serial, q2.recvd_serial) + serialMetric(q2.sent_serial, q1.recvd_serial)
+          metrics[7] = serialStrMetric(q1, q2)
+          metrics[8] = qthMetric(q1, q2)
+          metrics[9] = locationMetric(q1,q2)
+          metrics[10] = (JaroWinkler.distance(q1.sent_basecall, q2.recvd_basecall) *
+            JaroWinkler.distance(q2.sent_basecall, q1.recvd_basecall))
+          metrics[11] = ((q1.mode == "CW" ? 1 : 0) +
+            (q2.mode == "CW" ? 1 : 0))
+          metrics[12] = cp
+          metrics[13] = greenMatch
+          out.write(metrics.join(",") + "\n")
+        end
       }
     }
+    matches = confirmed
     print "Done ranking potential matches: #{Time.now.to_s}\n"
     print matches.length.to_s + " possible matches selected\n"
     $stdout.flush
+    return
     matches.sort! { |a,b| b <=> a }
     matches.each { |m|
       print m.to_s + "\n"

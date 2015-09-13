@@ -327,6 +327,23 @@ qso_id(VALUE obj)
 
 /*
  * call-seq:
+ *     qso.impossibleMatch?(q)
+ *
+ * Return true iff qso and q cannot possibly match (e.g., from same log or
+ * QSO id of q is <= the QSO id of qso.
+ */
+static VALUE
+qso_impossible(VALUE obj, VALUE q)
+{
+  struct QSO_t *qsop, *qp;
+  GetQSO(obj, qsop);
+  GetQSO(q, qp);
+  return ((qp->d_qsoID >= qsop->d_qsoID ) || (qp->d_logID == qsop->d_logID))
+    ? Qtrue : Qfalse;
+}
+
+/*
+ * call-seq:
  *    qso.logID
  *
  * Return the unique ID of the log this QSO appears in.
@@ -1055,6 +1072,7 @@ Init_qsomatch(void)
   rb_define_method(rb_cQSO, "initialize", qso_initialize, -1);
   rb_define_method(rb_cQSO, "id", qso_id, 0);
   rb_define_method(rb_cQSO, "logID", qso_logID, 0);
+  rb_define_method(rb_cQSO, "impossibleMatch?", qso_impossible, 1);
   rb_define_method(rb_cQSO, "freq", qso_freq, 0);
   rb_define_method(rb_cQSO, "band", qso_band, 0);
   rb_define_method(rb_cQSO, "mode", qso_mode, 0);
