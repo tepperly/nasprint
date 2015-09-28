@@ -4,12 +4,13 @@ require 'csv'
 
 LABELS = { "Yes" => 1, "No" => 0 }.freeze
 
-def writeTraining(data, filename)
+def writeTraining(data, scales, filename)
   open(filename, "w:ascii") { |out|
     data.each { |row|
       out.write(LABELS[row[13]])
+      
       row[2,11].each_with_index { |value, index|
-        out.write(" " + (index+1).to_s + ":" + value.to_s)
+        out.write(" " + index.to_s + ":" + (value.to_f/scales[index]).to_s)
       }
       out.write("\n")
     }
@@ -32,4 +33,7 @@ ARGV.each { |arg|
 
 print "#{yes_data.length} matches\n#{no_data.length} unmatched\n"
 
-writeTraining(all_data, "test_svm.in")
+scales = [ 1, 1, 1000, 1000, 1000, 1, 1, 1, 1, 1, 1 ].freeze
+
+
+writeTraining(all_data, scales, "test_svm.in")

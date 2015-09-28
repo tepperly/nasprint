@@ -16,19 +16,36 @@ def hillFunc(value, full, none)
 end
 
 
+EXCHANGE_FIELD_TYPES = %w{ _callID _entityID _multiplierID _serial }
+EXCHANGE_EXTRA_FIELD_TYPES = %w{ _callsign _location }
+
+def lookupBase(db, callID)
+  db.query("select basecall from Callsign where id = ? limit 1;", [callID]) { |row|
+    return row[0]
+  }
+  nil
+end
+
+def lookupMult(db, mID)
+  db.query("select abbrev from Multiplier where id = ? limit 1;", [mID]) { | row|
+    return row[0]
+  }
+  nil
+end
+
 def lookupQSO(db, id, timeadj=0)
   db.query("select q.logID, q.frequency, q.band, q.fixedMode, q.time, " +
-                 ContestDB.EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "q.sent" + f }.join(", ") + ", " +
-                 ContestDB.EXCHANGE_FIELD_TYPES.keys.sort.map { |f| "q.recvd" + f }.join(", ") + " , " +
-                 ContestDB.EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "qe.sent" + f}.join(", ") + ", " +
-                 ContestDB.EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "qe.recvd" + f}.join(", ") +
+                 EXCHANGE_FIELD_TYPES.sort.map { |f| "q.sent" + f }.join(", ") + ", " +
+                 EXCHANGE_FIELD_TYPES.sort.map { |f| "q.recvd" + f }.join(", ") + " , " +
+                 EXCHANGE_EXTRA_FIELD_TYPES.sort.map { |f| "qe.sent" + f}.join(", ") + ", " +
+                 EXCHANGE_EXTRA_FIELD_TYPES.sort.map { |f| "qe.recvd" + f}.join(", ") +
                  " from QSO as q join QSOExtra as qe where q.id = ? and qe.id = ? limit 1;",
            [id, id]) { |row|
       return QSO.new(id, row[0].to_i, row[1].to_i, row[2], row[3], 
                      db.toDateTime(row[4])+timeadj,
-                     db.baseCall(row[5]), row[13], row[8], db.lookupMultiplierByID(row[7]),
+                     lookupBase(db,row[5]), row[13], row[8], lookupMult(db, row[7]),
                      row[14],
-                     db.baseCall(row[9]), row[15], row[14], db.lookupMultiplierByID(row[11]),
+                     lookupBase(db,row[9]), row[15], row[12], lookupMult(db, row[11]),
                      row[16])
     }
     nil
