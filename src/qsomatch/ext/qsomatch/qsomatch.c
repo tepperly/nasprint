@@ -12,9 +12,12 @@
 #include "ruby.h"
 #include "distance.h"
 #include "adj_matrix.h"
+#include "svmmodel.h"
 
 #define MAX_CALLSIGN_CHARS   12
 #define MAX_MULTIPLIER_CHARS 20
+
+struct svm_model *s_svm_model = 0;
 
 /* order must agree with s_bandName */
 enum Band_t {
@@ -861,6 +864,15 @@ timePenalty(time_t t1, time_t t2)
   
 }
 
+static double
+qso_combined_probs(const double e1, const double e2,
+		   const int bandmatch, const int modematch,
+		   const double timepenalty)
+{
+  return e1*e2*(bandmatch ? 1.0 : 0.9)*(modematch ? 1.0 : 0.9)*
+    timepenalty;
+}
+
 static VALUE
 qso_probablymatch(VALUE obj, VALUE qso)
 {
@@ -884,14 +896,173 @@ qso_probablymatch(VALUE obj, VALUE qso)
 			     &exchangeTwo, &callTwo);
     rb_ary_store(result, 1, 
 		 rb_float_new(callOne*callTwo));
-    rb_ary_store(result, 0, 
-		 rb_float_new(exchangeOne*exchangeTwo*
-			      ((selfp->d_band == qsop->d_band) ? 1.0 : 0.9) *
-			      ((selfp->d_mode == qsop->d_mode) ? 1.0 : 0.9) *
-			      timePenalty(selfp->d_datetime, qsop->d_datetime)));
+    rb_ary_store(result, 0,
+		 rb_float_new(qso_combined_probs(exchangeOne, exchangeTwo,
+						 selfp->d_band == qsop->d_band,
+						 selfp->d_mode == qsop->d_mode,
+						 timePenalty(selfp->d_datetime,
+							     qsop->d_datetime))));
   }
   return result;
 }
+
+static double
+serialMetric(const int16_t sent,
+	     const int16_t recvd)
+{
+  if (sent >= 0) {
+    if (recvd >= 0) {
+      return abs(sent - recvd);
+    }
+    else {
+      return abs(sent);
+    }
+  }
+  return 0;
+}
+
+static double
+strMetric(const int16_t sent,
+	  const int16_t recvd,
+	  const int     isCW)
+{
+  char buffer1[12], buffer2[12];
+  int len1, len2;
+  jw_Option opt = jw_option_new();
+  opt.adj_table = isCW ? s_CW_adj: s_Normal_adj;
+  if (sent >= 0) {
+    len1 = snprintf(buffer1, sizeof(buffer1), "%" PRId16, sent) - 1;
+  }
+  else {
+    len1 = 0;
+    buffer1[0] = '\0';
+  }
+  if (recvd >= 0) {
+    len2 = snprintf(buffer2, sizeof(buffer2), "%" PRId16, recvd) -1;
+  }
+  else{
+    len2 = 0;
+    buffer2[0] = '\0';
+  }
+  return jw_distance(buffer1, len1, buffer2, len2, opt);
+}
+
+static double
+serialStrMetric(const int16_t s1,
+		const int16_t r1,
+		const int16_t s2,
+		const int16_t r2,
+		const int     isCW)
+{
+  return strMetric(s1,r2, isCW) * strMetric(s2, r1, isCW);
+}
+
+static double
+qso_calc_ml_metrics(const struct QSO_t *selfp,
+		    const struct QSO_t *qsop,
+		    double metrics[11])
+{
+  const int isCW = ((m_CW == qsop->d_mode) && (m_CW == selfp->d_mode));
+  double exchangeOne, callOne, exchangeTwo, callTwo, combined;
+  qso_exchange_probability(&(qsop->d_sent), &(selfp->d_recvd), isCW,
+			   &exchangeOne, &callOne);
+  qso_exchange_probability(&(qsop->d_recvd), &(selfp->d_sent), isCW,
+			   &exchangeTwo, &callTwo);
+  combined = qso_combined_probs(exchangeOne, exchangeTwo,
+				selfp->d_band == qsop->d_band,
+				selfp->d_mode == qsop->d_mode,
+				timePenalty(selfp->d_datetime,
+					    qsop->d_datetime));
+  if (combined > 0.1) {
+    jw_Option opt = jw_option_new();
+    opt.adj_table = isCW ? s_CW_adj : s_Normal_adj;
+    metrics[0] = (selfp->d_band == qsop->d_band);
+    metrics[1] = (selfp->d_mode == qsop->d_mode);
+    metrics[2] = abs(selfp->d_datetime - qsop->d_datetime);
+    metrics[3] = abs(selfp->d_frequency - qsop->d_frequency);
+    metrics[4] = (serialMetric(selfp->d_sent.d_serial,
+			       qsop->d_recvd.d_serial)+
+		  serialMetric(qsop->d_sent.d_serial,
+			       selfp->d_recvd.d_serial));
+    metrics[5] = serialStrMetric(selfp->d_sent.d_serial,
+				 selfp->d_recvd.d_serial,
+				 qsop->d_sent.d_serial,
+				 qsop->d_recvd.d_serial, isCW);
+    metrics[6] = jw_distance(selfp->d_sent.d_multiplier,
+			     strlen(selfp->d_sent.d_multiplier),
+			     qsop->d_recvd.d_multiplier,
+			     strlen(qsop->d_recvd.d_multiplier),
+			     opt) *
+      jw_distance(qsop->d_sent.d_multiplier,
+		  strlen(qsop->d_sent.d_multiplier),
+		  selfp->d_recvd.d_multiplier,
+		  strlen(selfp->d_recvd.d_multiplier),
+		  opt);
+    metrics[7] = jw_distance(selfp->d_sent.d_location,
+			     strlen(selfp->d_sent.d_location),
+			     qsop->d_recvd.d_location,
+			     strlen(qsop->d_recvd.d_location),
+			     opt) *
+      jw_distance(qsop->d_sent.d_location,
+		  strlen(qsop->d_sent.d_location),
+		  selfp->d_recvd.d_location,
+		  strlen(selfp->d_recvd.d_location),
+		  opt);
+    metrics[8] = jw_distance(selfp->d_sent.d_basecall,
+			     strlen(selfp->d_sent.d_basecall),
+			     qsop->d_recvd.d_basecall,
+			     strlen(qsop->d_recvd.d_basecall), opt) *
+      jw_distance(qsop->d_sent.d_basecall,
+		  strlen(qsop->d_sent.d_basecall),
+		  selfp->d_recvd.d_basecall,
+		  strlen(selfp->d_recvd.d_basecall), opt);
+    metrics[9] = ((qsop->d_mode == m_CW) ? 1 : 0) +
+      ((selfp->d_mode == m_CW) ? 1 : 0);
+    metrics[10] = callOne*callTwo;
+  }
+  else {
+    memset(metrics, 0, sizeof(double)*11);
+  }
+  return combined;
+}
+
+static VALUE
+qso_ml_metrics(VALUE obj, VALUE qso)
+{
+  const struct QSO_t *selfp, *qsop;
+  double combined, metrics[11];
+  GetQSO(obj, selfp);
+  GetQSO(qso, qsop);
+  combined = qso_calc_ml_metrics(selfp, qsop, metrics);
+  if (combined > 0.1) {
+    VALUE result = rb_ary_new2(11);
+    int i;
+    for(i = 0; i < 11; ++i) {
+      rb_ary_store(result, i, rb_float_new(metrics[i]));
+    }
+    return result;
+  }
+  return Qnil;
+}
+
+static VALUE
+qso_ml_match_check(VALUE obj, VALUE qso)
+{
+  const struct QSO_t *selfp, *qsop;
+  GetQSO(obj, selfp);
+  GetQSO(qso, qsop);
+  if ((selfp->d_logID != qsop->d_logID) && (selfp->d_qsoID < qsop->d_qsoID)) {
+    double combined, metrics[11];
+    combined = qso_calc_ml_metrics(selfp, qsop, metrics);
+    if (combined > 0.1) {
+      metrics[2] = 1.0e-3*metrics[2];
+      metrics[3] = 1.0e-3*metrics[3];
+      metrics[4] = 1.0e-3*metrics[4];
+    }
+  }
+  return Qnil;
+}
+
 
 static
 enum Band_t
@@ -1058,21 +1229,59 @@ qso_initialize(int argc, VALUE *argv, VALUE obj)
   }
   return Qnil;
 }
+
+static VALUE
+qso_cwjw(VALUE cls, VALUE s1, VALUE s2)
+{
+  if ((T_STRING == TYPE(s1)) && (T_STRING == TYPE(s2))) {
+    const char *str1 = RSTRING_PTR(s1);
+    const size_t str1len = RSTRING_LEN(s1);
+    const char *str2 = RSTRING_PTR(s2);
+    const size_t str2len = RSTRING_LEN(s2);
+    jw_Option opt = jw_option_new();
+    opt.adj_table = s_CW_adj;
+    return rb_float_new(jw_distance(str1, str1len,
+				    str2, str2len, opt));
+  }
+  rb_raise(rb_eTypeError, "Incorrect arguments to cwJaroWinkler (strings required).");
+  return Qnil;
+}
+
+static VALUE
+qso_phjw(VALUE cls, VALUE s1, VALUE s2)
+{
+  if ((T_STRING == TYPE(s1)) && (T_STRING == TYPE(s2))) {
+    const char *str1 = RSTRING_PTR(s1);
+    const size_t str1len = RSTRING_LEN(s1);
+    const char *str2 = RSTRING_PTR(s2);
+    const size_t str2len = RSTRING_LEN(s2);
+    jw_Option opt = jw_option_new();
+    opt.adj_table = s_Normal_adj;
+    return rb_float_new(jw_distance(str1, str1len,
+				    str2, str2len, opt));
+  }
+  rb_raise(rb_eTypeError, "Incorrect arguments to cwJaroWinkler (strings required).");
+  return Qnil;
+}
 	       
 void
 Init_qsomatch(void)
 {
+  s_svm_model = qso_svm_classifier();
   s_CW_adj = jw_adj_matrix_create(jw_CW_ADJ_TABLE);
   s_Normal_adj = jw_adj_matrix_create(jw_HAM_ADJ_TABLE);
   rb_cQSO = rb_define_class("QSO", rb_cObject);
   rb_define_alloc_func(rb_cQSO, qso_s_allocate);
   rb_define_singleton_method(rb_cQSO, "toCW", qso_toCW, 1);
+  rb_define_singleton_method(rb_cQSO, "cwJaroWinkler", qso_cwjw, 2);
+  rb_define_singleton_method(rb_cQSO, "phJaroWinkler", qso_phjw, 2);
   rb_eQSOError = rb_define_class("QSOError", rb_eException);
   s_cToI = rb_intern("to_i");
   rb_define_method(rb_cQSO, "initialize", qso_initialize, -1);
   rb_define_method(rb_cQSO, "id", qso_id, 0);
   rb_define_method(rb_cQSO, "logID", qso_logID, 0);
   rb_define_method(rb_cQSO, "impossibleMatch?", qso_impossible, 1);
+  rb_define_method(rb_cQSO, "ml_metrics", qso_ml_metrics, 1);
   rb_define_method(rb_cQSO, "freq", qso_freq, 0);
   rb_define_method(rb_cQSO, "band", qso_band, 0);
   rb_define_method(rb_cQSO, "mode", qso_mode, 0);

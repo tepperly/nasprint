@@ -452,34 +452,29 @@ class CrossMatch
   end
 
   def strMetric(sentStr, recvdStr, isCW)
-    jw = JaroWinkler.distance(sentStr, recvdStr)
     if isCW
-      sentStr = QSO.toCW(sentStr)
-      recvdStr = QSO.toCW(recvdStr)
-      jwcw = JaroWinkler.distance(sentStr, recvdStr)
-      if jwcw > jw
-        return jwcw
-      end
+      return QSO.cwJaroWinkler(sentStr, recvdStr)
+    else
+      return QSO.phJaroWinkler(sentStr, recvdStr)
     end
-    return jw
   end
 
   def serialStrMetric(q1, q2)
     isCW = ("CW" == q1.mode and "CW" == q2.mode)
     return strMetric(q1.sent_serial.to_s, q2.recvd_serial.to_s, isCW) *
-      strMetric(q2.sent_serial.to_s, q1.sent_serial.to_s, isCW)
+      strMetric(q2.sent_serial.to_s, q1.recvd_serial.to_s, isCW)
   end
 
   def qthMetric(q1, q2)
     isCW = ("CW" == q1.mode and "CW" == q2.mode)
     return strMetric(q1.sent_multiplier, q2.recvd_multiplier, isCW) *
-      strMetric(q2.sent_multiplier, q1.sent_multiplier, isCW)
+      strMetric(q2.sent_multiplier, q1.recvd_multiplier, isCW)
   end
 
   def locationMetric(q1, q2)
     isCW = ("CW" == q1.mode and "CW" == q2.mode)
-    return strMetric(q1.sent_location, q2.sent_location, isCW) *
-      strMetric(q2.sent_location, q1.sent_location, isCW)
+    return strMetric(q1.sent_location, q2.recvd_location, isCW) *
+      strMetric(q2.sent_location, q1.recvd_location, isCW)
   end
 
   def greenInfo(id)
