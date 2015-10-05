@@ -29,6 +29,7 @@ $verbose = nil
 
 opts = GetoptLong.new(
                       [ '--new', '-N', GetoptLong::NO_ARGUMENT],
+                      [ '--check', '-C', GetoptLong::NO_ARGUMENT],
                       [ '--no-init', '-I', GetoptLong::NO_ARGUMENT],
                       [ '--qrzuser', '-u', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--qrzpwd', '-p', GetoptLong::REQUIRED_ARGUMENT],
@@ -57,6 +58,8 @@ opts.each { |opt, arg|
   when '--sqlite'
     cmddbopts['type'] = 'sqlite3'
     cmddbopts['filename'] = arg
+  when '--check'
+    $action = :check
   when '--load'
     $action = :load
   when '--score'
@@ -83,7 +86,7 @@ dbopts.merge!(cmddbopts)
 def loadFiles(args, cdb, contestID)
   args.each { |filename|
     cab = Cabrillo.new(filename)
-    if cab
+    if cab and cdb
       addLog(cdb, contestID, cab)
     end
   }
@@ -133,22 +136,22 @@ def scoreContest(db, contestID, contestDB)
     restartContest(cm)
   end
   checkCallsigns(db, contestID, $qrzuser, $qrzpwd)
-  # num1 = cm.perfectMatch
-  # print "Perfect matches: #{num1}\n"
-  # $stdout.flush
-  # num3, partial = cm.partialMatch
-  # print "Full matches partial: #{num3}\n"
-  # print "Partial matches full: #{partial}\n"
-  # $stdout.flush
-  # num1 = cm.perfectMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull')
-  # print "Time shifted perfect matches: #{num1}\n"
-  # $stdout.flush
-  # num3, partial = cm.partialMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull', 'TimeShiftPartial')
-  # print "Time shifted full matches partial: #{num3}\n"
-  # print "Time shifted partial matches full: #{partial}\n"
-  # $stdout.flush
-  # p1, p2 = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
-  # print "Basic QSO matches within 24 hours: #{p1+p2}\n"
+  num1 = cm.perfectMatch
+  print "Perfect matches: #{num1}\n"
+  $stdout.flush
+  num3, partial = cm.partialMatch
+  print "Full matches partial: #{num3}\n"
+  print "Partial matches full: #{partial}\n"
+  $stdout.flush
+  num1 = cm.perfectMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull')
+  print "Time shifted perfect matches: #{num1}\n"
+  $stdout.flush
+  num3, partial = cm.partialMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull', 'TimeShiftPartial')
+  print "Time shifted full matches partial: #{num3}\n"
+  print "Time shifted partial matches full: #{partial}\n"
+  $stdout.flush
+  p1, p2 = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
+  print "Basic QSO matches within 24 hours: #{p1+p2}\n"
   $stdout.flush
   cm.probMatch
   print "Calculating clock drift\n"
@@ -189,8 +192,8 @@ def scoreContest(db, contestID, contestDB)
   print "All Done\n"
 end
 
-if $name and $year
-  begin
+begin
+  if $name and $year and [:load, :score ].include?($action)
     db = makeDB(dbopts)
     cdb = ContestDatabase.new(db)
     contestID = cdb.addOrLookupContest($name, $year, $create)
@@ -199,20 +202,29 @@ if $name and $year
       db.close
       exit 2
     end
-    case $action
-    when :load
-      loadFiles(ARGV, cdb, contestID)
-    when :score
-      scoreContest(db, contestID, cdb)
+  else
+    db = nil
+    cdb = nil
+    if [:load, :score ].include?($action)
+      print "Load and score action require a database.\n"
+      exit 2
     end
-    print "Done...shutting down\n"
-    $stdout.flush
-  rescue
-    print "Exception thrown"
-    $stdout.flush
-    $stderr.print "Exception: " + $!.to_s + "\n"
-    $stderr.print $!.backtrace.join("\n")
-  ensure
+  end  
+  case $action
+  when :load, :check
+    loadFiles(ARGV, cdb, contestID)
+  when :score
+    scoreContest(db, contestID, cdb)
+  end
+  print "Done...shutting down\n"
+  $stdout.flush
+rescue
+  print "Exception thrown"
+  $stdout.flush
+  $stderr.print "Exception: " + $!.to_s + "\n"
+  $stderr.print $!.backtrace.join("\n")
+ensure
+  if db 
     db.close
   end
 end
