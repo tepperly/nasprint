@@ -80,7 +80,7 @@
       <input type="email" name="confirm" id="confirmID" class="jForm"><br >
       <label for="tranlocID">Transmitted location:</label>
       <input type="text" name="transloc" id="translocID">
-      (abbreviation for your CA County, US state, Canadian Province or DX)
+      (4-letter abbreviation for your CA County or 2-letter abbreviation for your US state, Canadian Province or "DX")
       <br><br>
       <label for="numqID">Number of QSOs*:</label>
       <input type="text" name="numq" id="numqID" value="1"> (number here sets the size of the QSO grid)
@@ -275,7 +275,7 @@ function timeStr(val) {
 
 function flushLeft(str, len) {
    var i = str.length;
-   var result = str;
+   var result = str.toUpperCase();
    while ( i < len) {
      result += " ";
      i += 1;
@@ -286,7 +286,7 @@ function flushLeft(str, len) {
 function newCabrilloContent() {
   var result = "";
   result += "START-OF-LOG: 3.0\n"
-  result += "CALLSIGN: " + $("#callsignID").val() + "\n";
+  result += "CALLSIGN: " + $("#callsignID").val().toUpperCase() + "\n";
   result += "NAME: " + $("#nameID").val() + "\n";
   result += "CONTEST: CA-QSO-PARTY\n";
   result += "CREATED-BY: cabmaker.html\n";
@@ -301,19 +301,23 @@ function newCabrilloContent() {
   result += "CATEGORY-TRANSMITTER: " + $("#transnumID").val() + "\n";
   result += "CLUB: " + $("#clubID").val() + "\n";
   result += "EMAIL: " + $("#emailID").val() + "\n";
-  result += "LOCATION: " + $("#translocID").val() + "\n";
+  result += "LOCATION: " + $("#translocID").val().toUpperCase() + "\n";
   $('.qsoline').each( function (index, elem) {
-    result += "QSO: " + bandToNum(elem.getElementsByClassName("band")[0].value);
-    result += " " + elem.getElementsByClassName("mode")[0].value + " ";
-    result += " " + elem.getElementsByClassName('date')[0].value + " ";
-    result += timeStr(elem.getElementsByClassName('time')[0].value);
-    result += flushLeft(elem.getElementsByClassName('sent_call')[0].value,10);
-    result += flushLeft(elem.getElementsByClassName('sent_serial')[0].value,4);
-    result += flushLeft(elem.getElementsByClassName('sent_location')[0].value,4);
-    result += flushLeft(elem.getElementsByClassName('call')[0].value, 10);
-    result += flushLeft(elem.getElementsByClassName('serial')[0].value, 4);
-    result += flushLeft(elem.getElementsByClassName('location')[0].value, 4);
-    result += "\n";
+    if ((elem.getElementsByClassName('call')[0].value.length > 0) ||
+        (elem.getElementsByClassName('serial')[0].value.length > 0) ||
+        (elem.getElementsByClassName('location')[0].value.length > 0)) {
+      result += "QSO: " + bandToNum(elem.getElementsByClassName("band")[0].value);
+      result += " " + elem.getElementsByClassName("mode")[0].value + " ";
+      result += " " + elem.getElementsByClassName('date')[0].value + " ";
+      result += timeStr(elem.getElementsByClassName('time')[0].value);
+      result += flushLeft(elem.getElementsByClassName('sent_call')[0].value,10);
+      result += flushLeft(elem.getElementsByClassName('sent_serial')[0].value,4);
+      result += flushLeft(elem.getElementsByClassName('sent_location')[0].value,4);
+      result += flushLeft(elem.getElementsByClassName('call')[0].value, 10);
+      result += flushLeft(elem.getElementsByClassName('serial')[0].value, 4);
+      result += flushLeft(elem.getElementsByClassName('location')[0].value, 4);
+      result += "\n";
+    }
   });
   result += "END-OF-LOG:\n";
   return result;
@@ -322,6 +326,7 @@ function newCabrilloContent() {
 function generateCabrillo() {
   $('#cabrilloID').val(newCabrilloContent()); // clear text area
 }
+
 
 $(function () {
   $("#MakeQSOsID").click(qsoButton);
