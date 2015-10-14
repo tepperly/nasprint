@@ -174,7 +174,8 @@ def handleRequest(request, db, logCheck)
                                 request["comments"],
                                 checkBox(request, "expedition"), checkBox(request, "youth"),
                                 checkBox(request, "mobile"), checkBox(request, "female"),
-                                checkBox(request, "school"), checkBox(request, "new"))
+                                checkBox(request, "school"), checkBox(request, "new"),
+                                request['power'], request['opclass'])
         open(asciiFile,File::Constants::RDONLY,
              :encoding => "US-ASCII") { |io|
           content = io.read()

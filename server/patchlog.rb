@@ -44,7 +44,8 @@ def patchLog(content, attributes)
 end
 
 def makeAttributes(id, callsign, email, email_confirm, sentqth, phone, comments,
-                   expedition, youth, mobile, female, school, newcontester)
+                   expedition, youth, mobile, female, school, newcontester,
+                   power, opclass)
   result = { }
   result['X-CQP-CALLSIGN'] = callsign
   result['X-CQP-SENTQTH'] = sentqth
@@ -74,5 +75,13 @@ def makeAttributes(id, callsign, email, email_confirm, sentqth, phone, comments,
   result['X-CQP-CATEGORIES'] = categories.join(" ")
   result['X-CQP-ID'] = id.to_s
   result['X-CQP-TIMESTAMP'] = Time.now.utc.strftime("%Y-%m-%d %H:%M:%S.%L +0000")
+  power = power.to_s.strip.upcase
+  if %w( LOW HIGH QRP ).include?(power)
+    result['X-CQP-POWER'] = power
+  end
+  opclass = opclass.to_s.upcase
+  if %w( SINGLE SINGLE-ASSISTED MULTI-SINGLE MULTI-MULTI CHECKLOG ).include?(opclass)
+    result['X-CQP-OPCLASS'] = opclass
+  end
   result
 end

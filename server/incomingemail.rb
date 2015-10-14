@@ -88,7 +88,8 @@ def processEmailLog(rawContent, fixedContent, filename, subject, sender, headers
                 log.newcontester?, "email", nil)
     attrib = makeAttributes(logID, callsign, sender, sender, log.filterQTH[0].to_s,
                             "", "", log.county?, log.youth?, log.mobile?,
-                            log.female?, log.school?, log.newcontester?)
+                            log.female?, log.school?, log.newcontester?,
+                            log.powerStr.upcase, log.calcOpClass.upcase)
     patchedContent = patchLog(asciiContent, attrib) # add X-CQP lines
     open(asciiFilename.gsub(/\.ascii$/, ".log"),
          File::Constants::CREAT | File::Constants::EXCL | 
