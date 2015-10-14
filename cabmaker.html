@@ -240,28 +240,28 @@ function qsoButton() {
 
 function bandToNum(str) {
   if (str == "440MHz") {
-    return "432";
+    return "  432";
   } else if (str == "2m") {
-    return "144";
+    return "  144";
   } else if (str == "6m") {
-    return "50";
+    return "   50";
   } else if (str == "10m") {
     return "28000";
   } else if (str == "20m") {
     return "14000";
   } else if (str == "40m") { 
-    return "7000";
+    return " 7000";
   } else if (str == "80m") {
-    return "3500";
+    return " 3500";
   } else if (str == "160m") {
-    return "1800";
+    return " 1800";
   }
   return "Unknown";
 }
 
 function timeStr(val) {
   if (val.length == 0) {
-    return "0000";
+    return " 0000 ";
   }
   var num = parseInt(val).toString();
   var len = num.length;
