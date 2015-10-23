@@ -50,8 +50,9 @@ TESTCASES = [
   [ "VE1RGB", "cy0/ve1rgb" ],
   [ "CY0A", "Cy0a" ]]
 
+ct = CallsignTools.new
 TESTCASES.each { |test|
-  if test[0] != callBase(test[1])
+  if test[0] != ct.callBase(test[1])
     print "callBase(\"#{test[1]}\") => \"#{callBase(test[1])}\" *NOT* \"#{test[0]}\"\n"
   end
 }

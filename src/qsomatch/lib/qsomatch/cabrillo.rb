@@ -6,6 +6,7 @@
 #
 require 'csv'
 require 'time'
+require 'set'
 
 CONTEST_START=Time.utc(2015,10,3,16, 00)
 CONTEST_END=Time.utc(2015,10,4,22,00)
@@ -225,11 +226,12 @@ class Cabrillo
     @postcode= nil
     @country = nil
     @operators = nil
+    @badmults = Set.new
     @qsos = [ ]
     parse
   end
 
-  attr_reader :cleanparse, :logcall, :qsos, :club, :name
+  attr_reader :cleanparse, :logcall, :qsos, :club, :name, :badmults
 
   def trans(oldstate, newstate)
     if @parsestate <= oldstate
@@ -245,7 +247,7 @@ class Cabrillo
     if MULTIPLIER_ALIASES[tmp]
       return  MULTIPLIER_ALIASES[tmp]
     else
-      $stderr.write("Unknown multiplier: '" + str + "'\n")
+      @badmults << tmp
       return tmp
     end
   end
@@ -627,7 +629,6 @@ class Cabrillo
     }
     reviewQSOs
     @qsos.each { |qso| checkTime(qso) }
-    print "cleanparse is #{@cleanparse.to_s}\n"
   end
 
   def logCall

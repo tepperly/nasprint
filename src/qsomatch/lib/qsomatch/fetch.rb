@@ -90,6 +90,9 @@ class QRZLookup
       return str, xml
     else
       print "QRZ query failed: #{res.code}\n"
+      if res.body
+        print res.body + "\n"
+      end
     end
     return nil, nil
   end

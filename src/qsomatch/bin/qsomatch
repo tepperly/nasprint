@@ -3,6 +3,7 @@
 require 'getoptlong'
 require 'database'
 require 'contestdb'
+reuiqre 'callsign'
 require 'addlog'
 require 'cabrillo'
 require 'qrzdb'
@@ -85,9 +86,37 @@ dbopts.merge!(cmddbopts)
 
 def loadFiles(args, cdb, contestID)
   args.each { |filename|
-    cab = Cabrillo.new(filename)
-    if cab and cdb
-      addLog(cdb, contestID, cab)
+    begin
+      cab = Cabrillo.new(filename)
+      if cab and cdb
+        addLog(cdb, contestID, cab, ct)
+      end
+      if $action == :check
+        if cab
+          if not cab.cleanparse
+            $stderr.flush
+            print "Station: #{cab.logcall}:#{filename} failed to parse.\n"
+            $stdout.flush
+          end
+          if not cab.badmults.empty?
+            $stderr.flush
+            print "Station: #{cab.logcall}:#{filename} has bad #{cab.badmults.size} multipliers in #{cab.qsos.size} QSO(s).\n"
+            print "Multipliers: " + cab.badmults.to_a.join(" ") + "\n"
+            $stdout.flush
+          end
+          if not cab.defaultSentQTH  or cab.defaultSentQTH == "CA"
+            print "Station: #{cab.logcall}:#{filename} has bad sent QTH #{cab.defaultSentQTH}\n"
+          end
+        else
+          $stderr.flush
+          print "#{filename} failed to parse at all.\n"
+          $stdout.flush
+        end
+      end
+    rescue ArgumentError => e
+      $stderr.flush
+      print "#{filename} caused an exception #{e}\n"
+      $stdout.flush
     end
   }
 end
@@ -193,9 +222,10 @@ def scoreContest(db, contestID, contestDB)
 end
 
 begin
+  ct = CallsignTools.new
   if $name and $year and [:load, :score ].include?($action)
     db = makeDB(dbopts)
-    cdb = ContestDatabase.new(db)
+    cdb = ContestDatabase.new(db, ct)
     contestID = cdb.addOrLookupContest($name, $year, $create)
     if not contestID
       print "Unknown contest #{$name} #{$year}\n"

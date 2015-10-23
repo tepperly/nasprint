@@ -12,8 +12,9 @@ class ContestDatabase
   CHARS_PER_CALL = 16
   CHARS_PER_NAME = 24
 
-  def initialize(db)
+  def initialize(db, ct)
     @db = db
+    @ct = ct
     @contestID = nil
     @callCache = Hash.new
     createDB
@@ -295,6 +296,14 @@ class ContestDatabase
     num ? num.to_i : nil
   end
 
+  def numOrNullSerial(num)
+    if num
+      num = num.to_i
+      return (num != 9999) ? num : nil
+    end
+    nil
+  end
+
   def markReceived(callID)
     @db.query("update Callsign set logrecvd = 1 where id = ? limit 1;", [callID.to_i]) { }
   end
@@ -342,7 +351,7 @@ class ContestDatabase
   end
 
   def translateExchange(exch, contestID)
-    basecall = callBase(exch.callsign)
+    basecall = @ct.callBase(exch.callsign)
     bcID = addOrLookupCall(basecall, contestID)
     multID, entityID = lookupMultiplier(exch.qth)
     return bcID, multID, entityID
@@ -358,9 +367,9 @@ class ContestDatabase
               ") values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
               [ numOrNull(logID), frequency, band, mode, dateOrNull(datetime),
                 numOrNull(sentCallID), numOrNull(sentEntityID), numOrNull(sentMultID),
-                numOrNull(sentExchange.serial),
+                numOrNullSerial(sentExchange.serial),
                 numOrNull(recvdCallID), numOrNull(recvdEntityID), numOrNull(recvdMultID),
-                numOrNull(recvdExchange.serial) ]) { }
+                numOrNullSerial(recvdExchange.serial) ]) { }
     qsoID = @db.last_id
     @db.query("insert into QSOExtra (id, logID, mode, " +
               (EXCHANGE_EXTRA_FIELD_TYPES.keys.sort.map { |f| "sent" + f }.join(", ")) + ", " +

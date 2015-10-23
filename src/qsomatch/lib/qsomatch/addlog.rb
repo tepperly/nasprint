@@ -65,11 +65,11 @@ def addQSOs(db, contestID, logID, qsos)
   }
 end
 
-def addLog(db, cID, cab)
+def addLog(db, cID, cab, ct)
   if cab.logcall
     multID, entID = checkLocation(db, cab)
     if multID
-      basecall = callBase(cab.logcall)
+      basecall = ct.callBase(cab.logcall)
       bcID = db.addOrLookupCall(basecall, cID)
       db.markReceived(bcID)
       logID = db.addLog(cID, cab.logcall, bcID, cab.logEmail,
