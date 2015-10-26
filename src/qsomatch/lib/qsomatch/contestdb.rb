@@ -5,6 +5,7 @@
 #
 require 'csv'
 require 'set'
+require 'digest'
 require_relative 'callsign'
 
 
@@ -721,5 +722,35 @@ class ContestDatabase
       logs << { 'time' => @db.toDateTime(row[0]), 'number' => row[1] }
     }
     logs
+  end
+
+  def qsoDigest(logID)
+    result = Digest::SHA2.new(256)
+    @db.query("select frequency, band, fixedMode, time, sent_serial, recvd_callID, recvd_multiplierID, recvd_serial from QSO where logID = ? order by time asc, sent_serial asc;", [ logID ]) { |row|
+      row.each { |item|
+        result << item.to_s
+      }
+    }
+    result.hexdigest
+  end
+
+  def checkDupeLogs(cid)
+    logSpace = Hash.new
+    logsForContest(cid).each { |logID|
+      digest = qsoDigest(logID)
+      if logSpace.has_key?(digest)
+        logSpace[digest] << logID
+      else
+        logSpace[digest] = [ logID ]
+      end
+    }
+    # remove logs without duplicates
+    logSpace.keep_if { |k,v| v.length > 1 }
+    if not logSpace.empty?
+      print "THERE ARE DUPLICATE LOGS!!!\n"
+      logSpace.each { |digest, ids|
+        print "Group: " + ids.map { |id| logCallsign(id) }.join(" ") + "\n"
+      }
+    end
   end
 end

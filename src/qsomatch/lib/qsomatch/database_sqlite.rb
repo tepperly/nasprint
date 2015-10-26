@@ -69,7 +69,7 @@ class DatabaseSQLite
   }
 
   def timediff(units, time1, time2)
-    "((" + time1 + " - " + time2 + ")/" +
+    "((strftime('%s'," + time1 + ") - strftime('%s'," + time2 + "))/" +
       DIFF_DIVISOR[units] + ")"
   end
 
@@ -111,7 +111,6 @@ class DatabaseSQLite
         toSecs(adjustment, units) + ", 'unixepoch')"
     end
   end
-
 
   def autoincrement
     return AUTOINCREMENT

@@ -21,6 +21,12 @@ def addToDb(db, xml, filename)
       db[call] = filename
     }
   }
+  xml.xpath("//qrz:Callsign/qrz:Session/qrz:Error", XML_NAMESPACE).each { |match|
+    if match.text.strip.start_with?("Not found")
+      found = false
+      db[call] = false
+    end
+  }
   return found
 end
 
@@ -38,12 +44,15 @@ def readXMLDb(db = Hash.new)
   db
 end
 
+def xmlFilename(call)
+  call.gsub(/[^a-z0-9]/i,"_") + ".xml"
+end
 
 def lookupCall(qrz, db, call)
   if qrz
     str, xml = qrz.lookupCall(call)
     if str and xml
-      open("xml_db/#{call}.xml", "w:iso-8859-1") { |out|
+      open("xml_db/#{xmlFilename(call)}", "w:iso-8859-1") { |out|
         str.encode!(Encoding::ISO_8859_1, :undef => :replace)
         out.write(str)
       }

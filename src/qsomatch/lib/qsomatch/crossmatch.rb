@@ -174,6 +174,11 @@ class CrossMatch
       q2 + ".fixedMode"
   end
 
+  def qsoInexactMatch(q1,q2)
+    return "((" + q1 + ".band = " + q2 + ".band) or (" + q1 + ".fixedMode = " +
+      q2 + ".fixedMode))"
+  end
+
   def qsoMatch(q1, q2, timediff=PERFECT_TIME_MATCH)
     return timeMatch("q1.time", "q2.time", timediff) 
   end
@@ -269,12 +274,15 @@ class CrossMatch
     return count1, count2
   end
 
-  def perfectMatch(timediff = PERFECT_TIME_MATCH, matchType="Full")
-    print "Staring perfect match test phase 1 (#{timediff} minute tolerance): #{Time.now.to_s}\n"
+  def perfectMatch(timediff = PERFECT_TIME_MATCH, 
+                   matchType="Full",
+                   modeAndBand=true)
+    print "Staring perfect match #{modeAndBand ? "" : " allowing band or mode mismatch "}(#{timediff} minute tolerance): #{Time.now.to_s}\n"
     queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 " +
       " on (" +  exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
       exchangeExactMatch("q2.recvd", "q1.sent") + " and " +
-      qsoExactMatch("q1", "q2") +
+      (modeAndBand ? qsoExactMatch("q1", "q2") :
+       qsoInexactMatch("q1", "q2")) +
       ") where " +
       @logs.membertest("q1.logID") + " and " +
       @logs.membertest("q2.logID") + " and " +
@@ -299,10 +307,15 @@ class CrossMatch
     return num1
   end
 
-  def partialMatch(timediff = PERFECT_TIME_MATCH, fullType="Full",  partialType="Partial")
+  def partialMatch(timediff = PERFECT_TIME_MATCH, 
+                   fullType="Full",  
+                   partialType="Partial",
+                   modeAndBand = true)
     queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 on (" +
       exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
-      qsoExactMatch("q1", "q2") + " and q2.recvd_callID = q1.sent_callID )" +
+      (modeAndBand ? qsoExactMatch("q1", "q2") :
+       qsoInexactMatch("q1", "q2")) + 
+      " and q2.recvd_callID = q1.sent_callID ) " +
       "where " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
       @logs.membertest("q1.logID") + " and " +
@@ -313,7 +326,7 @@ class CrossMatch
       " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(" +
       @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
-    print "Partial match test phase 1 (#{timediff} min tolerance): #{Time.now.to_s}\n"
+    print "Partial match test #{modeAndBand ? "" : " allowing band or mode mismatch "}(#{timediff} min tolerance): #{Time.now.to_s}\n"
     print queryStr + "\n"
     if $explain
       @db.query("explain " + queryStr) { |row|
@@ -387,19 +400,26 @@ class CrossMatch
   end
 
 
-  def basicMatch(timediff = PERFECT_TIME_MATCH)
-    queryStr = "select q1.id, q2.id from QSO as q1 join QSOExtra as qe1 on q1.id = qe1.id, QSO as q2 join QSOExtra as qe2 on q2.id = qe2.id where " +
+  def basicMatch(timediff = PERFECT_TIME_MATCH,
+                 modeAndBand = true)
+    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2 where " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
       @logs.membertest("q1.logID") + " and " +
       @logs.membertest("q2.logID") + " and " +
       "q1.logID < q2.logID " +
-                    " and " + qsoMatch("q1", "q2", timediff) + " and " +
-                    " (qe1.sent_callsign = qe2.recvd_callsign or q1.sent_callID = q2.recvd_callID) and " +
-                    " (q2.sent_callID = q1.recvd_callID or qe2.sent_callsign = qe1.recvd_callsign) " +
-                    " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
-      ", abs(" +
-      @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
-    return linkQSOs(queryStr, 'Partial', 'Partial', true)
+      " and " + qsoMatch("q1", "q2", timediff) + " and " +
+      (modeAndBand ? qsoExactMatch("q1", "q2") :
+       qsoInexactMatch("q1", "q2")) +  " and " +
+      " q1.sent_callID = q2.recvd_callID and q2.sent_callID = q1.recvd_callID " +
+      " order by abs(" +
+      @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc, " +
+      " (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc;"
+    print "Basic match test phase #{modeAndBand ? "" : " allowing band or mode mismatch "}(#{timediff} min tolerance): #{Time.now.to_s}\n"
+    print queryStr + "\n"
+    $stdout.flush
+    num1, num2 = linkQSOs(queryStr, 'Partial', 'Partial', true)
+    print "Basic match end: #{Time.now.to_s}\n"
+    return num1, num2
   end
 
   def hillFunc(quantity, fullrange, zerorange)

@@ -62,6 +62,7 @@ class QRZLookup
     if not @session_key
       startSession
     end
+    sleep 0.2
     myuri = @queryURI.clone
     myuri.query = URI.encode_www_form({ :s => @session_key, 
                                         :callsign => callsign} )
@@ -85,13 +86,18 @@ class QRZLookup
       @session_key = extractKey(xml)
       printMessage(xml)
       if not (@session_key or norecurse) # session expired
-        lookupCall(callsign, true)
+        return lookupCall(callsign, true)
       end
       return str, xml
     else
       print "QRZ query failed: #{res.code}\n"
       if res.body
         print res.body + "\n"
+      end
+      if not norecurse
+        sleep 2
+        @session_key = nil
+        return lookupCall(callsign, true)
       end
     end
     return nil, nil

@@ -3,7 +3,7 @@
 require 'getoptlong'
 require 'database'
 require 'contestdb'
-reuiqre 'callsign'
+require 'callsign'
 require 'addlog'
 require 'cabrillo'
 require 'qrzdb'
@@ -27,12 +27,15 @@ $action = nil
 $qrzuser = nil
 $qrzpwd = nil
 $verbose = nil
+ct = CallsignTools.new
 
 opts = GetoptLong.new(
                       [ '--new', '-N', GetoptLong::NO_ARGUMENT],
                       [ '--check', '-C', GetoptLong::NO_ARGUMENT],
+                      [ '--check-dupe', '-c', GetoptLong::NO_ARGUMENT],
                       [ '--no-init', '-I', GetoptLong::NO_ARGUMENT],
                       [ '--qrzuser', '-u', GetoptLong::REQUIRED_ARGUMENT],
+                      [ '--exceptions', '-X', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--qrzpwd', '-p', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--sqlite', '-S', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--reset', '-R', GetoptLong::NO_ARGUMENT],
@@ -61,6 +64,8 @@ opts.each { |opt, arg|
     cmddbopts['filename'] = arg
   when '--check'
     $action = :check
+  when '--check-dupe'
+    $action = :checkdupes
   when '--load'
     $action = :load
   when '--score'
@@ -71,6 +76,8 @@ opts.each { |opt, arg|
     $name = arg
   when '--year'
     $year = arg.to_i
+  when '--exceptions'
+    ct.addException(arg.split(/[,;:]/))
   end
 }
                       
@@ -84,7 +91,7 @@ end
 
 dbopts.merge!(cmddbopts)
 
-def loadFiles(args, cdb, contestID)
+def loadFiles(args, cdb, contestID, ct)
   args.each { |filename|
     begin
       cab = Cabrillo.new(filename)
@@ -119,6 +126,9 @@ def loadFiles(args, cdb, contestID)
       $stdout.flush
     end
   }
+  if cdb
+    cdb.checkDupeLogs(contestID)
+  end
 end
 
 def checkCallsigns(db, cid, user, pwd)
@@ -130,7 +140,10 @@ def checkCallsigns(db, cid, user, pwd)
   xmldb = readXMLDb()
   res = db.query("select id, basecall from Callsign where contestID = ? and validcall is null;", [cid.to_i])
   res.each { |row|
-    if xmldb.has_key?(row[1]) or lookupCall(qrz, xmldb, row[1])
+    if xmldb.has_key?(row[1]) 
+      db.query("update Callsign set validcall = ? where id = ? limit 1;",
+               [(xmldb[row[1]] ? 1 : 0), row[0].to_i])
+    elsif lookupCall(qrz, xmldb, row[1])
       db.query("update Callsign set validcall = 1 where id = ? limit 1;",
                [row[0].to_i])
     else
@@ -168,6 +181,10 @@ def scoreContest(db, contestID, contestDB)
   num1 = cm.perfectMatch
   print "Perfect matches: #{num1}\n"
   $stdout.flush
+  num1 = cm.perfectMatch(CrossMatch::PERFECT_TIME_MATCH,
+                         "Partial", 
+                         false)
+  print "Perfect matches (with a band or mode mismatch): #{num1}\n"
   num3, partial = cm.partialMatch
   print "Full matches partial: #{num3}\n"
   print "Partial matches full: #{partial}\n"
@@ -179,14 +196,21 @@ def scoreContest(db, contestID, contestDB)
   print "Time shifted full matches partial: #{num3}\n"
   print "Time shifted partial matches full: #{partial}\n"
   $stdout.flush
+  num3, partial = cm.partialMatch(CrossMatch::PERFECT_TIME_MATCH,
+                                  'Partial', 'Partial',
+                                  false)
+  print "One side match with band/mode mismatch: #{num3}\n"
+  print "One size mismatch with band/mode mismatch: #{partial}\n"
+  $stdout.flush
   p1, p2 = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
   print "Basic QSO matches within 24 hours: #{p1+p2}\n"
   $stdout.flush
-  cm.probMatch
+#   cm.probMatch
   print "Calculating clock drift\n"
   ct = CalcTimeAdj.new(db, contestID)
   ct.buildVariables
   ct.buildMatrix
+  return  # warning short circuit end
   timeviolation = ct.markOutOfContest
   print "QSOs outside contest time period: #{timeviolation}\n"
   $stdout.flush
@@ -222,8 +246,7 @@ def scoreContest(db, contestID, contestDB)
 end
 
 begin
-  ct = CallsignTools.new
-  if $name and $year and [:load, :score ].include?($action)
+  if $name and $year and [:load, :score, :checkdupes ].include?($action)
     db = makeDB(dbopts)
     cdb = ContestDatabase.new(db, ct)
     contestID = cdb.addOrLookupContest($name, $year, $create)
@@ -235,16 +258,22 @@ begin
   else
     db = nil
     cdb = nil
-    if [:load, :score ].include?($action)
+    if [:load, :score, :checkdupes ].include?($action)
       print "Load and score action require a database.\n"
       exit 2
     end
   end  
   case $action
   when :load, :check
-    loadFiles(ARGV, cdb, contestID)
+    loadFiles(ARGV, cdb, contestID, ct)
   when :score
     scoreContest(db, contestID, cdb)
+  when :checkdupes
+    if cdb and contestID
+      cdb.checkDupeLogs(contestID)
+    else
+      $stderr.write("Check dupes requires a database and contest ID.\n")
+    end
   end
   print "Done...shutting down\n"
   $stdout.flush
