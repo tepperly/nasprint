@@ -2,6 +2,8 @@
 # -*- encoding: utf-8 -*-
 
 require 'set'
+require 'csv'
+require_relative 'logset'
 
 class Log
   WAS = %w(AK AL AR AZ CA CO CT DE FL GA HI IA ID IL IN KS KY LA MA ME MI 
@@ -105,7 +107,25 @@ class Report
     }
   end
 
-  def makeReport(out = $stdout)
+  def toxicLogReport(out = $stdout, contestID)
+    logs = Array.new
+    @db.query("select l.callsign, l.callID, count(*) from Log as l, QSO as q where q.logID = l.id and contestID = ? group by l.id order by l.callsign asc;", [contestID]) { |row|
+      item = Array.new(3)
+      item[0] = row[0]
+      item[1] = row[1].to_i
+      item[2] = row[2].to_i
+      logs << item
+    }
+    csv = CSV.new(out)
+    csv << ["Callsign", "Claimed QSOs", "# in other logs", "# Full", "# Partial", "# NIL", "# Removed" ]
+    logs.each { |l|
+      @db.query("select count(*), sum(matchType = 'Full'), sum(matchType = 'Partial'), sum(matchType = 'NIL'), sum(matchType = 'Removed') from QSO where recvd_callID = ? group by recvd_callID limit 1;", [ l[1] ]) { |row|
+        csv << [ l[0], l[2], row[0], row[1], row[2], row[3], row[4] ]
+      }
+    }
+  end
+
+  def makeReport(out = $stdout, contestID)
     logs = Array.new
     @db.query("select callsign, email, opclass, id from Log where contestID = ? order by callsign asc;", [contestID]) { |row|
       log = Log.new(row[0], row[1], row[2])

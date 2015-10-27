@@ -341,7 +341,7 @@ qso_impossible(VALUE obj, VALUE q)
   struct QSO_t *qsop, *qp;
   GetQSO(obj, qsop);
   GetQSO(q, qp);
-  return ((qp->d_qsoID >= qsop->d_qsoID ) || (qp->d_logID == qsop->d_logID))
+  return ((qp->d_qsoID <= qsop->d_qsoID ) || (qp->d_logID == qsop->d_logID))
     ? Qtrue : Qfalse;
 }
 
@@ -724,7 +724,6 @@ qso_fullmatch(VALUE obj, VALUE qso, VALUE time)
 static int
 toCW(const char *src, char *dest)
 {
-  char c;
   int result = 0;
   const size_t maxIndex = (char)(sizeof(s_CW_MAPPING)/sizeof(char *));
   while (*src) {
@@ -1058,6 +1057,7 @@ qso_ml_match_check(VALUE obj, VALUE qso)
       metrics[2] = 1.0e-3*metrics[2];
       metrics[3] = 1.0e-3*metrics[3];
       metrics[4] = 1.0e-3*metrics[4];
+      if (qso_svm_match(s_svm_model, metrics)) return Qtrue;
     }
   }
   return Qnil;
@@ -1300,4 +1300,5 @@ Init_qsomatch(void)
   rb_define_method(rb_cQSO, "to_s", qso_to_s, -1);
   rb_define_method(rb_cQSO, "fullMatch?", qso_fullmatch, 2);
   rb_define_method(rb_cQSO, "probablyMatch", qso_probablymatch, 1);
+  rb_define_method(rb_cQSO, "svmMatch", qso_ml_match_check, 1);
 }

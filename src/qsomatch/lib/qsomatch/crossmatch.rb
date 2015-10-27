@@ -5,6 +5,7 @@
 #
 
 require_relative 'contestdb'
+require_relative 'logset'
 require 'qsomatch'
 require 'jaro_winkler'
 require 'set'
@@ -35,21 +36,21 @@ end
 
 def lookupQSO(db, id, timeadj=0)
   db.query("select q.logID, q.frequency, q.band, q.fixedMode, q.time, " +
-                 EXCHANGE_FIELD_TYPES.sort.map { |f| "q.sent" + f }.join(", ") + ", " +
-                 EXCHANGE_FIELD_TYPES.sort.map { |f| "q.recvd" + f }.join(", ") + " , " +
-                 EXCHANGE_EXTRA_FIELD_TYPES.sort.map { |f| "qe.sent" + f}.join(", ") + ", " +
-                 EXCHANGE_EXTRA_FIELD_TYPES.sort.map { |f| "qe.recvd" + f}.join(", ") +
-                 " from QSO as q join QSOExtra as qe where q.id = ? and qe.id = ? limit 1;",
+           EXCHANGE_FIELD_TYPES.sort.map { |f| "q.sent" + f }.join(", ") + ", " +
+           EXCHANGE_FIELD_TYPES.sort.map { |f| "q.recvd" + f }.join(", ") + " , " +
+           EXCHANGE_EXTRA_FIELD_TYPES.sort.map { |f| "qe.sent" + f}.join(", ") + ", " +
+           EXCHANGE_EXTRA_FIELD_TYPES.sort.map { |f| "qe.recvd" + f}.join(", ") +
+           " from QSO as q join QSOExtra as qe where q.id = ? and qe.id = ? limit 1;",
            [id, id]) { |row|
-      return QSO.new(id, row[0].to_i, row[1].to_i, row[2], row[3], 
-                     db.toDateTime(row[4])+timeadj,
-                     lookupBase(db,row[5]), row[13], row[8], lookupMult(db, row[7]),
-                     row[14],
-                     lookupBase(db,row[9]), row[15], row[12], lookupMult(db, row[11]),
-                     row[16])
-    }
-    nil
-  end
+    return QSO.new(id, row[0].to_i, row[1].to_i, row[2], row[3], 
+                   db.toDateTime(row[4])+timeadj,
+                   lookupBase(db,row[5]), row[13], row[8], lookupMult(db, row[7]),
+                   row[14],
+                   lookupBase(db,row[9]), row[15], row[12], lookupMult(db, row[11]),
+                   row[16])
+  }
+  nil
+end
 
 
 class Match
@@ -93,49 +94,8 @@ class Match
     ensure
       db.end_transaction
     end
+    return nil
   end
-end
-
-class LogSet
-  def initialize(list)
-    @logs = list.map { |i| i.to_i }
-    @isContiguous, @min, @max = testContiguous
-  end
-
-  def testContiguous
-    sum = 0
-    max = nil
-    min = nil
-    @logs.each { |i|
-      if max.nil? or i > max
-        max = i
-      end
-      if min.nil? or i < min
-        min = i
-      end
-      sum += i
-    }
-    print "testContiguous " + min.to_s + " " + max.to_s + " " + sum.to_s + "\n"
-    return ((not (min.nil? or max.nil?)) and
-            (sum == (max*(max+1)/2 - min*(min-1)/2))), min, max
-    
-  end
-
-  def membertest(id)
-    if @isContiguous
-      return "(" + id + " between " + @min.to_s + " and " + @max.to_s + ")"
-    else
-      if not (@min.nil? or @max.nil?)
-        return "(" + id + " in (" + @logs.join(", ") + "))"
-      else
-        # no logs
-        return "(" + id + " < -10000)"
-      end
-    end
-  end
-
-  attr_reader :logs
-
 end
 
 class CrossMatch
@@ -708,92 +668,27 @@ class CrossMatch
     matches = Array.new
     qsos.each { |q1|
       qsos.each { |q2|
-        break if q1.impossibleMatch?(q2)
-        metric, cp = q1.probablyMatch(q2)
-        if metric > 0.1
-          matches << Match.new(q1, q2, metric, cp)
+        if not q1.impossibleMatch?(q2)
+          if q1.svmMatch(q2)
+            metric, cp = q1.probablyMatch(q2)
+            if metric > 0.1
+              matches << Match.new(q1, q2, metric, cp)
+            end
+          end
         end
       }
     }
     print matches.length.to_s + " potential matches to evaluate\n"
     $stdout.flush
     matches.sort! { |a,b| b <=> a }
-    confirmed = Array.new
-    metrics = Array.new(14)
-    matched = Hash.new
-    open("machine_learning.csv", "w:ascii") { |out|
-      matches.each { |m|
-        q1 = m.q1
-        q2 = m.q2
-        metric = m.metric
-        cp = m.metric2
-        if not matched.include?(q1.id) and not matched.include?(q2.id)
-          greenMatch = greenMatch?(q1, q2, metric, cp)
-          if "Yes" == greenMatch
-            matched[q1.id] = true
-            matched[q2.id] = true
-            confirmed << m
-          end
-          metrics[0] = q1.id
-          metrics[1] = q2.id
-          metrics[2] = (q1.band == q2.band) ? 1 : 0
-          metrics[3] = (q1.mode == q2.mode) ? 1 : 0
-          metrics[4] = (q1.datetime - q2.datetime).abs
-          metrics[5] = (q1.freq - q2.freq).abs
-          metrics[6] = serialMetric(q1.sent_serial, q2.recvd_serial) + serialMetric(q2.sent_serial, q1.recvd_serial)
-          metrics[7] = serialStrMetric(q1, q2)
-          metrics[8] = qthMetric(q1, q2)
-          metrics[9] = locationMetric(q1,q2)
-          metrics[10] = (JaroWinkler.distance(q1.sent_basecall, q2.recvd_basecall) *
-            JaroWinkler.distance(q2.sent_basecall, q1.recvd_basecall))
-          metrics[11] = ((q1.mode == "CW" ? 1 : 0) +
-            (q2.mode == "CW" ? 1 : 0))
-          metrics[12] = cp
-          metrics[13] = greenMatch
-          out.write(metrics.join(",") + "\n")
-        end
-      }
-    }
-    matches = confirmed
     print "Done ranking potential matches: #{Time.now.to_s}\n"
     print matches.length.to_s + " possible matches selected\n"
     $stdout.flush
-    return
-    matches.sort! { |a,b| b <=> a }
     matches.each { |m|
       print m.to_s + "\n"
-      if m.metric >= 0.5 and m.metric2 >= 0.8
-        matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
-        if matchtypes
-          print matchtypes.join(" ") + "\n\n"
-        end
-      else
-        answer = alreadyPaired?(m)
-        if answer
-          if "YES" == answer
-            matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
-            if (matchtypes)
-              print matchtypes.join(" ") + "\n\n"
-            else
-              print "Not a match.\n"
-            end
-          else
-            print "Not a match.\n"
-          end
-        else
-          print "Is this a match (y/n): "
-          answer = STDIN.gets
-          if [ "Y", "YES" ].include?(answer.strip.upcase)
-            matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
-            if matchtypes
-              print matchtypes.join(" ") + "\n\n"
-            end
-            recordPair(m, true)
-          else
-            print "Not a match.\n"
-            recordPair(m, false)
-          end
-        end
+      matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
+      if matchtypes
+        print matchtypes.join(" ") + "\n\n"
       end
     }
   end

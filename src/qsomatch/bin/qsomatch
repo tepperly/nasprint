@@ -27,7 +27,7 @@ $action = nil
 $qrzuser = nil
 $qrzpwd = nil
 $verbose = nil
-ct = CallsignTools.new
+ctl = CallsignTools.new
 
 opts = GetoptLong.new(
                       [ '--new', '-N', GetoptLong::NO_ARGUMENT],
@@ -77,7 +77,7 @@ opts.each { |opt, arg|
   when '--year'
     $year = arg.to_i
   when '--exceptions'
-    ct.addException(arg.split(/[,;:]/))
+    ctl.addException(arg.split(/[,;:]/))
   end
 }
                       
@@ -91,12 +91,12 @@ end
 
 dbopts.merge!(cmddbopts)
 
-def loadFiles(args, cdb, contestID, ct)
+def loadFiles(args, cdb, contestID, ctl)
   args.each { |filename|
     begin
       cab = Cabrillo.new(filename)
       if cab and cdb
-        addLog(cdb, contestID, cab, ct)
+        addLog(cdb, contestID, cab, ctl)
       end
       if $action == :check
         if cab
@@ -205,14 +205,13 @@ def scoreContest(db, contestID, contestDB)
   p1, p2 = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
   print "Basic QSO matches within 24 hours: #{p1+p2}\n"
   $stdout.flush
-#   cm.probMatch
-  print "Calculating clock drift\n"
-  ct = CalcTimeAdj.new(db, contestID)
-  ct.buildVariables
-  ct.buildMatrix
-  return  # warning short circuit end
-  timeviolation = ct.markOutOfContest
-  print "QSOs outside contest time period: #{timeviolation}\n"
+  cm.probMatch
+  # print "Calculating clock drift\n"
+  # ct = CalcTimeAdj.new(db, contestID)
+  # ct.buildVariables
+  # ct.buildMatrix
+  #timeviolation = ct.markOutOfContest
+  # print "QSOs outside contest time period: #{timeviolation}\n"
   $stdout.flush
   num1, num2 = cm.resolveShifted
   print "Time shift resolved #{num1} full and #{num2} partial\n"
@@ -238,7 +237,10 @@ def scoreContest(db, contestID, contestDB)
   r = Report.new(db, contestID)
   print "Making report\n"
   open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
-    r.makeReport(out)
+    r.makeReport(out, contestID)
+  }
+  open("toxic_" + $name.gsub(/\s+/,'_') + "_" + $year.to_s + ".csv", "w:ascii") { |out|
+    r.toxicLogReport(out, contestID)
   }
   print "Dumping logs\n"
   dumpLogs(db, contestID)
@@ -248,7 +250,7 @@ end
 begin
   if $name and $year and [:load, :score, :checkdupes ].include?($action)
     db = makeDB(dbopts)
-    cdb = ContestDatabase.new(db, ct)
+    cdb = ContestDatabase.new(db, ctl)
     contestID = cdb.addOrLookupContest($name, $year, $create)
     if not contestID
       print "Unknown contest #{$name} #{$year}\n"
@@ -265,7 +267,7 @@ begin
   end  
   case $action
   when :load, :check
-    loadFiles(ARGV, cdb, contestID, ct)
+    loadFiles(ARGV, cdb, contestID, ctl)
   when :score
     scoreContest(db, contestID, cdb)
   when :checkdupes

@@ -2,12 +2,13 @@
 # -*- encoding: utf-8 -*-
 require 'nokogiri'
 require_relative 'qrzdb'
+require_relative 'logset'
 
 class Multiplier
   def initialize(db, contestID, cdb)
     @db = db
     @contestID = contestID
-    @logs = cdb.logsForContest(contestID)
+    @logs = LogSet.new(cdb.logsForContest(contestID))
     @callDB = readXMLDb
     lookupStates
   end
@@ -32,6 +33,35 @@ class Multiplier
     nil
   end
 
+  def callLocation(callsign)
+    county = nil
+    state = nil
+    begin
+      if @callDB.has_key?(callsign) and File.readable?(@callDB[callsign])
+        filename = @callDB[callsign]
+      elsif File.readable?("xml_db/" + callsign.upcase.gsub(/[^a-z0-9]/i,"_") +
+                           ".xml")
+        filename = "xml_db/" + callsign.upcase.gsub(/[^a-z0-9]/i,"_") +
+                           ".xml"
+      else
+        filename = nil
+      end
+      if (filename) 
+        open(filename, "r:iso8859-1:utf-8") { |io|
+          xml = Nokogiri::XML(io)
+          xml.path("//qrz:Callsign/qrz:county", XML_NAMESPACE).each { |match|
+            county = match.text.strip
+          }
+          xml.path("//qrz:Callsign/qrz:state", XML_NAMESPACE).each { |match|
+            state = match.text.strip
+          }
+        }
+      end
+    rescue
+    end
+    return state, county
+  end
+
   def checkOverride(call)
     @db.query("select entityID from Overrides where contestID = ? and callsign = ? limit 1;",
               [@contestID, call]) { |row|
@@ -41,8 +71,7 @@ class Multiplier
   end
 
   def resolveDX
-    @db.query("select distinct c.id, c.basecall from QSO as q, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye') and m.abbrev='DX' and c.id = q.recvd_callID and m.entityID is null and m.id = q.recvd_multiplierID and q.logID in (?);",
-                    [@logs]) { |row|
+    @db.query("select distinct c.id, c.basecall from QSO as q, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye') and m.abbrev='DX' and c.id = q.recvd_callID and m.entityID is null and m.id = q.recvd_multiplierID and #{@logs.membertest("q.logID")};") { |row|
       entity = checkOverride(row[1])
       override = entity
       if not entity and @callDB.has_key?(row[1])
@@ -124,8 +153,13 @@ class Multiplier
     nil
   end
 
-  def askUser(list)
+  def askUser(callsign,list)
     list = list.sort { |x,y| y[2] <=> x[2] }
+    print "Possible locations for callsign: #{callsign}\n"
+    state, county = callLocation(callsign)
+    if state and county
+      print "State: #{state}   County: #{county}\n"
+    end
     list.each { |item|
       print "ID #{item[0]} #{item[1]} #{item[2]}\n"
     }
@@ -147,19 +181,20 @@ class Multiplier
       qlist << row[0].to_i
     }
     if not qlist.empty?
-      @db.query("update QSO set matchType='Removed', comment='Location mismatch ' + ' where id in (?);",
-                [name,qlist]) { }
+      @db.query("update QSOExtra set comment='Location mismatch ' + ? where id in (#{qlist.join(", ")});",
+                [name]) { }
+      @db.query("update QSO set matchType='Removed' where id in (#{qlist.join(", ")});") { }
       return @db.affected_rows
     end
     0
   end
   
 
-  def resolveAmbiguous(id, res)
+  def resolveAmbiguous(id, res, callsign)
     list, total = toArray(res)
     choice, name = twoThirdsMajority(list, total)
     if not choice
-      choice, name = askUser(list)
+      choice, name = askUser(callsign,list)
     end
     if choice
       return markDiscentingQSOasRemoved(id, choice, name)
@@ -170,12 +205,11 @@ class Multiplier
   def checkByeMultipliers
     print "Checking Bye multipliers\n"
     count = 0
-    @db.query("select c.id, c.basecall, count(*) as numQ from Callsign as c, QSO as q where q.logID in (?) and q.matchType = 'Bye' and c.id = q.recvd_callID group by c.id having numQ > 1;",
-              [@logs]) { |row|
+    @db.query("select c.id, c.basecall, count(*) as numQ from Callsign as c, QSO as q where #{@logs.membertest("q.logID")} and q.matchType = 'Bye' and c.id = q.recvd_callID group by c.id having numQ > 1;") { |row|
       multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=? and q.recvd_multiplierID=m.id and q.matchType = 'Bye' group by m.id;",
                           [row[0]])
       if multres.count > 1
-        count = count + resolveAmbiguous(row[0], multres)
+        count = count + resolveAmbiguous(row[0], multres, row[1])
       end
       multres = nil
     }

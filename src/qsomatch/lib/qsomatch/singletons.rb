@@ -23,6 +23,7 @@ end
 class ResolveSingletons
   def initialize(db, contestID, cdb)
     @db = db
+    @cdb = cdb
     @contestID = contestID
     @logIDs = LogSet.new(cdb.logsForContest(contestID))
     @callsigns = queryCallsigns
@@ -129,18 +130,74 @@ class ResolveSingletons
       end
     }
   end
+  
+  MATCHTYPE_ORDERING = {
+    'Full' => 0,
+    'Bye' => 1,
+    'Partial' => 2,
+    'Dupe' => 3,
+    'OutsideContest' => 4,
+    'Removed' => 5,
+    'TimeShiftFull' => 6,
+    'TimeShiftPartial' => 7,
+    'Unique' => 8,
+    'NIL' => 9,
+    'None' => 10
+  }.freeze
+
+  def retainMostValuable(callID, band, mode, logID)
+    print "Log #{@cdb.logCallsign(logID)} has a DUPE\n"
+    qsos = Array.new
+    @db.query("select id, matchType, time from QSO where " +
+              "logID = ? and band = ? and fixedMode = ? and " +
+              "recvd_callID = ? " +
+              "order by time asc, id asc;", [logID, band, mode, callID] ) { |row|
+      qsos << [ row[0].to_i, row[1], @db.toDateTime(row[2]) ]
+    }
+    qsos.each { |q|
+      print lookupQSO(@db, q[0]).to_s + "\n"
+    }
+    if (qsos.length > 1)
+      qsos.sort! { |x,y| 
+        t = (MATCHTYPE_ORDERING[x[1]] <=> MATCHTYPE_ORDERING[y[1]])
+        if (t == 0)
+          t = (x[2] <=> y[2])
+          if (t == 0)
+            t = (x[0] <=> y[0])
+          end
+        end
+        t
+      }
+      # the first element of qsos is the most valuable
+      # the following should be turned into dupes
+      qsos.shift  # remove the first element to prevent marking it as a dupe
+      print "update QSO set matchType = 'Dupe' where id in (" +
+                qsos.map { |i| i[0] }.join(", ") +
+                ") limit #{qsos.length};\n"
+      @db.query("update QSO set matchType = 'Dupe' where id in (" +
+                qsos.map { |i| i[0] }.join(", ") +
+                ") limit #{qsos.length};")
+      ar = @db.affected_rows
+      print "Rows affected: #{ar}\n"
+      return ar
+    end
+    0
+  end
 
   def finalDupeCheck
     print "Starting final dupe check: #{Time.now.to_s}\n"
     count = 0
-    @db.query("select q1.id, q2.id from QSO as q1, QSO as q2 where " +
-                    @logIDs.membertest("q1.logID") + " and " +
-                    @logIDs.membertest("q2.logID") +
-              " and q1.id < q2.id and q1.logID = q2.logID and q1.matchType in ('Full','Bye') and q2.matchType in ('Full','Bye') and q1.band = q2.band and q1.recvd_callID = q2.recvd_callID order by q1.id;") { |row|
-      @db.query("update QSO set matchType = 'Dupe' where id = ? and matchType in ('Full','Bye') limit 1;", [row[1]]) { }
-      count = count + @db.affected_rows
+    @db.query("select min(q1.id), q1.recvd_callID, q1.band, q1.fixedMode, q1.logID, " + 
+              "count(*) as numDupe from QSO as q1, QSO as q2 where " +
+              @logIDs.membertest("q1.logID") + " and " + @logIDs.membertest("q2.logID") + 
+              " and q1.logID = q2.logID and q1.matchType in ('Full','Bye', 'Partial') and " +
+              "q2.matchType in ('Full','Bye','Partial') and q1.band = q2.band and " +
+              "q1.fixedMode = q2.fixedMode and q1.recvd_callID = q2.recvd_callID and " +
+              "q1.id < q2.id  group by q1.logID, q1.recvd_callID, q1.band, q1.fixedMode having numDupe > 1 " +
+              "order by q1.logID asc;") { |row|
+      count += retainMostValuable(row[1], row[2], row[3], row[4])
     }
-    print "Done final dupe check: #{Time.now.to_s}\n"
+    print "Done final dupe check (#{count} maked as dupes): #{Time.now.to_s}\n"
     count
   end
 end
