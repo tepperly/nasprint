@@ -33,6 +33,10 @@ class DatabaseSQLite
     1
   end
 
+  def false
+    0
+  end
+
   def formattime(time)
     time.strftime("%Y-%m-%dT%H:%M:%SZ")
   end

@@ -6,16 +6,13 @@ require 'csv'
 require_relative 'logset'
 
 class Log
-  WAS = %w(AK AL AR AZ CA CO CT DE FL GA HI IA ID IL IN KS KY LA MA ME MI 
-           MN MO MS MT NC ND NE NH NJ NM NV NY OH OK OR PA RI SC SD TN TX 
-           UT VA VT WA WI WV WY ).freeze
-
   def initialize(call, email, opclass)
     @call = call
     @email = email
     @opclass = opclass
     @numFull = 0
     @numBye = 0
+    @numPartialBye = 0
     @numUnique = 0
     @numDupe = 0
     @numPartial = 0
@@ -40,20 +37,11 @@ class Log
   end
 
   def numqsos
-    @numFull+@numBye-@numNIL
+    @numFull+@numBye+@numPartialBye/2-@numNIL
   end
 
   def nummultipliers
     @multipliers.size
-  end
-
-  def was?
-    WAS.each { |state| 
-      if not @multipliers.include?(state)
-        return false
-      end
-    }
-    return (@multipliers.include?("MD") or @multipliers.include?("DC"))
   end
 
   def score
@@ -61,7 +49,7 @@ class Log
   end
 
   def to_s
-    "\"#{@call}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",#{@numFull},#{@numBye},#{@numUnique},#{@numDupe},#{@numPartial+@numRemoved},#{@numNIL},#{@numOutsideContest},#{was? ? 1 : 0},#{@numFull+@numBye-@numNIL},#{@multipliers.size},#{(@numFull+@numBye-@numNIL)*@multipliers.size},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",#{@numFull},#{@numBye},#{@numPartial+@numPartialBye},#{@numUnique},#{@numDupe},#{@numPartial+@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numFull+@numBye+@numPartialBye/2-@numNIL},#{@multipliers.size},#{(@numFull+@numBye+@numPartialBye/2-@numNIL)*@multipliers.size},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -98,10 +86,11 @@ class Report
     end
   end
 
+  MULTIPLIER_CREDIT = Set.new(%w( Full Partial Bye PartialBye)).freeze
   def scoreLog(id, log)
     @db.query("select q.matchType, q.id from QSO as q where q.logID = ? order by q.time asc;", [id]) { |row|
       log.incCount(row[0])
-      if ["Full", "Bye"].include?(row[0]) # QSO counts for credit
+      if MULTIPLIER_CREDIT.include?(row[0]) # QSO counts for credit
         addMultiplier(log, row[1])
       end
     }

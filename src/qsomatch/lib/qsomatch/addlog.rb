@@ -1,12 +1,41 @@
 #!/usr/bin/env ruby
 # -*- encoding: utf-8 -*-
 require_relative 'callsign'
+require 'set'
 
 def calcOpClass(cab)
-  if (cab.logOperator != "SINGLE-OP") # or (cab.logAssisted == "ASSISTED")
-    return "CHECKLOG"
+  cab.cqpOpClass
+end
+
+def calcPowClass(cab)
+  cab.logPower
+end
+
+def numFromString(callsign, str)
+  if str
+    opset = Set.new
+    str.split.each { |op|
+      if op =~ /\A([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?)?\Z/i
+        opset << op
+      else
+        if not op.start_with?("@")
+          $stderr.write("Strange operator #{op} in log #{callsign}\n")
+        end
+      end
+    }
+    return [1, opset.length].max
+  end
+  1
+end
+
+def calcNumOps(opclass, cab)
+  if opclass.start_with?("SINGLE")
+    if numFromString(cab.logCall, cab.normalizeOps) != 1
+      $stderr.write("Mismatch for #{cab.logCall} between operator class (#{opclass}) and operator line: #{cab.normalizeOps}\n")
+    end
+    return 1
   else
-    return cab.logPower
+    return numFromString(cab.logCall, cab.normalizeOps)
   end
 end
 
@@ -72,9 +101,11 @@ def addLog(db, cID, cab, ct)
       basecall = ct.callBase(cab.logcall)
       bcID = db.addOrLookupCall(basecall, cID)
       db.markReceived(bcID)
+      opclass = calcOpClass(cab)
       logID = db.addLog(cID, cab.logcall, bcID, cab.logEmail,
-                        calcOpClass(cab),
-                        multID, entID, cab.name, cab.club)
+                        calcPowClass(cab),
+                        opclass,
+                        multID, entID, cab.name, cab.club, calcNumOps(opclass,cab))
       addQSOs(db, cID, logID, cab.qsos)
     else
       print "!!Can't add a log for #{cab.logcall} with no location\n"

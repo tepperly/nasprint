@@ -21,10 +21,10 @@ def addToDb(db, xml, filename)
       db[call] = filename
     }
   }
-  xml.xpath("//qrz:Callsign/qrz:Session/qrz:Error", XML_NAMESPACE).each { |match|
+  xml.xpath("//qrz:Session/qrz:Error", XML_NAMESPACE).each { |match|
     if match.text.strip.start_with?("Not found")
       found = false
-      db[call] = false
+#      db[call] = false
     end
   }
   return found
@@ -56,7 +56,7 @@ def lookupCall(qrz, db, call)
         str.encode!(Encoding::ISO_8859_1, :undef => :replace)
         out.write(str)
       }
-      return addToDb(db, xml, "xml_db/#{call}.xml")
+      return addToDb(db, xml, "xml_db/#{xmlFilename(call)}")
     else
       print "Lookup failed: #{call}\n"
       return false

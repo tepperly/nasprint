@@ -677,7 +677,27 @@ class Cabrillo
   end
 
   def normalizeOps
-    @operators.split(/\s*,\s*|\s+/).join(" ")
+    @operators ? @operators.split(/\s*,\s*|\s+/).join(" ") : ""
+  end
+
+  def classFromCat(cat)
+    case cat.numop
+    when :single
+      return cat.assisted ? "SINGLE_ASSISTED" : "SINGLE"
+    when :multi
+      return (cat.numtrans == :one) ? "MULTI_SINGLE" : "MULTI_MULTI"
+    end
+    "CHECKLOG"
+  end
+
+  def cqpOpClass
+    if @dbCat.numop
+      return classFromCat(@dbCat)
+    end
+    if @logCat.numop
+      return classFromCat(@logCat)
+    end
+    "CHECKLOG"
   end
 
   def logOperator

@@ -41,6 +41,10 @@ class DatabaseMysql
     "TRUE"
   end
 
+  def false
+    "FALSE"
+  end
+
   def close
     @db.close
   end

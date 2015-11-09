@@ -118,18 +118,19 @@ class ContestDatabase
   end
 
   def createMultiplierTable
-    @db.query("create table if not exists Multiplier (id integer primary key #{@db.autoincrement}, abbrev char(4) not null unique, wasstate char(2), entityID integer, ismultiplier bool);") { }
+    @db.query("create table if not exists Multiplier (id integer primary key #{@db.autoincrement}, abbrev char(4) not null unique, wasstate char(2), entityID integer, ismultiplier bool not null default #{@db.false}, isCA bool not null default #{@db.false});") { }
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii") { |row|
       begin
         if row[0] == row[1]
           entity = row[2].to_i
+          abbrev = row[1].strip.upcase
           if entity > 0
-            @db.query("insert into Multiplier (abbrev, entityID, wasstate, ismultiplier) values (?, ?, ?, #{@db.true});",
-                      [row[1].strip.upcase, entity, row[3]]) { }
+            @db.query("insert into Multiplier (abbrev, entityID, wasstate, ismultiplier, isCA) values (?, ?, ?, #{@db.true}, #{(abbrev.length == 4 and abbrev != "XXXX") ? @db.true : @db.false});",
+                      [abbrev, entity, row[3]]) { }
           else
             # DX gets a null for entityID and ismultiplier
             @db.query("insert into Multiplier (abbrev) values (?);",
-                      [row[1].strip.upcase ]) { }
+                      [abbrev ]) { }
           end
         end
       rescue Mysql2::Error => e
@@ -174,9 +175,9 @@ class ContestDatabase
     @db.query("create table if not exists Callsign (id integer primary key #{@db.autoincrement}, contestID integer not null, basecall varchar(#{CHARS_PER_CALL}) not null, logrecvd bool, validcall bool);") { }
     @db.query("create index if not exists bcind on Callsign (contestID, basecall);") { }
     if @db.has_enum?
-      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, opclass enum('CHECKLOG', 'QRP', 'LOW', 'HIGH'), verifiedscore integer, verifiedQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, name varchar(128), club varchar(128));") { }
+      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass enum('QRP', 'LOW', 'HIGH'), opclass enum('CHECKLOG', 'SINGLE', 'SINGLE_ASSISTED', 'MULTI_SINGLE', 'MULTI_MULTI'), numops int, verifiedscore integer, verifiedQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, name varchar(128), club varchar(128));") { }
     else
-      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, opclass char(7), verifiedscore integer, verifiedQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, name varchar(128), club varchar(128));") { }
+      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass char(7), opclass char(15), numops int, verifiedscore integer, verifiedQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, name varchar(128), club varchar(128));") { }
     end
     @db.query("create index if not exists callind on Log (callsign);") { }
     @db.query("create index if not exists contestind on Log (contestID);") { }
@@ -211,13 +212,13 @@ class ContestDatabase
       @db.query("create table if not exists QSO (id integer primary key #{@db.autoincrement}, logID integer not null, frequency integer, band enum('241G','142G','119G','75G','47G','24G','10G','5.7G','3.4G','2.3G','1.2G','902','432','222','2m','6m','10m','15m','20m', '40m', '80m','160m', 'unknown') default 'unknown', fixedMode enum('PH', 'CW', 'FM', 'RY'), time datetime, " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "sent") + ", " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "recvd") +
-                ", matchID integer, matchType enum('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None');") { }
+                ", judged_multiplierID integer, judged_band enum('241G','142G','119G','75G','47G','24G','10G','5.7G','3.4G','2.3G','1.2G','902','432','222','2m','6m','10m','15m','20m', '40m', '80m','160m', 'unknown'), judged_mode enum('PH', 'CW', 'FM', 'RY') , matchID integer, matchType enum('None','Full','Bye', 'PartialBye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None');") { }
       @db.query("create table if not exists QSOGreen (id integer primary key, logID integer not null, status enum('Automatic', 'Unscored', 'Manual', 'Override', 'BadDupe') not null default 'Unscored', score enum('Bye', 'FullMatch', 'MatchZero', 'MatchOne', 'MatchTwo', 'Dupe', 'Unscored') not null default 'Unscored',  uniqueQSO bool not null default false, correctQTH char(4),  correctNum integer, correctMode enum('CW', 'PH'),  correctBand char(4), correctCall varchar(14), NILqso bool not null default false, isDUPE bool not null default false, comment varchar(100));") { }
     else
       @db.query("create table if not exists QSO (id integer primary key #{@db.autoincrement}, logID integer not null, frequency integer, band char(7) default 'unknown', fixedMode char(2), time datetime, " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "sent") + ", " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "recvd") +
-                ", matchID integer, matchType char(17) not null default 'None');") { }
+                ", judged_multiplierID integer, judged_band char(7), judged_mode char(2), matchID integer, matchType char(17) not null default 'None');") { }
       @db.query("create table if not exists QSOGreen (id integer primary key, logID integer not null, status char(9) not null default 'Unscored', score char(9) not null default 'Unscored', uniqueQSO bool not null default false, correctQTH char(4), correctNum integer, correctMode char(2), correctBand char(4), correctCall varchar(14), NILqso bool not null default false, isDUPE bool not null default false, comment varchar(100));") { }
     end
     @db.query("create index if not exists matchind on QSO (matchType);") { }
@@ -227,6 +228,7 @@ class ContestDatabase
     @db.query("create index if not exists modeind on QSO (fixedMode);") { }
     @db.query("create index if not exists sent_multind on QSO (sent_multiplierID);") { }
     @db.query("create index if not exists recvd_multind on QSO (recvd_multiplierID);") { }
+    @db.query("create index if not exists judged_ind on QSO (judged_multiplierID);") { }
     @db.query("create index if not exists sent_callind on QSO (sent_callID);") { }
     @db.query("create index if not exists recvd_callind on QSO (recvd_callID);") { }
     @db.query("create table if not exists QSOExtra (id integer primary key #{@db.autoincrement}, logID integer not null, mode char(6), transmitterNum integer, comment varchar(256), " +
@@ -309,16 +311,19 @@ class ContestDatabase
     @db.query("update Callsign set logrecvd = 1 where id = ? limit 1;", [callID.to_i]) { }
   end
 
-  def addLog(contID, callsign, callID, email, opclass, multID, entID, name, club)
-    @db.query("insert into Log (contestID, callsign, callID, email, opclass, multiplierID, entityID, name, club) values (?, ?, ?, ?, ?, ?, ?, ?, ?);",
-              [contID.to_i, capOrNull(callsign), callID.to_i, email, opclass, multID.to_i,
-                numOrNull(entID), name, club]) { }
+  def addLog(contID, callsign, callID, email, powclass, opclass, multID, entID, name, club, numops)
+    @db.query("insert into Log (contestID, callsign, callID, email, powclass, opclass, multiplierID, entityID, name, club, numops) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+              [contID.to_i, capOrNull(callsign), callID.to_i, email, powclass, 
+               opclass, multID.to_i, numOrNull(entID), name, club, numops]) { }
 
     return @db.last_id
   end
 
   def lookupMultiplier(str)
     @db.query("select id, entityID from Multiplier where abbrev = ? limit 1;", [ capOrNull(str)] ) { |row|
+      return row[0].to_i, (row[1].nil? ? nil : row[1].to_i)
+    }
+    @db.query("select multiplierID, entityID from MultiplierAlias where abbrev = ? limit 1;", [ capOrNull(str) ]) { |row|
       return row[0].to_i, (row[1].nil? ? nil : row[1].to_i)
     }
     return nil, nil
@@ -588,10 +593,10 @@ class ContestDatabase
   end
   
   def logInfo(logID)
-    @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedqsos, l.verifiedMultipliers, l.verifiedscore, l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = ? limit 1;",
+    @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedqsos, l.verifiedMultipliers, l.verifiedscore, l.powclass l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = ? limit 1;",
               [ logID ]) { |row|
       name = firstName(row[1])
-      return row[0], name, row[2], row[3], lookupTeam(row[8], logID), row[4], row[5], row[6], row[7], numStates(logID)
+      return row[0], name, row[2], row[3], lookupTeam(row[9], logID), row[4], row[5], row[6], row[7], row[8], numStates(logID)
     }
     return nil
   end

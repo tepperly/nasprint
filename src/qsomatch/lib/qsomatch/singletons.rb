@@ -37,12 +37,10 @@ class ResolveSingletons
     (val and (val.to_i != 0))
   end
 
-  ONE_BY_ONE = /\A[A-Z][0-9][A-Z]\Z/
-
   def queryCallsigns
     callList = Array.new
     @db.query("select c.id, c.basecall, c.validcall, c.logrecvd, count(*) as num from Callsign as c, QSO as q where c.contestID = ? and q.recvd_callID = c.id group by c.id order by c.basecall asc;", [@contestID]) { |row|
-      callList << Call.new(row[0].to_i, row[1], (toBool(row[2]) or ONE_BY_ONE.match(row[1])), toBool(row[3]), row[4].to_i)
+      callList << Call.new(row[0].to_i, row[1], toBool(row[2]), toBool(row[3]), row[4].to_i)
     }
     return callList
   end
@@ -88,7 +86,7 @@ class ResolveSingletons
   def resolve
     @db.query("select distinct q.id from QSO as q where matchType = 'None' and (q.recvd_multiplierID is null or q.recvd_serial is null);") { |row|
       @db.query("update QSO set matchType = 'Removed'  where id = ? limit 1;", [row[0]]) { }
-      @db.query("update QSOExtra set comment='Incomplete exchanged received.' where id = ? limit 1;", [row[0]]) { }
+      @db.query("update QSOExtra set comment='No received serial number or multiplier for this QSO.' where id = ? limit 1;", [row[0]]) { }
     }
     @db.query("select q.id, q.recvd_callID, q.recvd_serial from QSO as q where " +
                     @logIDs.membertest("q.logID") +
@@ -135,14 +133,15 @@ class ResolveSingletons
     'Full' => 0,
     'Bye' => 1,
     'Partial' => 2,
-    'Dupe' => 3,
-    'OutsideContest' => 4,
-    'Removed' => 5,
-    'TimeShiftFull' => 6,
-    'TimeShiftPartial' => 7,
-    'Unique' => 8,
-    'NIL' => 9,
-    'None' => 10
+    'PartialBye' => 3,
+    'Dupe' => 4,
+    'OutsideContest' => 5,
+    'Removed' => 6,
+    'TimeShiftFull' => 7,
+    'TimeShiftPartial' => 8,
+    'Unique' => 9,
+    'NIL' => 10,
+    'None' => 11
   }.freeze
 
   def retainMostValuable(callID, band, mode, logID)
@@ -190,10 +189,14 @@ class ResolveSingletons
     @db.query("select min(q1.id), q1.recvd_callID, q1.band, q1.fixedMode, q1.logID, " + 
               "count(*) as numDupe from QSO as q1, QSO as q2 where " +
               @logIDs.membertest("q1.logID") + " and " + @logIDs.membertest("q2.logID") + 
-              " and q1.logID = q2.logID and q1.matchType in ('Full','Bye', 'Partial') and " +
-              "q2.matchType in ('Full','Bye','Partial') and q1.band = q2.band and " +
+              " and q1.logID = q2.logID and q1.matchType in ('Full','Bye', 'Partial', 'PartialBye') and " +
+              "q2.matchType in ('Full','Bye','Partial', 'PartialBye') and q1.band = q2.band and " +
               "q1.fixedMode = q2.fixedMode and q1.recvd_callID = q2.recvd_callID and " +
-              "q1.id < q2.id  group by q1.logID, q1.recvd_callID, q1.band, q1.fixedMode having numDupe > 1 " +
+              "q1.id < q2.id  and " +
+              " q1.sent_multiplierID = q2.sent_multiplierID and " +
+              " q1.judged_multiplierID = q2.judged_multiplierID " +
+              "group by q1.logID, q1.sent_multiplierID, q1.recvd_callID, " +
+              " q1.judged_multiplierID, q1.band, q1.fixedMode having numDupe > 1 " +
               "order by q1.logID asc;") { |row|
       count += retainMostValuable(row[1], row[2], row[3], row[4])
     }

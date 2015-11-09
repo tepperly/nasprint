@@ -99,8 +99,9 @@ class Match
 end
 
 class CrossMatch
+  NOBANDMODE_TIME_MATCH = 5     # in minutes
   PERFECT_TIME_MATCH = 15       # in minutes
-  MAXIMUM_TIME_MATCH = 24*60    # one day in minutes
+  MAXIMUM_TIME_MATCH = 30*60    # 30 hours in minutes
 
   def initialize(db, contestID, cdb)
     @db = db
@@ -112,7 +113,7 @@ class CrossMatch
   def restartMatch
     begin
       @db.begin_transaction
-      @db.query("update QSO set matchID = NULL, matchType = 'None' where #{@logs.membertest("logID")};") { }
+      @db.query("update QSO set matchID = NULL, matchType = 'None', judged_multiplierID = NULL, judged_band = NULL, judged_mode = NULL where #{@logs.membertest("logID")};") { }
       @db.query("update QSOExtra set comment = NULL where #{@logs.membertest("logID")};") { }
       @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where #{@logs.membertest("id")};") { }
     ensure
@@ -148,13 +149,16 @@ class CrossMatch
       ") and (" + s2 + " + " + range.to_s + "))"
   end
 
-  def exchangeExactMatch(e1, e2)
-    return e1 + "_callID = " + e2 + "_callID and " +
-      e1 + "_multiplierID = " + e2 + "_multiplierID"
+  def exchangeExactMatch(recvd, sent)
+    return " (" + recvd + "_callID = " + sent + "_callID and (" +
+      recvd + "_multiplierID = " + sent + "_multiplierID or " +
+      sent + "_multiplierID is null)) "
   end
 
-  def exchangeMatch(e1, e2)
-    return serialCmp(e1 + "_serial", e2 + "_serial", 1)
+  def exchangeMatch(recvd, sent)
+    return "((" +
+      serialCmp(recvd + "_serial", sent + "_serial", 1) + ") or " +
+      sent + "_serial is null)"
   end
 
   def qsoFromDBRow(row, qsos = Array.new)
@@ -202,6 +206,7 @@ class CrossMatch
   def linkQSOs(queryStr, match1, match2, quiet=true)
     count1 = 0
     count2 = 0
+    dupeCount = 0
     if not quiet
       print "linkQSOs #{match1} #{match2}\n"
     end
@@ -223,6 +228,7 @@ class CrossMatch
         end
         if not found
           @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i]) { }
+          dupeCount += @db.affected_rows
         end
       ensure
         @db.end_transaction
@@ -231,22 +237,42 @@ class CrossMatch
         printDupeMatch(row[0].to_i, row[1].to_i)
       end
     }
-    return count1, count2
+    return count1, count2, dupeCount
+  end
+
+  def modeBandDesc(setting)
+    case setting
+    when :perfect
+      return ""
+    when :one
+      return "requiring band or mode to match"
+    else
+      return "without requiring band or mode to match"
+    end
+  end
+
+  def modeBandMatch(q1, q2, setting)
+    case setting
+    when :perfect
+      return qsoExactMatch(q1, q2)
+    when :one
+      return qsoInexactMatch(q1, q2)
+    end
+    return @db.true.to_s
   end
 
   def perfectMatch(timediff = PERFECT_TIME_MATCH, 
                    matchType="Full",
-                   modeAndBand=true)
-    print "Staring perfect match #{modeAndBand ? "" : " allowing band or mode mismatch "}(#{timediff} minute tolerance): #{Time.now.to_s}\n"
+                   modeAndBand=:perfect)
+    print "Staring perfect match #{modeBandDesc(modeAndBand)}(#{timediff} minute tolerance): #{Time.now.to_s}\n"
     queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 " +
       " on (" +  exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
       exchangeExactMatch("q2.recvd", "q1.sent") + " and " +
-      (modeAndBand ? qsoExactMatch("q1", "q2") :
-       qsoInexactMatch("q1", "q2")) +
+      modeBandMatch("q1", "q2", modeAndBand)  +
       ") where " +
       @logs.membertest("q1.logID") + " and " +
       @logs.membertest("q2.logID") + " and " +
-      "q1.logID != q2.logID and q1.id < q2.id and " +
+      "q1.logID != q2.logID and q1.id < q2.id and "  +
       exchangeMatch("q1.recvd", "q2.sent") + " and " +
       exchangeMatch("q2.recvd", "q1.sent") + " and " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
@@ -261,20 +287,19 @@ class CrossMatch
       }
     end
     $stdout.flush
-    num1, num2 = linkQSOs(queryStr, matchType, matchType, true)
+    num1, num2, dupeCount = linkQSOs(queryStr, matchType, matchType, true)
     num1 = num1 + num2
     print "Ending perfect match test: #{Time.now.to_s}\n"
-    return num1
+    return num1, dupeCount
   end
 
   def partialMatch(timediff = PERFECT_TIME_MATCH, 
                    fullType="Full",  
                    partialType="Partial",
-                   modeAndBand = true)
+                   modeAndBand = :perfect)
     queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 on (" +
       exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
-      (modeAndBand ? qsoExactMatch("q1", "q2") :
-       qsoInexactMatch("q1", "q2")) + 
+      modeBandMatch("q1", "q2", modeAndBand) +
       " and q2.recvd_callID = q1.sent_callID ) " +
       "where " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
@@ -286,7 +311,7 @@ class CrossMatch
       " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(" +
       @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
-    print "Partial match test #{modeAndBand ? "" : " allowing band or mode mismatch "}(#{timediff} min tolerance): #{Time.now.to_s}\n"
+    print "Partial match test #{modeBandDesc(modeAndBand)}(#{timediff} min tolerance): #{Time.now.to_s}\n"
     print queryStr + "\n"
     if $explain
       @db.query("explain " + queryStr) { |row|
@@ -294,9 +319,9 @@ class CrossMatch
       }
     end
     $stdout.flush
-    full1, partial1 = linkQSOs(queryStr, fullType, partialType, true)
+    full1, partial1, dupeCount = linkQSOs(queryStr, fullType, partialType, true)
     print "Partial match end: #{Time.now.to_s}\n"
-    return full1, partial1
+    return full1, partial1, dupeCount
   end
 
 
@@ -361,25 +386,24 @@ class CrossMatch
 
 
   def basicMatch(timediff = PERFECT_TIME_MATCH,
-                 modeAndBand = true)
+                 modeAndBand = :perfect)
     queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2 where " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
       @logs.membertest("q1.logID") + " and " +
       @logs.membertest("q2.logID") + " and " +
       "q1.logID < q2.logID " +
       " and " + qsoMatch("q1", "q2", timediff) + " and " +
-      (modeAndBand ? qsoExactMatch("q1", "q2") :
-       qsoInexactMatch("q1", "q2")) +  " and " +
+      modeBandMatch("q1", "q2", modeAndBand) + " and " +
       " q1.sent_callID = q2.recvd_callID and q2.sent_callID = q1.recvd_callID " +
       " order by abs(" +
       @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc, " +
       " (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc;"
-    print "Basic match test phase #{modeAndBand ? "" : " allowing band or mode mismatch "}(#{timediff} min tolerance): #{Time.now.to_s}\n"
+    print "Basic match test phase #{modeBandDesc(modeAndBand)}(#{timediff} min tolerance): #{Time.now.to_s}\n"
     print queryStr + "\n"
     $stdout.flush
-    num1, num2 = linkQSOs(queryStr, 'Partial', 'Partial', true)
+    num1, num2, dupeCount = linkQSOs(queryStr, 'Partial', 'Partial', true)
     print "Basic match end: #{Time.now.to_s}\n"
-    return num1, num2
+    return num1, num2, dupeCount
   end
 
   def hillFunc(quantity, fullrange, zerorange)

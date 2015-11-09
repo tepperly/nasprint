@@ -32,7 +32,7 @@ class LCR
     @cdb = contestDB
     @contestName = name
     @contestYear = year
-    @callsign, @name, @location, @dxprefix, @team, @verifiedQSOs, @verifiedMultipliers, @verifiedScore, @opclass, @numStates = @cdb.logInfo(logID)
+    @callsign, @name, @location, @dxprefix, @team, @verifiedQSOs, @verifiedMultipliers, @verifiedScore, @powclass, @opclass, @numStates = @cdb.logInfo(logID)
     @filename = filename
     @out = out
   end

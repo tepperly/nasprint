@@ -2,6 +2,7 @@
 
 require 'getoptlong'
 require 'database'
+require 'bandmode'
 require 'contestdb'
 require 'callsign'
 require 'addlog'
@@ -14,6 +15,7 @@ require 'multiplier'
 require 'report'
 require 'errors'
 require 'dumplog'
+require 'json'
 
 
 $year = nil
@@ -131,6 +133,16 @@ def loadFiles(args, cdb, contestID, ctl)
   end
 end
 
+class AllIncluded
+  def include?(str)
+    true
+  end
+
+  def useQRZ?
+    true
+  end
+end
+
 def checkCallsigns(db, cid, user, pwd)
   if user and pwd
     qrz = QRZLookup.new(user, pwd)
@@ -138,18 +150,36 @@ def checkCallsigns(db, cid, user, pwd)
     qrz = nil
   end
   xmldb = readXMLDb()
-  res = db.query("select id, basecall from Callsign where contestID = ? and validcall is null;", [cid.to_i])
-  res.each { |row|
-    if xmldb.has_key?(row[1]) 
-      db.query("update Callsign set validcall = ? where id = ? limit 1;",
-               [(xmldb[row[1]] ? 1 : 0), row[0].to_i])
-    elsif lookupCall(qrz, xmldb, row[1])
-      db.query("update Callsign set validcall = 1 where id = ? limit 1;",
-               [row[0].to_i])
+  if File.readable?("valid1x1.json")
+    validOneByOnes = Set.new(JSON.parse(File.read("valid1x1.json")))
+    def validOneByOnes.useQRZ?
+      false
+    end
+  else
+    $stderr.write("Missing valid1x1.json\n")
+    validOneByOnes = AllIncluded.new # says everything is valid
+  end
+  db.query("select id, basecall from Callsign where contestID = ? and validcall is null;", [cid.to_i]) { |row|
+    if row[1].length > 3 or validOneByOnes.useQRZ?
+      if xmldb.has_key?(row[1]) 
+        db.query("update Callsign set validcall = ? where id = ? limit 1;",
+                 [(xmldb[row[1]] ? 1 : 0), row[0].to_i])
+      elsif lookupCall(qrz, xmldb, row[1])
+        db.query("update Callsign set validcall = 1 where id = ? limit 1;",
+                 [row[0].to_i])
+      else
+        db.query("update Callsign set validcall = 0 where id = ? limit 1;",
+                 [row[0].to_i]);
+        print "Callsign #{row[1]} is unknown to QRZ.\n"
+      end
     else
-      db.query("update Callsign set validcall = 0 where id = ? limit 1;",
-               [row[0].to_i]);
-      print "Callsign #{row[1]} is unknown to QRZ.\n"
+      if validOneByOnes.include?(row[1])
+        db.query("update Callsign set validcall = 1 where id = ? limit 1;",
+                 [row[0].to_i]);
+      else
+        db.query("update Callsign set validcall = 0 where id = ? limit 1;",
+                 [row[0].to_i]);
+      end
     end
   }
 end
@@ -178,40 +208,47 @@ def scoreContest(db, contestID, contestDB)
     restartContest(cm)
   end
   checkCallsigns(db, contestID, $qrzuser, $qrzpwd)
-  num1 = cm.perfectMatch
-  print "Perfect matches: #{num1}\n"
+  num1, dupeCount = cm.perfectMatch
+  print "Perfect matches: #{num1} (dupes #{dupeCount})\n"
   $stdout.flush
-  num1 = cm.perfectMatch(CrossMatch::PERFECT_TIME_MATCH,
-                         "Partial", 
-                         false)
-  print "Perfect matches (with a band or mode mismatch): #{num1}\n"
-  num3, partial = cm.partialMatch
+  num1, dupeCount = cm.perfectMatch(CrossMatch::PERFECT_TIME_MATCH,
+                                    "Partial", 
+                                    :one)
+  print "Perfect matches (with a band or mode mismatch): #{num1} (dupes #{dupeCount})\n"
+  num3, partial, dupeCount  = cm.partialMatch
   print "Full matches partial: #{num3}\n"
   print "Partial matches full: #{partial}\n"
+  print "               Dupes: #{dupeCount}\n"
   $stdout.flush
-  num1 = cm.perfectMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull')
-  print "Time shifted perfect matches: #{num1}\n"
+  num1, dupeCount = cm.perfectMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull')
+  print "Time shifted perfect matches: #{num1} (dupes #{dupeCount})\n"
   $stdout.flush
-  num3, partial = cm.partialMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull', 'TimeShiftPartial')
+  num3, partial, dupeCount = cm.partialMatch(CrossMatch::MAXIMUM_TIME_MATCH, 'TimeShiftFull', 'TimeShiftPartial')
   print "Time shifted full matches partial: #{num3}\n"
   print "Time shifted partial matches full: #{partial}\n"
+  print "                            Dupes: #{dupeCount}\n"
   $stdout.flush
-  num3, partial = cm.partialMatch(CrossMatch::PERFECT_TIME_MATCH,
-                                  'Partial', 'Partial',
-                                  false)
-  print "One side match with band/mode mismatch: #{num3}\n"
+  num1, dupeCount = cm.perfectMatch(CrossMatch::NOBANDMODE_TIME_MATCH,
+                                    "Partial", 
+                                    nil)
+  print "Perfect matches (without band or mode mismatch): #{num1} (dupes #{dupeCount})\n"
+  num3, partial, dupeCount = cm.partialMatch(CrossMatch::PERFECT_TIME_MATCH,
+                                             'Partial', 'Partial',
+                                             :one)
+  print "   One side match with band/mode mismatch: #{num3}\n"
   print "One size mismatch with band/mode mismatch: #{partial}\n"
+  print "                                    Dupes: #{dupeCount}\n"
   $stdout.flush
-  p1, p2 = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
-  print "Basic QSO matches within 24 hours: #{p1+p2}\n"
+  p1, p2, dupeCount = cm.basicMatch(CrossMatch::MAXIMUM_TIME_MATCH)
+  print "Basic QSO matches within 24 hours: #{p1+p2} (dupes #{dupeCount})\n"
   $stdout.flush
   cm.probMatch
-  # print "Calculating clock drift\n"
-  # ct = CalcTimeAdj.new(db, contestID)
-  # ct.buildVariables
-  # ct.buildMatrix
-  #timeviolation = ct.markOutOfContest
-  # print "QSOs outside contest time period: #{timeviolation}\n"
+  print "Calculating clock drift\n"
+  ct = CalcTimeAdj.new(db, contestID)
+  ct.buildVariables
+  ct.buildMatrix
+  timeviolation = ct.markOutOfContest
+  print "QSOs outside contest time period: #{timeviolation}\n"
   $stdout.flush
   num1, num2 = cm.resolveShifted
   print "Time shift resolved #{num1} full and #{num2} partial\n"
@@ -225,13 +262,23 @@ def scoreContest(db, contestID, contestDB)
   print "Resolving singletons\n"
   $stdout.flush
   singles.resolve
-  num = singles.finalDupeCheck
-  print "#{num} Dupe QSOs identified during final check\n."
   m = Multiplier.new(db, contestID, contestDB)
+  print "Checking that every QSO has an appropriate sent multiplier\n"
+  count = m.checkSentMultIDs
+  print "#{count} QSOs updated\n"
+  print "Matched QSOs get the judged multipier of the sender\n"
+  transferred = m.transferJudged
+  print "#{transferred} multipliers assigned\n"
   print "Resolving DX\n"
   m.resolveDX
   print "Resolving bye multipliers\n"
   m.checkByeMultipliers
+  print "Resolving band/mode mismatches\n"
+  bmm = BandModeMismatch.new(db, contestID, contestDB)
+  bmm.resolve
+  print "Final dupe check\n"
+  num = singles.finalDupeCheck
+  print "#{num} Dupe QSOs identified during final check\n."
   print "Filling in comments\n"
   fillInComment(db, contestID)
   r = Report.new(db, contestID)
