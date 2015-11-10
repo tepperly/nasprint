@@ -5,6 +5,7 @@
 #
 
 require 'crossmatch'
+require 'gsl'
 
 class CalcTimeAdj
   def initialize(db, contestID)
@@ -26,48 +27,65 @@ class CalcTimeAdj
     }      
   end
 
-  PENALTY_TERM = 0.001
+  PENALTY_TERM = 10.0 # 0.001
+
+  def numRows(logs)
+    @db.query("select count(*) from QSO as q where #{logs.membertest("q.logID")} and q.matchID is not null and q.id < q.matchID;") { |row|
+      return row[0]
+    }
+    nil
+  end
 
   def buildMatrix
     logs = LogSet.new(@idtovar.keys)
-    
-    numrows = nil
-    @db.query("select count(*) from QSO as q where #{logs.membertest("q.logID")} and q.matchID is not null and q.id < q.matchID;") { |row|
-      numrows = row[0]
-    }
+    numrows = numRows(logs)
     if numrows and numrows > 0
-      open("/tmp/calcadj.py","w") { |out|
-        numrows = numrows + @numvars
-        out.write("#!/usr/bin/env python\nimport numpy\nimport numpy.linalg\nA = numpy.zeros((#{numrows}, #{@numvars}))\nb = numpy.zeros((#{numrows},))\n")
+      numrows = numrows + @numvars
+      print "Building matrix #{Time.now.to_s}\n"
+      mA = GSL::Matrix.zeros(numrows, @numvars)
+      b = GSL::Vector.alloc(numrows)
+      rowcount = 0
+      @db.query("select q1.logID, q1.time, q2.logID, q2.time from QSO as q1, QSO as q2 where #{logs.membertest("q1.logID")} and #{logs.membertest("q2.logID")} and q1.matchID is not null and q1.matchID = q2.id and q1.id < q2.id;") { |row|
+        mA[rowcount, @idtovar[row[0]]] = 1
+        mA[rowcount, @idtovar[row[2]]] = -1
+        b[rowcount] = @db.toDateTime(row[3]).to_i-@db.toDateTime(row[1]).to_i
+        rowcount += 1
+      }
+      @numvars.times { |i|
+        mA[rowcount, i] = PENALTY_TERM
+        b[rowcount] = 0
+        rowcount += 1
+      }
+      x = GSL::Vector.alloc(@numvars)
+      r = GSL::Vector.alloc(numrows)
+      print "Done #{Time.now.to_s}\n"
+      print "Starting QR factorization #{Time.now.to_s}\n"
+      qr, tau = mA.QRPT_decomp
+      print "Done #{Time.now.to_s}\n"
+      print "Starting QR least-squares solve #{Time.now.to_s}\n"
+      qr.QR_lssolve(tau, b, x, r)
+      print "Done #{Time.now.to_s}\n"
+      begin
+        @db.begin_transaction
         rowcount = 0
-        @db.query("select q1.logID, q1.time, q2.logID, q2.time from QSO as q1, QSO as q2 where #{logs.membertest("q1.logID")} and #{logs.membertest("q2.logID")} and q1.matchID is not null and q1.matchID = q2.id and q1.id < q2.id;") { |row|
-          out.write("A[#{rowcount},#{@idtovar[row[0]]}] = 1\nA[#{rowcount},#{@idtovar[row[2]]}] = -1\n")
-          out.write("b[#{rowcount}] = #{@db.toDateTime(row[3]).to_i-@db.toDateTime(row[1]).to_i}\n")
-          rowcount = rowcount + 1
-        }
         @numvars.times { |i|
-          out.write("A[#{rowcount},#{i}] = #{PENALTY_TERM}\n")
-          out.write("b[#{rowcount}] = 0\n")
-          rowcount = rowcount + 1
+          @db.query("update Log set clockadj = ? where id = ? limit 1;",
+                    [ x[i], @vartoid[rowcount] ])
+          rowcount += 1
         }
-        out.write("adj, residuals, rank, s = numpy.linalg.lstsq(A,b)\n")
-        out.write("for i in xrange(#{@numvars}):\n")
-        out.write("  print adj[i]")
-        out.write("# done")
-      }
-      IO.popen("python /tmp/calcadj.py") { |res|
-        rowcount = 0
-        begin
-          @db.begin_transaction
-          res.each { |line|
-            @db.query("update Log set clockadj = ? where id = ? limit 1;", [line.to_f, @vartoid[rowcount]]) { }
-            rowcount = rowcount + 1
-          }
-        ensure
-          @db.end_transaction
-        end
-      }
+      ensure
+        @db.end_transaction
+      end
     end
+  end
+
+  def report(out)
+    diff = @db.timediff('SECOND','q1.time','q2.time')
+    diff2 = "(" + diff + " + l1.clockadj - l2.clockadj)"
+    @db.query("select l1.id, l1.callsign, l1.clockadj, count(*), sum(#{diff}*#{diff}), sum(abs(#{diff}) > 15*60), sum(#{diff2}*#{diff2}), sum(abs(#{diff2}) > 15*60) from (Log as l1 join QSO as q1 on l1.id = q1.logID) join (Log as l2 join QSO as q2 on l2.id = q2.logID) on q1.matchID = q2.id and q2.matchID = q1.id where l1.contestID = ? and l2.contestID = ? group by l1.id order by l1.id asc;", [@contestID, @contestID] ) {  |row|
+      out.write(row[0].to_s + ",\"" + row[1] + "\"," +
+                row[2..-1].join(",") + "\n")
+    }
   end
 
   def markOutOfContest
