@@ -147,7 +147,7 @@ class ResolveSingletons
   def retainMostValuable(callID, band, mode, logID)
     print "Log #{@cdb.logCallsign(logID)} has a DUPE\n"
     qsos = Array.new
-    @db.query("select id, matchType, time from QSO where " +
+    @db.query("select id, score, time from QSO where " +
               "logID = ? and band = ? and fixedMode = ? and " +
               "recvd_callID = ? " +
               "order by time asc, id asc;", [logID, band, mode, callID] ) { |row|
@@ -158,7 +158,7 @@ class ResolveSingletons
     }
     if (qsos.length > 1)
       qsos.sort! { |x,y| 
-        t = (MATCHTYPE_ORDERING[x[1]] <=> MATCHTYPE_ORDERING[y[1]])
+        t = y[1] <=> x[1]
         if (t == 0)
           t = (x[2] <=> y[2])
           if (t == 0)
@@ -170,10 +170,10 @@ class ResolveSingletons
       # the first element of qsos is the most valuable
       # the following should be turned into dupes
       qsos.shift  # remove the first element to prevent marking it as a dupe
-      print "update QSO set matchType = 'Dupe' where id in (" +
+      print "update QSO set matchType = 'Dupe', score=0 where id in (" +
                 qsos.map { |i| i[0] }.join(", ") +
                 ") limit #{qsos.length};\n"
-      @db.query("update QSO set matchType = 'Dupe' where id in (" +
+      @db.query("update QSO set matchType = 'Dupe', score=0 where id in (" +
                 qsos.map { |i| i[0] }.join(", ") +
                 ") limit #{qsos.length};")
       ar = @db.affected_rows

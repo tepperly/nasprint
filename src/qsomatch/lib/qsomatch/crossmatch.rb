@@ -113,7 +113,7 @@ class CrossMatch
   def restartMatch
     begin
       @db.begin_transaction
-      @db.query("update QSO set matchID = NULL, matchType = 'None', judged_multiplierID = NULL, judged_band = NULL, judged_mode = NULL where #{@logs.membertest("logID")};") { }
+      @db.query("update QSO set matchID = NULL, matchType = 'None', judged_multiplierID = NULL, judged_band = NULL, judged_mode = NULL, score = NULL where #{@logs.membertest("logID")};") { }
       @db.query("update QSOExtra set comment = NULL where #{@logs.membertest("logID")};") { }
       @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where #{@logs.membertest("id")};") { }
     ensure
@@ -277,7 +277,7 @@ class CrossMatch
       exchangeMatch("q2.recvd", "q1.sent") + " and " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
       qsoMatch("q1", "q2", timediff) +
-      " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.recvd_serial)) asc" +
+      " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(" +
       @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
     print queryStr + "\n"
@@ -715,5 +715,54 @@ class CrossMatch
         print matchtypes.join(" ") + "\n\n"
       end
     }
+  end
+
+  def logAdj(id)
+    @db.query("select clockadj from Log where id = ?;", [ id ]) { |row|
+      return row[0]
+    }
+    return 0
+  end
+
+  def initialScore
+    @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q1.judged_multiplierID, q1.recvd_serial, q1.matchType, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc;") { |row|
+      log1Adj = logAdj(row[2])
+      log2Adj = logAdj(row[10])
+      comment = ""
+      notMatch = 0
+      if ((@db.toDateTime(row[1])+log1Adj) - (@db.toDateTime(row[9])+log2Adj)).abs > 15*60
+        notMatch += 1
+        comment << " clock"
+      end
+      if row[3].nil? or (row[3] != row[11]) # call signs mismatch
+        notMatch += 1
+        comment << " callsign"
+      end
+      if row[4].nil? or (row[4] != row[5]) # multiplier mismatch
+        notMatch += 1
+        comment << " multiplier"
+      end
+      if row[6].nil? or ((not (row[12].nil?)) and ((row[6] < (row[12]-1)) or (row[6] > (row[12]+1)))) # serial mismatch
+        notMatch += 1
+        comment << " serial"
+      end
+      if (notMatch == 0 and row[7] != "Full") or (notMatch != 0 and row[7] == "Full")
+        print "QSO ID #{row[0]} is a #{row[7]} match with #{notMatch} mismatches #{comment}\n"
+      end
+      case notMatch
+      when 0
+        score = 2
+      when 1
+        score = 1
+      else
+        score = 0
+      end
+      @db.query("update QSO set score = ? where id = ? limit 1;",
+                [ score, row[0]])
+    }
+    @db.query("update QSO set score = 2 where #{@logs.membertest("logID")} and matchType='Bye';")
+    @db.query("update QSO set score = 1 where #{@logs.membertest("logID")} and matchType='PartialBye';")
+    @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType in ('None', 'Unique', 'Dupe', 'OutsideContest', 'Removed');")
+    @db.query("update QSO set score = -2 where #{@logs.membertest("logID")} and matchType = 'NIL';")
   end
 end

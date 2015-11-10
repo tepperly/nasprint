@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 # -*- encoding: utf-8 -*-
 require 'nokogiri'
+require_relative 'dxmap'
 require_relative 'qrzdb'
 require_relative 'logset'
 
@@ -83,6 +84,7 @@ class Multiplier
   end
 
   def resolveDX
+    dxlookup = CallsignLocator.new
     @db.query("select distinct c.id, c.basecall from QSO as q, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye', 'Partial', 'PartialBye') and m.abbrev='DX' and c.id = q.recvd_callID and q.recvd_entityID is null and m.id = q.recvd_multiplierID and #{@logs.membertest("q.logID")};") { |row|
       entity = checkOverride(row[1])
       override = entity
@@ -90,8 +92,16 @@ class Multiplier
         entity = lookupEntity(@callDB[row[1]])
       end
       if not entity
-        print "Please enter entity ID # for #{row[1]}:"
-        entity = STDIN.gets.to_i
+        ent = dxlookup.lookup(row[1])
+        if ent
+          if ent.dx?
+            entity = ent.entityID
+          end
+        end
+        if not entity
+          print "Please enter entity ID # for #{row[1]}:"
+          entity = STDIN.gets.to_i
+        end
       end
       if entity
         case entity
@@ -167,7 +177,7 @@ class Multiplier
 
 
   def qrzMostPopular(qrzId, hash)
-    if hash.include(qrzID)
+    if hash.include?(qrzId)
       value = hash[qrzId][2]
       hash.each { |k,v|
         if v[2] > value
@@ -197,6 +207,9 @@ class Multiplier
             id, entity = @cdb.lookupMultiplier(county)
             if id 
               if hash.include?(id)
+                if qrzMostPopular(id, hash)
+                  return id, @cdb.lookupMultiplierByID(id)
+                end
               else
                 hash[id] = [id, @cdb.lookupMultiplierByID(id), 0]
               end

@@ -2,6 +2,7 @@
 
 require 'xz'
 require 'csv'
+require 'set'
 
 class Entity
   def initialize(canonPrefix, name,
@@ -44,6 +45,12 @@ class Entity
 
   attr_reader :canonPrefix, :name, :entityID, :continent, :cqZone,
       :ituZone, :latitude, :longitude, :timeadj
+
+  NOTDX=Set.new([1, 6, 110, 291]).freeze
+
+  def dx?
+    not NOTDX.include?(@entityID) # non US, Alaska, Canada, Hawaii
+  end
 end
 
 class CallPrefix
@@ -71,7 +78,6 @@ class CallsignLocator
   def initialize
     if not defined? @@callprefixes
       readRules
-      sortRules
     end
   end
 
@@ -88,12 +94,6 @@ class CallsignLocator
         ent.freeze
         addEntity(ent, record[9])
       }
-    }
-  end
-
-  def sortRules
-    @@callprefixes.each { |key,value|
-      value.sort! { |x,y| x <=> y }
     }
   end
 
@@ -132,11 +132,10 @@ class CallsignLocator
       if item.start_with?("=")
         @@exceptions[item[1..-1]] = ent
       else
-        key = item[0,1]
-        if not @@callprefixes.include?(key)
-          @@callprefixes[key] = Array.new
+        if not @@callprefixes.include?(item.length)
+          @@callprefixes[item.length] = Hash.new
         end
-        @@callprefixes[key] << CallPrefix.new(item, ent)
+        @@callprefixes[item.length][item] = CallPrefix.new(item, ent)
       end
     }
   end
@@ -146,14 +145,17 @@ class CallsignLocator
       if @@exceptions.include?(callsign)
         return @@exceptions[callsign]
       else
-        key = callsign[0,1] # first letter
-        if @@callprefixes.include?(key)
-          @@callprefixes[key].each { |cp|
-            if cp.match?(callsign)
-              return cp.entity
+        callsign.length.downto(1) { |len|
+          if @@callprefixes.include?(len)
+            prefix = callsign[0,len]
+            if @@callprefixes[len].include?(prefix)
+              cp = @@callprefixes[len][prefix]
+              if cp.match?(callsign)
+                return cp.entity
+              end
             end
-          }
-        end
+          end
+        }
       end
     end
     nil

@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # -*- encoding: utf-8 -*-
 require 'getoptlong'
+require 'set'
+require_relative 'dxmap'
 require_relative 'database'
 require_relative 'contestdb'
 require_relative 'crossmatch'
@@ -48,6 +50,17 @@ opts.each { |opt,arg|
   end
 }
 
+NOTDX=Set.new([1, 6, 110, 291]).freeze
+
+def isDXCall(callsign)
+  dm = CallsignLocator.new
+  entity = dm.lookup(callsign)
+  if entity
+    return not NOTDX.include?(entity.entityID)
+  end
+  false
+end
+
 def checkCallsigns(db, cid, user, pwd)
   if user and pwd
     qrz = QRZLookup.new(user, pwd)
@@ -57,7 +70,7 @@ def checkCallsigns(db, cid, user, pwd)
   xmldb = readXMLDb()
   res = db.query("select id, basecall from Callsign where contestID = ? and validcall is null;", [cid.to_i])
   res.each { |row|
-    if xmldb.has_key?(row[1]) or lookupCall(qrz, xmldb, row[1])
+    if xmldb.has_key?(row[1]) or lookupCall(qrz, xmldb, row[1]) or isDXCall(row[1])
       db.query("update Callsign set validcall = 1 where id = ? limit 1;",
                [row[0].to_i])
     else

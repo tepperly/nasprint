@@ -2,6 +2,7 @@
 
 require 'getoptlong'
 require 'database'
+require 'dxmap'
 require 'bandmode'
 require 'contestdb'
 require 'callsign'
@@ -22,6 +23,7 @@ $year = nil
 $name = nil
 $explain = false
 $totallydestroy = false
+$skipclock = false
 $restart = false
 $create = false
 $readinit = true
@@ -35,6 +37,7 @@ opts = GetoptLong.new(
                       [ '--new', '-N', GetoptLong::NO_ARGUMENT],
                       [ '--check', '-C', GetoptLong::NO_ARGUMENT],
                       [ '--check-dupe', '-c', GetoptLong::NO_ARGUMENT],
+                      [ '--skip-clock-adj', '-x', GetoptLong::NO_ARGUMENT],
                       [ '--no-init', '-I', GetoptLong::NO_ARGUMENT],
                       [ '--qrzuser', '-u', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--exceptions', '-X', GetoptLong::REQUIRED_ARGUMENT],
@@ -53,6 +56,8 @@ opts.each { |opt, arg|
   case opt
   when '--new'
     $create = true
+  when '--skip-clock-adj'
+    $skipclock = true
   when '--no-init'
     $readinit = false
   when '--qrzuser'
@@ -143,6 +148,16 @@ class AllIncluded
   end
 end
 
+
+def isDXCall(callsign)
+  dm = CallsignLocator.new
+  entity = dm.lookup(callsign)
+  if entity
+    return not( entity.dx? )
+  end
+  false
+end
+
 def checkCallsigns(db, cid, user, pwd)
   if user and pwd
     qrz = QRZLookup.new(user, pwd)
@@ -165,6 +180,9 @@ def checkCallsigns(db, cid, user, pwd)
         db.query("update Callsign set validcall = ? where id = ? limit 1;",
                  [(xmldb[row[1]] ? 1 : 0), row[0].to_i])
       elsif lookupCall(qrz, xmldb, row[1])
+        db.query("update Callsign set validcall = 1 where id = ? limit 1;",
+                 [row[0].to_i])
+      elsif isDXCall(row[1]) # QRZ is not a reliable authority for DX
         db.query("update Callsign set validcall = 1 where id = ? limit 1;",
                  [row[0].to_i])
       else
@@ -243,11 +261,17 @@ def scoreContest(db, contestID, contestDB)
   print "Basic QSO matches within 24 hours: #{p1+p2} (dupes #{dupeCount})\n"
   $stdout.flush
   cm.probMatch
-  print "Calculating clock drift\n"
   ct = CalcTimeAdj.new(db, contestID)
-  ct.buildVariables
-  ct.buildMatrix
-  timeviolation = ct.markOutOfContest
+  if not $skipclock
+    print "Calculating clock drift\n"
+    ct.buildVariables
+    ct.buildMatrix
+    timeviolation = ct.markOutOfContest
+  end
+  open("clock_report.csv", "w:ascii") { |outfile|
+    ct.report(outfile)
+  }
+  ct = nil
   print "QSOs outside contest time period: #{timeviolation}\n"
   $stdout.flush
   num1, num2 = cm.resolveShifted
@@ -255,7 +279,6 @@ def scoreContest(db, contestID, contestDB)
   $stdout.flush
   d1 = cm.ignoreDups
   print "Duplicates of matches: #{d1}\n"
-  ct = nil
   nil1 = cm.markNIL
   print "Not In Log penalties: #{nil1}\n"
   singles = ResolveSingletons.new(db, contestID, contestDB)
@@ -276,6 +299,8 @@ def scoreContest(db, contestID, contestDB)
   print "Resolving band/mode mismatches\n"
   bmm = BandModeMismatch.new(db, contestID, contestDB)
   bmm.resolve
+  print "Assigning initial scores to QSO(s)\n"
+  cm.initialScore
   print "Final dupe check\n"
   num = singles.finalDupeCheck
   print "#{num} Dupe QSOs identified during final check\n."
