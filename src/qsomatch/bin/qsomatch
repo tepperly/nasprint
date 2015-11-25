@@ -23,7 +23,7 @@ $year = nil
 $name = nil
 $explain = false
 $totallydestroy = false
-$skipclock = false
+$skipclock = true
 $restart = false
 $create = false
 $readinit = true
@@ -37,7 +37,7 @@ opts = GetoptLong.new(
                       [ '--new', '-N', GetoptLong::NO_ARGUMENT],
                       [ '--check', '-C', GetoptLong::NO_ARGUMENT],
                       [ '--check-dupe', '-c', GetoptLong::NO_ARGUMENT],
-                      [ '--skip-clock-adj', '-x', GetoptLong::NO_ARGUMENT],
+                      [ '--calc-clock-adj', '-x', GetoptLong::NO_ARGUMENT],
                       [ '--no-init', '-I', GetoptLong::NO_ARGUMENT],
                       [ '--qrzuser', '-u', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--exceptions', '-X', GetoptLong::REQUIRED_ARGUMENT],
@@ -48,7 +48,8 @@ opts = GetoptLong.new(
                       [ '--year', '-y', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--verbose', '-V', GetoptLong::NO_ARGUMENT],
                       [ '--load', '-l', GetoptLong::NO_ARGUMENT],
-                      [ '--score', '-s', GetoptLong::NO_ARGUMENT]
+                      [ '--score', '-s', GetoptLong::NO_ARGUMENT],
+                      [ '--rare', '-r', GetoptLong::NO_ARGUMENT]
                       )
 
 cmddbopts = Hash.new
@@ -56,8 +57,8 @@ opts.each { |opt, arg|
   case opt
   when '--new'
     $create = true
-  when '--skip-clock-adj'
-    $skipclock = true
+  when '--calc-clock-adj'
+    $skipclock = false
   when '--no-init'
     $readinit = false
   when '--qrzuser'
@@ -69,6 +70,8 @@ opts.each { |opt, arg|
   when '--sqlite'
     cmddbopts['type'] = 'sqlite3'
     cmddbopts['filename'] = arg
+  when '--rare'
+    $action = :rare
   when '--check'
     $action = :check
   when '--check-dupe'
@@ -153,7 +156,7 @@ def isDXCall(callsign)
   dm = CallsignLocator.new
   entity = dm.lookup(callsign)
   if entity
-    return not( entity.dx? )
+    return entity.dx?
   end
   false
 end
@@ -200,6 +203,15 @@ def checkCallsigns(db, cid, user, pwd)
       end
     end
   }
+  if File.readable?("illegalcalls.json")
+    list = JSON.parse(File.read("illegalcalls.json"))
+    list.each { |callsign|
+      db.query("update Callsign set validcall = 0, illegalcall = 1 where basecall= ? limit 1;",
+               [ callsign ])
+    }
+  else
+    $stderr.write("Missing illegalcalls.json\n")
+  end
 end
 
 NUMSECS=5
@@ -219,6 +231,10 @@ def restartContest(cm)
   cm.restartMatch
 end
 
+def rareReport(db, contestID, contestDB)
+  m = Multiplier.new(db, contestID, contestDB)
+  m.rareMultReport
+end
 
 def scoreContest(db, contestID, contestDB)
   cm = CrossMatch.new(db, contestID, contestDB)
@@ -265,12 +281,19 @@ def scoreContest(db, contestID, contestDB)
   if not $skipclock
     print "Calculating clock drift\n"
     ct.buildVariables
+    ct.buildMILP
+    print "Building matrix\n"
     ct.buildMatrix
-    timeviolation = ct.markOutOfContest
+    open("clock_report1.csv", "w:ascii") { |outfile|
+      ct.report(outfile)
+    }
+    ct.buildMatrix              # second time it knows the bad clocks
+    open("clock_report2.csv", "w:ascii") { |outfile|
+      ct.report(outfile)
+    }
+    ct.reportByLog
   end
-  open("clock_report.csv", "w:ascii") { |outfile|
-    ct.report(outfile)
-  }
+  timeviolation = ct.markOutOfContest
   ct = nil
   print "QSOs outside contest time period: #{timeviolation}\n"
   $stdout.flush
@@ -296,6 +319,7 @@ def scoreContest(db, contestID, contestDB)
   m.resolveDX
   print "Resolving bye multipliers\n"
   m.checkByeMultipliers
+  m.savePrevious("callmults.json")
   print "Resolving band/mode mismatches\n"
   bmm = BandModeMismatch.new(db, contestID, contestDB)
   bmm.resolve
@@ -320,7 +344,7 @@ def scoreContest(db, contestID, contestDB)
 end
 
 begin
-  if $name and $year and [:load, :score, :checkdupes ].include?($action)
+  if $name and $year and [:load, :score, :checkdupes, :rare ].include?($action)
     db = makeDB(dbopts)
     cdb = ContestDatabase.new(db, ctl)
     contestID = cdb.addOrLookupContest($name, $year, $create)
@@ -332,7 +356,7 @@ begin
   else
     db = nil
     cdb = nil
-    if [:load, :score, :checkdupes ].include?($action)
+    if [:load, :score, :checkdupes, :rare ].include?($action)
       print "Load and score action require a database.\n"
       exit 2
     end
@@ -342,6 +366,8 @@ begin
     loadFiles(ARGV, cdb, contestID, ctl)
   when :score
     scoreContest(db, contestID, cdb)
+  when :rare
+    rareReport(db, contestID, cdb)
   when :checkdupes
     if cdb and contestID
       cdb.checkDupeLogs(contestID)

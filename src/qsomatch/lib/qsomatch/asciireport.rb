@@ -83,7 +83,7 @@ def printArea(cdb, logs, key)
   print "CALL   NAME        CLS  LOC  20m  40m  80m #QSOs #Mults #State Score     BandChgs  Team\n"
   print "====== =========== ===  ===  ===  ===  === ===== ====== ====== ========= ========  ==================================================\n"
   logs.each { |log|
-    callsign, name, location, dxprefix, team, qsos, mults, score, powclass, opclass, numstates = cdb.logInfo(log)
+    callsign, name, location, dxprefix, team, phqsos, cwqsos, mults, score, powclass, opclass, numstates = cdb.logInfo(log)
     bandQSOs = cdb.qsosByBand(log)
     bandChanges = cdb.numBandChanges(log)
     values = [callsign.upcase, name, opclass[0], location.to_s,  bandQSOs["20m"], bandQSOs["40m"],

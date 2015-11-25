@@ -1,6 +1,6 @@
 #!/usr/local/bin/ruby
 # -*- encoding: utf-8 -*-
-# Parse a NA Sprint pseudo-Cabrillo
+# Parse a CQP pseudo-Cabrillo
 # By Tom Epperly
 # ns6t@arrl.net
 #
@@ -240,6 +240,11 @@ class Cabrillo
       $stderr.write("Unexpected state transition #{@parsestate} #{oldstate} #{newstate} in #{@filename}.\n")
       @parsestate = newstate
     end
+  end
+
+  def self.normalMult(str)
+    str = str.strip.upcase.gsub(/\s{2,}/, " ")
+    return MULTIPLIER_ALIASES.has_key?(str) ? MULTIPLIER_ALIASES[str] : "????"
   end
 
   def normalizeMult(str)

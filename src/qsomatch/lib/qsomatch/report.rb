@@ -6,38 +6,31 @@ require 'csv'
 require_relative 'logset'
 
 class Log
-  def initialize(call, email, opclass)
+  def initialize(call, email, opclass, qth)
     @call = call
+    @qth = qth
     @email = email
     @opclass = opclass
-    @numFull = 0
-    @numBye = 0
-    @numPartialBye = 0
+    @numClaimed = 0
+    @numD1 = 0
+    @numD2 = 0
+    @numPH = 0
+    @numCW = 0
     @numUnique = 0
     @numDupe = 0
-    @numPartial = 0
     @numRemoved = 0
     @numNIL = 0
     @numOutsideContest = 0
     @multipliers = Set.new
   end
 
-  # 
-  def incCount(type)
-    sym = ("@num" + type).to_s
-    if instance_variable_defined?(sym)
-      instance_variable_set(sym,1+instance_variable_get(sym))
-    else
-      print "Unknown QSO type #{type}\n"
-    end
-  end
+  attr_reader :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
+        :numOutsideContest, :numClaimed, :numD1, :numD2
+  attr_writer :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
+        :numOutsideContest, :numClaimed, :numD1, :numD2
 
   def addMultiplier(name)
     @multipliers.add(name)
-  end
-
-  def numqsos
-    @numFull+@numBye+@numPartialBye/2-@numNIL
   end
 
   def nummultipliers
@@ -45,11 +38,11 @@ class Log
   end
 
   def score
-    numqsos * nummultipliers
+    ( numPH*2 + numCW*3) * nummultipliers
   end
 
   def to_s
-    "\"#{@call}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",#{@numFull},#{@numBye},#{@numPartial+@numPartialBye},#{@numUnique},#{@numDupe},#{@numPartial+@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numFull+@numBye+@numPartialBye/2-@numNIL},#{@multipliers.size},#{(@numFull+@numBye+@numPartialBye/2-@numNIL)*@multipliers.size},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{@multipliers.size},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -86,14 +79,64 @@ class Report
     end
   end
 
-  MULTIPLIER_CREDIT = Set.new(%w( Full Partial Bye PartialBye)).freeze
-  def scoreLog(id, log)
-    @db.query("select q.matchType, q.id from QSO as q where q.logID = ? order by q.time asc;", [id]) { |row|
-      log.incCount(row[0])
-      if MULTIPLIER_CREDIT.include?(row[0]) # QSO counts for credit
-        addMultiplier(log, row[1])
-      end
+  def totalClaimed(id, multID)
+    @db.query("select count(*) from QSO where logID = ? and sent_multiplierID = ? limit 1;", [id, multID]) { |row|
+      return row[0]
     }
+    0
+  end
+
+  def numPartial(id, multID, score)
+    @db.query("select count(*) from QSO where logID = ? and sent_multiplierID = ? and score = ?  and matchType in ('Full', 'Bye', 'Partial', 'PartialBye') limit 1;", [id, multID, score] ) { |row|
+      return row[0]
+    }
+    0
+  end
+
+  def qsoTotal(id, mode, multID)
+    @db.query("select sum(q.score) from QSO as q where q.logID = ? and q.judged_mode = ? and q.sent_multiplierID = ? and q.matchType in ('Full', 'Bye', 'Partial', 'PartialBye') limit 1;",[id, mode, multID]) { |row|
+      return (row[0].to_i / 2).to_i
+    }
+    0
+  end
+
+  def modeTotal(id, mode, multID)
+    @db.query("select count(*) from QSO as q where q.logID = ? and q.matchType = ? and q.sent_multiplierID = ? limit 1;",[id, mode, multID]) { |row|
+      return row[0].to_i
+    }
+    0
+  end
+
+  def calcMultipliers(id, log, multID)
+    isCA = @db.true
+    @db.query("select m.isCA from Multiplier as m join Log as l on l.multiplierID = m.id where l.id = ? limit 1;", [ id ]) { |row|
+      isCA = row[0]
+    }
+    @db.query("select distinct m.abbrev from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.judged_multiplierID = m.id where l.id = ? and q.matchType in ('Full','Partial','Bye', 'PartialBye') and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA != ?; ", 
+              [id, multID, isCA]) { |row|
+      log.addMultiplier(row[0])
+    }
+    if @db.toBool(isCA)
+      # for CA stations any CA county counts as a CA multiplier
+      @db.query("select m.id from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.judged_multiplierID = m.id where l.id = ? and q.matchType in ('Full','Partial','Bye', 'PartialBye') and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA limit 1;", [ id, multID ]) { |row|
+        log.addMultiplier("CA")
+      }
+    end
+  end
+
+  MULTIPLIER_CREDIT = Set.new(%w( Full Partial Bye PartialBye)).freeze
+  def scoreLog(id, multID, log)
+    log.numD1 = numPartial(id, multID, 1)
+    log.numD2 = numPartial(id, multID, 0)
+    log.numClaimed = totalClaimed(id, multID)
+    log.numPH = qsoTotal(id, "PH", multID)
+    log.numCW = qsoTotal(id, "CW", multID)
+    log.numNIL = modeTotal(id, "NIL", multID)
+    log.numUnique = modeTotal(id, "Unique", multID)
+    log.numDupe = modeTotal(id, "Dupe", multID)
+    log.numRemoved = modeTotal(id, "Removed", multID)
+    log.numOutsideContest = modeTotal(id, "OutsideContest", multID)
+    calcMultipliers(id, log, multID)
   end
 
   def toxicLogReport(out = $stdout, contestID)
@@ -116,14 +159,14 @@ class Report
 
   def makeReport(out = $stdout, contestID)
     logs = Array.new
-    @db.query("select callsign, email, opclass, id from Log where contestID = ? order by callsign asc;", [contestID]) { |row|
-      log = Log.new(row[0], row[1], row[2])
-      scoreLog(row[3],log)
-      @db.query("update Log set verifiedscore = #{log.score}, verifiedQSOs = ?, verifiedMultipliers = ? where id = ? limit 1;",
-                [log.numqsos, log.nummultipliers, row[3]]) { }
+    @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID where contestID = ? order by callsign asc;", [contestID]) { |row|
+      log = Log.new(row[0], row[1], row[2], row[5])
+      scoreLog(row[3], row[4], log)
+      @db.query("update Log set verifiedscore = #{log.score}, verifiedCWQSOs = ?, verifiedPHQSOs = ?, verifiedMultipliers = ? where id = ? limit 1;",
+                [log.numCW, log.numPH, log.nummultipliers, row[3]]) { }
       logs << log
     }
-    out.write("\"Callsign\",\"Email\",\"Operator Class\",\"#Fully matched QSOs\",\"# Bye QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"WAS?\",\"# Verified QSOs (full+bye-NIL)\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
+    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
     logs.each { |log|
       out.write(log.to_s + "\r\n")
     }

@@ -37,6 +37,10 @@ class DatabaseSQLite
     0
   end
 
+  def toBool(val)
+    (val and (val.to_i != 0)) ? true : false
+  end
+
   def formattime(time)
     time.strftime("%Y-%m-%dT%H:%M:%SZ")
   end

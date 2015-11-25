@@ -2,18 +2,22 @@
 # -*- encoding: utf-8 -*-
 
 require 'jaro_winkler'
-require 'crossmatch'
+require_relative 'crossmatch'
+require_relative 'dxmap'
 
 class Call
-  def initialize(id, callsign, valid, haveLog, numQSOs)
+  def initialize(id, callsign, valid, illegal, haveLog, numQSOs)
     @id = id
     @callsign = callsign
     @valid = valid
+    @illegal = illegal
     @haveLog = haveLog
     @numQSOs = numQSOs
+    @otherContest = false
   end
   
-  attr_reader :id, :callsign, :valid, :haveLog, :numQSOs
+  attr_reader :id, :callsign, :valid, :haveLog, :numQSOs, :otherContest, :illegal
+  attr_writer :otherContest
 
   def to_s
     callsign.to_s
@@ -33,14 +37,16 @@ class ResolveSingletons
     }
   end
 
-  def toBool(val)
-    (val and (val.to_i != 0))
-  end
-
   def queryCallsigns
+    loc = CallLocator.new
     callList = Array.new
-    @db.query("select c.id, c.basecall, c.validcall, c.logrecvd, count(*) as num from Callsign as c, QSO as q where c.contestID = ? and q.recvd_callID = c.id group by c.id order by c.basecall asc;", [@contestID]) { |row|
-      callList << Call.new(row[0].to_i, row[1], toBool(row[2]), toBool(row[3]), row[4].to_i)
+    @db.query("select c.id, c.basecall, c.validcall, c.logrecvd, count(*) as num, illegalcall from Callsign as c, QSO as q where c.contestID = ? and q.recvd_callID = c.id group by c.id order by c.basecall asc;", [@contestID]) { |row|
+      c = Call.new(row[0].to_i, row[1], @db.toBool(row[2]), @db.toBool(row[5]), @db.toBool(row[3]), row[4].to_i)
+      callList << c
+      ent = loc.lookup(row[1])
+      if ent and ("OC" == ent.continent) and not c.illegal
+        c.otherContest = true   # might be participant in Oceana DX
+      end
     }
     return callList
   end
@@ -48,7 +54,7 @@ class ResolveSingletons
   def possibleMatches(id, callsign, tolerance = 0.94)
     results = Array.new
     @callsigns.each { |call|
-      if call.id != id and call.valid and (call.numQSOs >= 10 or call.haveLog) and JaroWinkler.distance(call.callsign, callsign) >= tolerance
+      if call.id != id and call.valid and (not call.illegal) and (call.numQSOs >= 10 or call.haveLog) and JaroWinkler.distance(call.callsign, callsign) >= tolerance
         results << call
       end
     }
@@ -93,11 +99,11 @@ class ResolveSingletons
               " and q.matchType = 'None' order by q.id asc;"){ |row|
       call = @callFromID[row[1]]
       if call
-        if row[2] >= 10 and call.numQSOs <= 2
+        if row[2] >= 10 and call.numQSOs <= 2 and not call.otherContest
           @db.query("update QSO set matchType = 'Unique' where id = ? limit 1;", [row[0]]) { }
           @db.query("update QSOExtra set comment='High serial number a station only worked #{call.numQSOs.to_i} time(s).' where id = ? limit 1;", [row[0]]) { }
         else
-          if not call.valid and call.numQSOs <= 5
+          if call.illegal or (not call.valid and call.numQSOs <= 5)
             # illegal callsign
             list = possibleMatches(call.id, call.callsign)
             if list
@@ -186,17 +192,17 @@ class ResolveSingletons
   def finalDupeCheck
     print "Starting final dupe check: #{Time.now.to_s}\n"
     count = 0
-    @db.query("select min(q1.id), q1.recvd_callID, q1.band, q1.fixedMode, q1.logID, " + 
+    @db.query("select min(q1.id), q1.recvd_callID, q1.judged_band, q1.judged_mode, q1.logID, " + 
               "count(*) as numDupe from QSO as q1, QSO as q2 where " +
               @logIDs.membertest("q1.logID") + " and " + @logIDs.membertest("q2.logID") + 
               " and q1.logID = q2.logID and q1.matchType in ('Full','Bye', 'Partial', 'PartialBye') and " +
-              "q2.matchType in ('Full','Bye','Partial', 'PartialBye') and q1.band = q2.band and " +
-              "q1.fixedMode = q2.fixedMode and q1.recvd_callID = q2.recvd_callID and " +
+              "q2.matchType in ('Full','Bye','Partial', 'PartialBye') and q1.judged_band = q2.judged_band and " +
+              "q1.judged_mode = q2.judged_mode and q1.recvd_callID = q2.recvd_callID and " +
               "q1.id < q2.id  and " +
               " q1.sent_multiplierID = q2.sent_multiplierID and " +
               " q1.judged_multiplierID = q2.judged_multiplierID " +
               "group by q1.logID, q1.sent_multiplierID, q1.recvd_callID, " +
-              " q1.judged_multiplierID, q1.band, q1.fixedMode having numDupe > 1 " +
+              " q1.judged_multiplierID, q1.judged_band, q1.judged_mode " +
               "order by q1.logID asc;") { |row|
       count += retainMostValuable(row[1], row[2], row[3], row[4])
     }

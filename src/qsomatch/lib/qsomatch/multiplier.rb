@@ -1,9 +1,11 @@
 #!/usr/bin/env ruby
 # -*- encoding: utf-8 -*-
 require 'nokogiri'
+require 'csv'
 require_relative 'dxmap'
 require_relative 'qrzdb'
 require_relative 'logset'
+require_relative 'cabrillo'
 
 class Multiplier
   def initialize(db, contestID, cdb)
@@ -11,8 +13,26 @@ class Multiplier
     @contestID = contestID
     @cdb = cdb
     @logs = LogSet.new(cdb.logsForContest(contestID))
+    @previousDecisions = readPrevious
+    @tojson = Hash.new
     @callDB = readXMLDb
     lookupStates
+  end
+
+  def readPrevious
+    if File.readable?("callmults.json")
+      result = JSON.parse(File.read("callmults.json"))
+    elsif File.readable?("callmults.csv")
+      result = Hash.new
+      CSV.foreach("callmults.csv") {|row|
+        result[row[0]] = row[1]
+      }
+    end
+    result
+  end
+
+  def savePrevious(filename)
+    File.write(filename, @tojson)
   end
 
   def lookupStates
@@ -238,14 +258,20 @@ class Multiplier
     list.each { |item|
       print "ID #{item} #{hash[item][1]} #{hash[item][2]}\n"
     }
-    print "Please enter the ID number: "
-    item = STDIN.gets
-    num = item.strip.to_i
-    list.each { |item|
-      if item[0] == num
-        return num, item[1]
-      end
-    }
+    if @previousDecisions.has_key?(callsign)
+      @tojson[callsign] = @previousDecisions[callsign]
+      num, entID = @cdb.lookupMultiplier(@previousDecisions[callsign])
+      return num, @previousDecisions[callsign]
+    else
+      print "Please enter the ID number: "
+      item = STDIN.gets
+      num = item.strip.to_i
+      list.each { |item|
+        if item[0] == num
+          return num, item[1]
+        end
+      }
+    end
     return num, nil
   end
 
@@ -305,5 +331,62 @@ class Multiplier
       print "Station #{@cdb.logCallsign(row[0])} has missing sent multiplier information\n"
     }
     count
+  end
+
+  def rarestMults(limit, isCA)
+    result = Array.new
+    @db.query("select m.id, count(*) as num from Multiplier as m join QSO as q on q.judged_multiplierID = m.id where #{@logs.membertest("q.logID")} and #{isCA ? "m.isCA" : "not m.isCA"} and m.ismultiplier and q.matchType in ('Full','Bye','PartialBye','Partial') group by m.id order by num asc limit #{limit.to_i};") { |row|
+      result << row[0].to_i
+    }
+    result
+  end
+
+  def allCallsigns(id, multID)
+    result = Array.new
+    @db.query("select distinct qe.recvd_callsign from QSOExtra as qe join QSO as q on q.id = qe.id and q.recvd_callID = ? and q.judged_multiplierID = ? where #{@logs.membertest("q.logID")} order by qe.recvd_callsign asc;", [ id, multID ]) { |row|
+      result << row[0]
+    }
+    result.join(" ")
+  end
+
+  def qLoc(isQRZ, callsign)
+    if isQRZ
+      state, county, dcxx = callLocation(callsign)
+      if "CA" == state
+        return Cabrillo.normalMult(county)
+      else
+        return state
+      end
+    else
+      "????"
+    end
+  end
+  
+  def rareMultGroupReport(ids)
+    prev = nil
+    @db.query("select m.abbrev, c.basecall, c.logrecvd, c.validcall, count(*) as num, c.id, m.id from Multiplier as m join QSO as q on q.judged_multiplierID = m.id join Callsign as c on c.id = q.recvd_callID where #{@logs.membertest("q.logID")} and q.matchType in ('Full','Bye','PartialBye','Partial') and m.id in (#{ids.join(", ")}) group by m.id, c.id order by m.id asc, num desc;") { |row|
+      if (row[0] != prev) 
+        print "Multiplier: " + row[0] + "\n"
+        print "    %-8s %-5s %-5s %-4s %-4s %s\n" % ["Station", "Log?", "QRZ?",
+                                               "QLOC", "#", "Callsigns"]
+        prev = row[0]
+      end
+      print "    %-8s %-5s %-5s %-4s %4d %s\n" % 
+        [row[1], @db.toBool(row[2]).to_s,
+         @db.toBool(row[3]).to_s,
+         qLoc(@db.toBool(row[3]), row[1]),
+         row[4].to_i, 
+         allCallsigns(row[5].to_i, 
+                      row[6].to_i) ]
+    }
+  end
+
+  def rareMultReport
+    topFiveCA = rarestMults(5, true)
+    topFiveNonCA = rarestMults(5, false)
+    print "Top Five Rarest CA Multipliers\n"
+    rareMultGroupReport(topFiveCA)
+    print "\nTop Five Rarest non-CA Multipliers\n"
+    rareMultGroupReport(topFiveNonCA)
   end
 end

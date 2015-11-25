@@ -32,7 +32,7 @@ class LCR
     @cdb = contestDB
     @contestName = name
     @contestYear = year
-    @callsign, @name, @location, @dxprefix, @team, @verifiedQSOs, @verifiedMultipliers, @verifiedScore, @powclass, @opclass, @numStates = @cdb.logInfo(logID)
+    @callsign, @name, @location, @dxprefix, @team, @verifiedPHQSOs, @verifiedCWQSOs, @verifiedMultipliers, @verifiedScore, @powclass, @opclass, @numStates = @cdb.logInfo(logID)
     @filename = filename
     @out = out
   end
@@ -80,7 +80,7 @@ minimize discrepancies between logs.\r
     rawQSOs, dupeQSOs, bustedQSOs, penaltyQSOs, outside = @cdb.scoreSummary(@logID)
     @out << "\r\nSCORE SUMMARY\r\n-------------\r\n\r\n"
     @out << ("    Raw QSOs = %d\r\n       Dupes = %d\r\n Busted QSOs = %d\r\nPenalty QSOs = %d\r\nOutside time = %d\r\n  Final QSOs = %d\r\n#Multipliers = %d\r\n------------------------------\r\n Final Score = %d\r\n  Error rate = %.1f%%\r\n" %
-            [ rawQSOs, dupeQSOs, bustedQSOs, penaltyQSOs, outside, @verifiedQSOs, @verifiedMultipliers, @verifiedScore,
+            [ rawQSOs, dupeQSOs, bustedQSOs, penaltyQSOs, outside, @verifiedPHQSOs, @verifiedMultipliers, @verifiedScore,
               (((rawQSOs - dupeQSOs) > 0) ? (100*bustedQSOs.to_f/(rawQSOs - dupeQSOs).to_f) : 0.0) ] )
   end
 

@@ -172,12 +172,12 @@ class ContestDatabase
   
   def createLogTable
     # table of callsigns converted to base format
-    @db.query("create table if not exists Callsign (id integer primary key #{@db.autoincrement}, contestID integer not null, basecall varchar(#{CHARS_PER_CALL}) not null, logrecvd bool, validcall bool);") { }
+    @db.query("create table if not exists Callsign (id integer primary key #{@db.autoincrement}, contestID integer not null, basecall varchar(#{CHARS_PER_CALL}) not null, logrecvd bool, validcall bool, illegalcall bool not null default #{@db.false});") { }
     @db.query("create index if not exists bcind on Callsign (contestID, basecall);") { }
     if @db.has_enum?
-      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass enum('QRP', 'LOW', 'HIGH'), opclass enum('CHECKLOG', 'SINGLE', 'SINGLE_ASSISTED', 'MULTI_SINGLE', 'MULTI_MULTI'), numops int, verifiedscore integer, verifiedQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, name varchar(128), club varchar(128));") { }
+      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass enum('QRP', 'LOW', 'HIGH'), opclass enum('CHECKLOG', 'SINGLE', 'SINGLE_ASSISTED', 'MULTI_SINGLE', 'MULTI_MULTI'), numops int, verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, trustedclock bool not null default #{@db.false}, name varchar(128), club varchar(128));") { }
     else
-      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass char(7), opclass char(15), numops int, verifiedscore integer, verifiedQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, name varchar(128), club varchar(128));") { }
+      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass char(7), opclass char(15), numops int, verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs, verifiedMultipliers integer, clockadj integer not null default 0, trustedclock bool not null default #{@db.false}, name varchar(128), club varchar(128));") { }
     end
     @db.query("create index if not exists callind on Log (callsign);") { }
     @db.query("create index if not exists contestind on Log (contestID);") { }
@@ -593,10 +593,10 @@ class ContestDatabase
   end
   
   def logInfo(logID)
-    @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedqsos, l.verifiedMultipliers, l.verifiedscore, l.powclass l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = ? limit 1;",
+    @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedPHQSOs, l.verifiedCWQSOs, l.verifiedMultipliers, l.verifiedscore, l.powclass l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = ? limit 1;",
               [ logID ]) { |row|
       name = firstName(row[1])
-      return row[0], name, row[2], row[3], lookupTeam(row[9], logID), row[4], row[5], row[6], row[7], row[8], numStates(logID)
+      return row[0], name, row[2], row[3], lookupTeam(row[10], logID), row[4], row[5], row[6], row[7], row[8], row[9], numStates(logID)
     }
     return nil
   end
@@ -694,7 +694,7 @@ class ContestDatabase
 
   def goldenLogs(contestID)
     golden = Array.new
-    @db.query("select l.id, l.callsign, l.verifiedQSOs, sum(q.matchType in ('Unique','Partial','NIL','OutsideContest','Removed')) as nongolden from Log as l join QSO as q on l.id = q.logID where l.contestID = ? group by l.id having nongolden = 0 order by l.verifiedQSOs desc, l.callsign asc;", [contestID]) { |row|
+    @db.query("select l.id, l.callsign, l.verifiedPHQSOs, l.verifiedCWQSOs, sum(q.matchType in ('Unique','Partial','NIL','OutsideContest','Removed')) as nongolden from Log as l join QSO as q on l.id = q.logID where l.contestID = ? group by l.id having nongolden = 0 order by l.verifiedQSOs desc, l.callsign asc;", [contestID]) { |row|
       golden << { "callsign" => row[1], "numQSOs" => row[2] }
     }
     golden

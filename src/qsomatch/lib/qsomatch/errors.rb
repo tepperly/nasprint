@@ -34,7 +34,7 @@ def fillInComment(db, contestID)
       comments << "mode mismatch #{row[10]}"
     end
     if ((db.toDateTime(row[3]) + row[4]) - 
-        (db.toDateTime(row[11]) + row[12])).abs > 15*60
+        (db.toDateTime(row[11]) + row[12])).abs > CrossMatch::PERFECT_TIME_MATCH*60
       comments << "time mismatch #{(db.toDateTime(row[11])+row[12]).to_s}"
     end
     if (row[6].to_i - row[14].to_i).abs > 1

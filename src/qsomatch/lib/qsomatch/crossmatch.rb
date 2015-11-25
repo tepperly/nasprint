@@ -115,7 +115,7 @@ class CrossMatch
       @db.begin_transaction
       @db.query("update QSO set matchID = NULL, matchType = 'None', judged_multiplierID = NULL, judged_band = NULL, judged_mode = NULL, score = NULL where #{@logs.membertest("logID")};") { }
       @db.query("update QSOExtra set comment = NULL where #{@logs.membertest("logID")};") { }
-      @db.query("update Log set clockadj = 0, verifiedscore = null, verifiedQSOs = null, verifiedMultipliers = null where #{@logs.membertest("id")};") { }
+      @db.query("update Log set verifiedscore = null, verifiedPHQSOs = null, verifiedCWQSOs = null, verifiedMultipliers = null where #{@logs.membertest("id")};") { }
     ensure
       @db.end_transaction
     end
@@ -203,7 +203,7 @@ class CrossMatch
     print m.to_s + "\n"
   end
  
-  def linkQSOs(queryStr, match1, match2, quiet=true)
+  def linkQSOs(queryStr, match1, match2, quiet=true, markDupe=true)
     count1 = 0
     count2 = 0
     dupeCount = 0
@@ -226,7 +226,7 @@ class CrossMatch
             found = true
           end
         end
-        if not found
+        if markDupe and not found
           @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i]) { }
           dupeCount += @db.affected_rows
         end
@@ -287,7 +287,7 @@ class CrossMatch
       }
     end
     $stdout.flush
-    num1, num2, dupeCount = linkQSOs(queryStr, matchType, matchType, true)
+    num1, num2, dupeCount = linkQSOs(queryStr, matchType, matchType, true, true)
     num1 = num1 + num2
     print "Ending perfect match test: #{Time.now.to_s}\n"
     return num1, dupeCount
@@ -319,7 +319,8 @@ class CrossMatch
       }
     end
     $stdout.flush
-    full1, partial1, dupeCount = linkQSOs(queryStr, fullType, partialType, true)
+    full1, partial1, dupeCount = linkQSOs(queryStr, fullType, partialType, true, 
+                                          false)
     print "Partial match end: #{Time.now.to_s}\n"
     return full1, partial1, dupeCount
   end
@@ -401,7 +402,7 @@ class CrossMatch
     print "Basic match test phase #{modeBandDesc(modeAndBand)}(#{timediff} min tolerance): #{Time.now.to_s}\n"
     print queryStr + "\n"
     $stdout.flush
-    num1, num2, dupeCount = linkQSOs(queryStr, 'Partial', 'Partial', true)
+    num1, num2, dupeCount = linkQSOs(queryStr, 'Partial', 'Partial', true, false)
     print "Basic match end: #{Time.now.to_s}\n"
     return num1, num2, dupeCount
   end
@@ -725,16 +726,16 @@ class CrossMatch
   end
 
   def initialScore
-    @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q1.judged_multiplierID, q1.recvd_serial, q1.matchType, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc;") { |row|
+    @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q1.judged_multiplierID, q1.recvd_serial, q1.matchType, q1.band, q1.fixedMode, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial, q2.band, q2.fixedMode from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc;") { |row|
       log1Adj = logAdj(row[2])
-      log2Adj = logAdj(row[10])
+      log2Adj = logAdj(row[12])
       comment = ""
       notMatch = 0
-      if ((@db.toDateTime(row[1])+log1Adj) - (@db.toDateTime(row[9])+log2Adj)).abs > 15*60
+      if ((@db.toDateTime(row[1])+log1Adj) - (@db.toDateTime(row[11])+log2Adj)).abs > PERFECT_TIME_MATCH*60
         notMatch += 1
         comment << " clock"
       end
-      if row[3].nil? or (row[3] != row[11]) # call signs mismatch
+      if row[3].nil? or (row[3] != row[13]) # call signs mismatch
         notMatch += 1
         comment << " callsign"
       end
@@ -742,11 +743,23 @@ class CrossMatch
         notMatch += 1
         comment << " multiplier"
       end
-      if row[6].nil? or ((not (row[12].nil?)) and ((row[6] < (row[12]-1)) or (row[6] > (row[12]+1)))) # serial mismatch
+      if row[8].nil? or ((not (row[15].nil?)) and (row[8] != row[15]))
+        notMatch += 1
+        comment << " band"
+      end
+      if row[9].nil? or ((not (row[16].nil?)) and (row[9] != row[16]))
+        notMatch += 1
+        comment << " mode"
+      end
+      if row[6].nil? or ((not (row[14].nil?)) and ((row[6] < (row[14]-1)) or (row[6] > (row[14]+1)))) # serial mismatch
         notMatch += 1
         comment << " serial"
       end
-      if (notMatch == 0 and row[7] != "Full") or (notMatch != 0 and row[7] == "Full")
+      if (notMatch == 0 and row[7] != "Full")
+        @db.query("update QSO set matchType='Full' where id = ? limit 1;",
+                  [ row[0] ])
+      end
+      if (notMatch != 0 and row[7] == "Full")
         print "QSO ID #{row[0]} is a #{row[7]} match with #{notMatch} mismatches #{comment}\n"
       end
       case notMatch

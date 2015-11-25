@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # -*- encoding: utf-8 -*-
 #
-# Normalize a NA Sprint pseudo-Cabrillo
+# Normalize a CQP pseudo-Cabrillo
 # By Tom Epperly
 # ns6t@arrl.net
 #
