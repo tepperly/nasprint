@@ -14,7 +14,6 @@ class Multiplier
     @cdb = cdb
     @logs = LogSet.new(cdb.logsForContest(contestID))
     @previousDecisions = readPrevious
-    @tojson = Hash.new
     @callDB = readXMLDb
     lookupStates
   end
@@ -22,17 +21,12 @@ class Multiplier
   def readPrevious
     if File.readable?("callmults.json")
       result = JSON.parse(File.read("callmults.json"))
-    elsif File.readable?("callmults.csv")
-      result = Hash.new
-      CSV.foreach("callmults.csv") {|row|
-        result[row[0]] = row[1]
-      }
     end
     result
   end
 
   def savePrevious(filename)
-    File.write(filename, @tojson)
+    File.write(filename, JSON.pretty_generate(@previousDecisions))
   end
 
   def lookupStates
@@ -259,7 +253,6 @@ class Multiplier
       print "ID #{item} #{hash[item][1]} #{hash[item][2]}\n"
     }
     if @previousDecisions.has_key?(callsign)
-      @tojson[callsign] = @previousDecisions[callsign]
       num, entID = @cdb.lookupMultiplier(@previousDecisions[callsign])
       return num, @previousDecisions[callsign]
     else
@@ -268,6 +261,7 @@ class Multiplier
       num = item.strip.to_i
       list.each { |item|
         if item[0] == num
+          @previousDecisions[callsign] = item[1]
           return num, item[1]
         end
       }
@@ -276,11 +270,14 @@ class Multiplier
   end
 
   def updateByeQSOs(id, choice, name)
+    count = 0
     @db.query("update QSO set judged_multiplierID = ? where matchType='Bye' and recvd_callID = ? and recvd_multiplierID = ? and judged_multiplierID is null and #{@logs.membertest("logID")};",
-              [ choice, id, choice ] )
+              [ choice, id, choice ] )  { }
+    count += @db.affected_rows
     @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where matchType='Bye' and recvd_callID = ? and recvd_multiplierID != ? and judged_multiplierID is null and #{@logs.membertest("logID")};",
-              [choice, id, choice] )
-    return @db.affected_rows
+                [choice, id, choice] ) { }
+    count += @db.affected_rows
+    return count
   end
   
 
@@ -341,6 +338,14 @@ class Multiplier
     result
   end
 
+  def numLogs(callID, multID)
+    count = 0
+    @db.query("select count(distinct logID) from QSO where #{@logs.membertest("logID")} and judged_multiplierID = ? and recvd_callID = ?;", [multID, callID]) { |row|
+      count = row[0]
+    }
+    count
+  end
+
   def allCallsigns(id, multID)
     result = Array.new
     @db.query("select distinct qe.recvd_callsign from QSOExtra as qe join QSO as q on q.id = qe.id and q.recvd_callID = ? and q.judged_multiplierID = ? where #{@logs.membertest("q.logID")} order by qe.recvd_callsign asc;", [ id, multID ]) { |row|
@@ -367,15 +372,17 @@ class Multiplier
     @db.query("select m.abbrev, c.basecall, c.logrecvd, c.validcall, count(*) as num, c.id, m.id from Multiplier as m join QSO as q on q.judged_multiplierID = m.id join Callsign as c on c.id = q.recvd_callID where #{@logs.membertest("q.logID")} and q.matchType in ('Full','Bye','PartialBye','Partial') and m.id in (#{ids.join(", ")}) group by m.id, c.id order by m.id asc, num desc;") { |row|
       if (row[0] != prev) 
         print "Multiplier: " + row[0] + "\n"
-        print "    %-8s %-5s %-5s %-4s %-4s %s\n" % ["Station", "Log?", "QRZ?",
-                                               "QLOC", "#", "Callsigns"]
+        print "    %-8s %-5s %-5s %-4s %-4s %-5s %s\n" % ["Station", "Log?",
+                                                          "QRZ?", "QLOC", 
+                                                          "#Qs", "#Logs",
+                                                          "Callsigns"]
         prev = row[0]
       end
-      print "    %-8s %-5s %-5s %-4s %4d %s\n" % 
+      print "    %-8s %-5s %-5s %-4s %4d %5d %s\n" % 
         [row[1], @db.toBool(row[2]).to_s,
          @db.toBool(row[3]).to_s,
          qLoc(@db.toBool(row[3]), row[1]),
-         row[4].to_i, 
+         row[4].to_i, numLogs(row[5].to_i, row[6].to_i),
          allCallsigns(row[5].to_i, 
                       row[6].to_i) ]
     }

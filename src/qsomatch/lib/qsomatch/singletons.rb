@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby
 # -*- encoding: utf-8 -*-
 
-require 'jaro_winkler'
+# require 'jaro_winkler'
+require 'qsomatch'
 require_relative 'crossmatch'
 require_relative 'dxmap'
 
@@ -38,7 +39,7 @@ class ResolveSingletons
   end
 
   def queryCallsigns
-    loc = CallLocator.new
+    loc = CallsignLocator.new
     callList = Array.new
     @db.query("select c.id, c.basecall, c.validcall, c.logrecvd, count(*) as num, illegalcall from Callsign as c, QSO as q where c.contestID = ? and q.recvd_callID = c.id group by c.id order by c.basecall asc;", [@contestID]) { |row|
       c = Call.new(row[0].to_i, row[1], @db.toBool(row[2]), @db.toBool(row[5]), @db.toBool(row[3]), row[4].to_i)
@@ -51,10 +52,13 @@ class ResolveSingletons
     return callList
   end
 
-  def possibleMatches(id, callsign, tolerance = 0.94)
+  def possibleMatches(id, callsign, isCW=false, tolerance = 0.94)
     results = Array.new
     @callsigns.each { |call|
-      if call.id != id and call.valid and (not call.illegal) and (call.numQSOs >= 10 or call.haveLog) and JaroWinkler.distance(call.callsign, callsign) >= tolerance
+      if (call.id != id and call.valid and (not call.illegal) and 
+          (call.numQSOs >= 10 or call.haveLog) and 
+          (isCW ? QSO.cwJaroWinkler(call.callsign, callsign)
+           : QSO.phJaroWinkler(call.callsign, callsign)) >= tolerance)
         results << call
       end
     }
@@ -88,13 +92,12 @@ class ResolveSingletons
     false
   end
 
-
   def resolve
     @db.query("select distinct q.id from QSO as q where matchType = 'None' and (q.recvd_multiplierID is null or q.recvd_serial is null);") { |row|
       @db.query("update QSO set matchType = 'Removed'  where id = ? limit 1;", [row[0]]) { }
       @db.query("update QSOExtra set comment='No received serial number or multiplier for this QSO.' where id = ? limit 1;", [row[0]]) { }
     }
-    @db.query("select q.id, q.recvd_callID, q.recvd_serial from QSO as q where " +
+    @db.query("select q.id, q.recvd_callID, q.recvd_serial, q.fixedMode from QSO as q where " +
                     @logIDs.membertest("q.logID") +
               " and q.matchType = 'None' order by q.id asc;"){ |row|
       call = @callFromID[row[1]]
@@ -105,7 +108,7 @@ class ResolveSingletons
         else
           if call.illegal or (not call.valid and call.numQSOs <= 5)
             # illegal callsign
-            list = possibleMatches(call.id, call.callsign)
+            list = possibleMatches(call.id, call.callsign, "CW" == row[3], 0.875)
             if list
               @db.query("update QSO set matchType = 'Removed' where id = ? limit 1;", [row[0]]) { }
               @db.query("update QSOExtra set comment='Busted callsign - potential matches: #{list.join(" ")}.' where id = ? limit 1;", [row[0]]) { }
@@ -117,7 +120,7 @@ class ResolveSingletons
             if call.numQSOs >= 10 or (call.valid and call.numQSOs >= 5)
               @db.query("update QSO set matchType = 'Bye' where id = ? limit 1;", [row[0]]) { }
             else
-              list = possibleMatches(call.id, call.callsign)
+              list = possibleMatches(call.id, call.callsign, "CW" == row[3])
               mc = farMoreCommon(list, call.numQSOs)
               if mc and exchangeClose(row[0],mc)
                 @db.query("update QSO set matchType = 'Removed' where id = ? limit 1;", [row[0]]) { }

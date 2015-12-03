@@ -49,7 +49,8 @@ opts = GetoptLong.new(
                       [ '--verbose', '-V', GetoptLong::NO_ARGUMENT],
                       [ '--load', '-l', GetoptLong::NO_ARGUMENT],
                       [ '--score', '-s', GetoptLong::NO_ARGUMENT],
-                      [ '--rare', '-r', GetoptLong::NO_ARGUMENT]
+                      [ '--rare', '-r', GetoptLong::NO_ARGUMENT],
+                      [ '--report', '-T', GetoptLong::NO_ARGUMENT]
                       )
 
 cmddbopts = Hash.new
@@ -70,6 +71,8 @@ opts.each { |opt, arg|
   when '--sqlite'
     cmddbopts['type'] = 'sqlite3'
     cmddbopts['filename'] = arg
+  when '--report'
+    $action = :report
   when '--rare'
     $action = :rare
   when '--check'
@@ -236,6 +239,23 @@ def rareReport(db, contestID, contestDB)
   m.rareMultReport
 end
 
+def reportContest(db, contestID, contestDB)
+  ct = CalcTimeAdj.new(db, contestID)
+  ct.buildVariables
+  ct.buildMILP
+  r = Report.new(db, contestID)
+  print "Making report\n"
+  open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
+    r.makeReport(out, contestID)
+  }
+  open("toxic_" + $name.gsub(/\s+/,'_') + "_" + $year.to_s + ".csv", "w:ascii") { |out|
+    r.toxicLogReport(out, contestID)
+  }
+  print "Dumping logs\n"
+  dumpLogs(db, contestID)
+  print "All Done Reporting\n"
+end
+
 def scoreContest(db, contestID, contestDB)
   cm = CrossMatch.new(db, contestID, contestDB)
   if $restart
@@ -330,21 +350,11 @@ def scoreContest(db, contestID, contestDB)
   print "#{num} Dupe QSOs identified during final check\n."
   print "Filling in comments\n"
   fillInComment(db, contestID)
-  r = Report.new(db, contestID)
-  print "Making report\n"
-  open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
-    r.makeReport(out, contestID)
-  }
-  open("toxic_" + $name.gsub(/\s+/,'_') + "_" + $year.to_s + ".csv", "w:ascii") { |out|
-    r.toxicLogReport(out, contestID)
-  }
-  print "Dumping logs\n"
-  dumpLogs(db, contestID)
-  print "All Done\n"
+  print "All Done Scoring\n"
 end
 
 begin
-  if $name and $year and [:load, :score, :checkdupes, :rare ].include?($action)
+  if $name and $year and [:load, :score, :checkdupes, :rare, :report ].include?($action)
     db = makeDB(dbopts)
     cdb = ContestDatabase.new(db, ctl)
     contestID = cdb.addOrLookupContest($name, $year, $create)
@@ -356,7 +366,7 @@ begin
   else
     db = nil
     cdb = nil
-    if [:load, :score, :checkdupes, :rare ].include?($action)
+    if [:load, :score, :checkdupes, :rare, :report ].include?($action)
       print "Load and score action require a database.\n"
       exit 2
     end
@@ -366,6 +376,9 @@ begin
     loadFiles(ARGV, cdb, contestID, ctl)
   when :score
     scoreContest(db, contestID, cdb)
+    reportContest(db, contestID, cdb)
+  when :report
+    reportContest(db, contestID, cdb)
   when :rare
     rareReport(db, contestID, cdb)
   when :checkdupes
