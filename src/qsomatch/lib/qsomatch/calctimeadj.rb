@@ -80,9 +80,11 @@ class CalcTimeAdj
         varsPerLog[i] << "#{row[3].to_i} * QSO#{intvars.length}"
         if row[2].to_i.abs > GRACE_PERIOD
           violationsPerLog[i] += row[3].to_i
-          totalClockErrs += row[3].to_i
         end
       }
+      if row[2].to_i.abs > GRACE_PERIOD
+        totalClockErrs += row[3].to_i
+      end
       intvars << [ row[0].to_i, row[1].to_i, row[2].to_i, row[3].to_i]
     }
     print "#{totalClockErrs} initial QSO clock mismatches\n"

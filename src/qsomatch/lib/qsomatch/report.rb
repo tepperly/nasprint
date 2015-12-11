@@ -6,7 +6,30 @@ require 'csv'
 require_relative 'logset'
 
 class Log
-  def initialize(call, email, opclass, qth)
+  CA_QTH = Set.new(%w{ ALAM ALPI AMAD BUTT CALA CCOS COLU DELN ELDO
+FRES GLEN HUMB IMPE INYO KERN KING LAKE LANG LASS MADE MARN MARP MEND
+MERC MODO MONO MONT NAPA NEVA ORAN PLAC PLUM RIVE SACR SBAR SBEN SBER
+SCLA SCRU SDIE SFRA SHAS SIER SISK SJOA SLUI SMAT SOLA SONO STAN SUTT
+TEHA TRIN TULA TUOL VENT YOLO YUBA }).freeze
+  US_QTH = Set.new(%w{  AK AL AR AZ CO CT DE FL GA HI IA ID
+IL IN KS KY LA MA MD ME MI MN MO MS MT NC ND NE NH NJ NM NV
+NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
+}).freeze
+  CAN_QTH = Set.new(%w{ AB BC MB MR NT ON QC SK })
+
+  def qthClass
+    if US_QTH.include?(@qth)
+      "USA"
+    elsif CA_QTH.include?(@qth)
+      "CA"
+    elsif CAN_QTH.include?(@qth)
+      "CAN"
+    else 
+      "DX"
+    end
+  end
+  
+  def initialize(call, email, opclass, qth, isCCE, isYOUTH, isYL, isNEW, isSCHOOL,isMOBILE)
     @call = call
     @qth = qth
     @email = email
@@ -21,6 +44,12 @@ class Log
     @numRemoved = 0
     @numNIL = 0
     @numOutsideContest = 0
+    @isCCE = isCCE
+    @isYOUTH = isYOUTH
+    @isYL = isYL
+    @isNEW = isNEW
+    @isSCHOOL = isSCHOOL
+    @isMOBILE = isMOBILE
     @multipliers = Set.new
   end
 
@@ -42,7 +71,7 @@ class Log
   end
 
   def to_s
-    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{@multipliers.size},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isSCHOOL}\",\"#{@isMOBILE}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{@multipliers.size},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -159,14 +188,14 @@ class Report
 
   def makeReport(out = $stdout, contestID)
     logs = Array.new
-    @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID where contestID = ? order by callsign asc;", [contestID]) { |row|
-      log = Log.new(row[0], row[1], row[2], row[5])
+    @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev, l.isCCE, l.isYOUTH, l.isYL, l.isNEW, l.isSCHOOL, l.isMOBILE from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID  where contestID = ? order by callsign asc;", [contestID]) { |row|
+      log = Log.new(row[0], row[1], row[2], row[5], @db.toBool(row[6]), @db.toBool(row[7]), @db.toBool(row[8]), @db.toBool(row[9]), @db.toBool(row[10]), @db.toBool(row[11]))
       scoreLog(row[3], row[4], log)
       @db.query("update Log set verifiedscore = #{log.score}, verifiedCWQSOs = ?, verifiedPHQSOs = ?, verifiedMultipliers = ? where id = ? limit 1;",
                 [log.numCW, log.numPH, log.nummultipliers, row[3]]) { }
       logs << log
     }
-    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
+    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"QTH Class\",\"CCE?\",\"YOUTH?\",\"YL?\",\"NEW?\",\"SCHOOL?\",\"MOBILE?\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
     logs.each { |log|
       out.write(log.to_s + "\r\n")
     }
