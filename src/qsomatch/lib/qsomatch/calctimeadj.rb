@@ -92,18 +92,18 @@ class CalcTimeAdj
     if not intvars.empty?
       milp_PENALTY = 0.9/@numvars/(big_M+2*GRACE_PERIOD)
       open("/tmp/calcadj.lp", "w") { |out|
-        out.write("min: ")
+        out.write("max: ")
         intvars.each_with_index { |v,i|
           out.write(((v[3] != 1) ? (v[3].to_s + " ")  : "")  +
                     "QSO" + i.to_s + " + ")
         }
         out.write(@idtovar.keys.map { |x| 
-                    (milp_PENALTY).to_s + " * LP" + x.to_s + " + " +
-                    (milp_PENALTY).to_s + " * LN" + x.to_s }.join(" + ") +
-                  " + 0.01*MaxPerLog;\n")
+                    (-milp_PENALTY).to_s + " * LP" + x.to_s + " + " +
+                    (-milp_PENALTY).to_s + " * LN" + x.to_s }.join(" + ") +
+                  " - 0.01*MaxPerLog;\n")
         intvars.each_with_index { |v,i|
-          out.write("LP#{v[0]} - LN#{v[0]} - LP#{v[1]} + LN#{v[1]} + #{big_M} * QSO#{i} >= #{-GRACE_PERIOD - v[2]};\n")
-          out.write("LP#{v[0]} - LN#{v[0]} - LP#{v[1]} + LN#{v[1]} - #{big_M} * QSO#{i} <= #{GRACE_PERIOD - v[2]};\n")
+          out.write("LP#{v[0]} - LN#{v[0]} - LP#{v[1]} + LN#{v[1]} + #{big_M} * QSO#{i} <= #{big_M + GRACE_PERIOD - v[2]};\n")
+          out.write("LP#{v[0]} - LN#{v[0]} - LP#{v[1]} + LN#{v[1]} - #{big_M} * QSO#{i} >= #{-GRACE_PERIOD - big_M - v[2]};\n")
         }
         varsPerLog.each { |k,v|
 #          out.write(v.join(" + ") + " <= #{violationsPerLog[k]};\n")

@@ -50,6 +50,7 @@ opts = GetoptLong.new(
                       [ '--load', '-l', GetoptLong::NO_ARGUMENT],
                       [ '--score', '-s', GetoptLong::NO_ARGUMENT],
                       [ '--rare', '-r', GetoptLong::NO_ARGUMENT],
+                      [ '--fifty-eight', '-5', GetoptLong::NO_ARGUMENT],
                       [ '--report', '-T', GetoptLong::NO_ARGUMENT]
                       )
 
@@ -73,6 +74,8 @@ opts.each { |opt, arg|
     cmddbopts['filename'] = arg
   when '--report'
     $action = :report
+  when '--fifty-eight'
+    $action = :fifty_eight
   when '--rare'
     $action = :rare
   when '--check'
@@ -239,18 +242,26 @@ def rareReport(db, contestID, contestDB)
   m.rareMultReport
 end
 
+def report58(db, contestID, contestDB)
+  r =Report.new(db, contestID)
+  r.firstTo58($stdout, contestID)
+end
+
 def reportContest(db, contestID, contestDB)
-  ct = CalcTimeAdj.new(db, contestID)
-  ct.buildVariables
-  ct.buildMILP
   r = Report.new(db, contestID)
   print "Making report\n"
   open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
     r.makeReport(out, contestID)
   }
+  open("green_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".txt", "w:ascii") { |out|
+    r.makeGreenReport(out, contestID)
+  }
   open("toxic_" + $name.gsub(/\s+/,'_') + "_" + $year.to_s + ".csv", "w:ascii") { |out|
     r.toxicLogReport(out, contestID)
   }
+  dir = "cqp" + $year.to_s + "_lcrs"
+  Dir.mkdir(dir)
+  r.logCheckReport(dir, contestID)
   print "Dumping logs\n"
   dumpLogs(db, contestID)
   print "All Done Reporting\n"
@@ -354,7 +365,7 @@ def scoreContest(db, contestID, contestDB)
 end
 
 begin
-  if $name and $year and [:load, :score, :checkdupes, :rare, :report ].include?($action)
+  if $name and $year and [:load, :score, :checkdupes, :rare, :report, :fifty_eight ].include?($action)
     db = makeDB(dbopts)
     cdb = ContestDatabase.new(db, ctl)
     contestID = cdb.addOrLookupContest($name, $year, $create)
@@ -366,7 +377,7 @@ begin
   else
     db = nil
     cdb = nil
-    if [:load, :score, :checkdupes, :rare, :report ].include?($action)
+    if [:load, :score, :checkdupes, :rare, :report, :fifty_eight ].include?($action)
       print "Load and score action require a database.\n"
       exit 2
     end
@@ -379,6 +390,8 @@ begin
     reportContest(db, contestID, cdb)
   when :report
     reportContest(db, contestID, cdb)
+  when :fifty_eight
+    report58(db, contestID, cdb)
   when :rare
     rareReport(db, contestID, cdb)
   when :checkdupes

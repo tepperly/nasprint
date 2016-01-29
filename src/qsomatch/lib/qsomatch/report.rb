@@ -28,13 +28,32 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
       "DX"
     end
   end
+
+  def greenArea
+    if US_QTH.include?(@qth)
+      "US"
+    elsif CA_QTH.include?(@qth)
+      "CA"
+    elsif CAN_QTH.include?(@qth)
+      "VE"
+    else 
+      "DX"
+    end
+  end
   
-  def initialize(call, email, opclass, qth, isCCE, isYOUTH, isYL, isNEW, isSCHOOL,isMOBILE)
+  def initialize(call, email, opclass, qth, power, isCCE, isYOUTH, isYL, isNEW, isSCHOOL,isMOBILE, entity, id, clockadj)
+    @id = id
+    @clockadj = clockadj
     @call = call
+    @entity = entity
     @qth = qth
     @email = email
     @opclass = opclass
+    @power = power
     @numClaimed = 0
+    @greenPH = nil
+    @greenCW = nil
+    @greenChecked = 0
     @numD1 = 0
     @numD2 = 0
     @numPH = 0
@@ -51,12 +70,15 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     @isSCHOOL = isSCHOOL
     @isMOBILE = isMOBILE
     @multipliers = Set.new
+    @claimedMults
   end
 
   attr_reader :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
-        :numOutsideContest, :numClaimed, :numD1, :numD2
+    :numOutsideContest, :numClaimed, :numD1, :numD2, :claimedMults,
+    :greenPH, :greenCW, :greenChecked,:call,:qth, :clockadj, :id
   attr_writer :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
-        :numOutsideContest, :numClaimed, :numD1, :numD2
+        :numOutsideContest, :numClaimed, :numD1, :numD2, :claimedMults,
+    :greenPH, :greenCW, :greenChecked
 
   def addMultiplier(name)
     @multipliers.add(name)
@@ -70,8 +92,14 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     ( numPH*2 + numCW*3) * nummultipliers
   end
 
+  def ls_line
+    print "!! #{@call}: numPH != claimedPH - 0.5*d1PH - d2PH : #{numPH} != #{@greenPH[0]} - 0.5*#{@greenPH[2]} - #{@greenPH[1]}\n" if numPH != (@greenPH[0] - @greenPH[1] -0.5* @greenPH[2]).to_i
+    print "!! #{@call}: numCW != claimedCW - 0.5*d1CW - d2CW : #{numCW} != #{@greenCW[0]} - 0.5*#{@greenCW[2]} - #{@greenCW[1]}\n" if numCW != (@greenCW[0] - @greenCW[1] - 0.5*@greenCW[2]).to_i
+    "LS,#{@call},,#{@numClaimed},#{@numDupe},#{@claimedMults},#{@greenCW[0]},#{@greenPH[0]},#{(@greenCW[0]*3+2*@greenPH[0])*@claimedMults},#{@greenChecked},#{@greenCW[1]},#{@greenCW[2]},#{@greenPH[1]},#{@greenPH[2]},#{@multipliers.length},#{score},#{@qth},#{greenArea},#{@entity}"
+  end
+
   def to_s
-    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isSCHOOL}\",\"#{@isMOBILE}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{@multipliers.size},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isSCHOOL}\",\"#{@isMOBILE}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{@multipliers.size},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -136,19 +164,47 @@ class Report
     0
   end
 
-  def calcMultipliers(id, log, multID)
+  def greenModeStats(id, mode, multID)
+    @db.query("select count(*), sum(q.score = 0), sum(q.score = 1), sum(q.score=2) from QSO as q where q.logID = ? and q.sent_multiplierID = ? and q.judged_mode in (#{mode.map { |x| "'" + x + "'"}.join(', ')}) and NOT q.matchType in ('None', 'Dupe', 'OutsideContest', 'TimeShiftFull', 'TimeShiftPartial');", [ id, multID ] ) {|row|
+      print "!! Don't add up\n" if row[0] and (row[0] > 0) and (row[0] != row[1]+row[2]+row[3])
+      return row[0].to_i, row[1].to_i, row[2].to_i
+    }
+    return nil, nil, nil
+  end
+
+  def calcGreenChecked(id, multID)
+    @db.query("select count(*) from QSO where matchType in ('Full', 'Partial') and logID = ? and sent_multiplierID = ?;", [id, multID]) { |row|
+      return row[0]
+    }
+    0
+  end
+
+  def calcMultipliers(id, log, multID, claimed = nil)
+    if claimed
+      matchType = %w{ None Full Partial Bye PartialBye Unique Dupe NIL OutsideContest Removed }
+    else
+      matchType = %w{ Full Partial Bye PartialBye }
+    end
     isCA = @db.true
     @db.query("select m.isCA from Multiplier as m join Log as l on l.multiplierID = m.id where l.id = ? limit 1;", [ id ]) { |row|
       isCA = row[0]
     }
-    @db.query("select distinct m.abbrev from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.judged_multiplierID = m.id where l.id = ? and q.matchType in ('Full','Partial','Bye', 'PartialBye') and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA != ?; ", 
+    @db.query("select distinct m.abbrev from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.judged_multiplierID = m.id where l.id = ? and q.matchType in (#{matchType.map { |x| "'" + x + "'"}.join(", ")}) and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA != ?; ", 
               [id, multID, isCA]) { |row|
-      log.addMultiplier(row[0])
+      if claimed
+        claimed << row[0]
+      else
+        log.addMultiplier(row[0])
+      end
     }
     if @db.toBool(isCA)
       # for CA stations any CA county counts as a CA multiplier
-      @db.query("select m.id from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.judged_multiplierID = m.id where l.id = ? and q.matchType in ('Full','Partial','Bye', 'PartialBye') and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA limit 1;", [ id, multID ]) { |row|
-        log.addMultiplier("CA")
+      @db.query("select m.id from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.judged_multiplierID = m.id where l.id = ? and q.matchType in (#{matchType.map { |x| "'" + x + "'"}.join(", ")}) and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA limit 1;", [ id, multID ]) { |row|
+        if claimed
+          claimed << "CA"
+        else
+          log.addMultiplier("CA")
+        end
       }
     end
   end
@@ -158,6 +214,9 @@ class Report
     log.numD1 = numPartial(id, multID, 1)
     log.numD2 = numPartial(id, multID, 0)
     log.numClaimed = totalClaimed(id, multID)
+    log.greenPH = greenModeStats(id, %w{ FM PH }, multID)
+    log.greenCW = greenModeStats(id, %w{ CW }, multID)
+    log.greenChecked = calcGreenChecked(id, multID)
     log.numPH = qsoTotal(id, "PH", multID)
     log.numCW = qsoTotal(id, "CW", multID)
     log.numNIL = modeTotal(id, "NIL", multID)
@@ -166,7 +225,89 @@ class Report
     log.numRemoved = modeTotal(id, "Removed", multID)
     log.numOutsideContest = modeTotal(id, "OutsideContest", multID)
     calcMultipliers(id, log, multID)
+    claimed = Set.new
+    calcMultipliers(id, log, multID, claimed)
+    log.claimedMults = claimed.length
   end
+
+  def scoredLogs(contestID)
+    logs = Array.new
+    @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev, l.isCCE, l.isYOUTH, l.isYL, l.isNEW, l.isSCHOOL, l.isMOBILE, l.entityID, l.powclass, l.clockadj from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID  where contestID = ? order by callsign asc;", [contestID]) { |row|
+      log = Log.new(row[0], row[1], row[2], row[5], row[13], @db.toBool(row[6]), @db.toBool(row[7]), @db.toBool(row[8]), @db.toBool(row[9]), @db.toBool(row[10]), @db.toBool(row[11]), row[12], row[3].to_i, row[14].to_i)
+      scoreLog(row[3], row[4], log)
+      logs << log
+    }
+    return logs
+  end
+
+  def logCheckReport(dir, contestID)
+    logs = scoredLogs(contestID)
+    logs.each { |log|
+      open(File.join(dir, log.call+"_" + log.qth + ".lcr"), "w") { |out|
+        lcrHeader(out, log)
+        lcrQSOReport(out,log)
+        lcrScoreSummary(out, log)
+        lcrMultiplierHistogram(out, log)
+      }
+    }
+  end
+
+  def lcrHeader(out, log)
+    out << log.call << "  QTH:" << log.qth << "\r\nCQP LOG CHECKING RESULTS\r\n\r\n"
+  end
+
+  def serialNum(num)
+    num ? num.to_i : 9999
+  end
+
+  def lcrQSOReport(out, log)
+    @db.query("select q.frequency, q.fixedMode, q.time, qe.sent_callsign, q.sent_serial, coalesce(m1.abbrev,qe.sent_location) as sentmult,  qe.recvd_callsign, q.recvd_serial, coalesce(m2.abbrev,qe.recvd_location) as recvdmult, q.matchType, qe.comment, q.score, q.id from (QSO as q left join Multiplier as m1 on m1.id = q.sent_multiplierID) left join Multiplier as m2 on m2.id = q.recvd_multiplierID, QSOExtra as qe on q.id = qe.id where q.logID = ? and (q.matchType in ('None','PartialBye','Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed') or (q.score != 2) or (q.recvd_multipliedID != q.judged_multiplierID)) order by q.time asc, q.sent_serial asc;",
+             [logID]) { |row|
+      td = db.toDateTime(row[2]) + log.clockAdj
+      out << ("QSO: %5d %2s %4d-%02d-%02d %02d%02d %-10s %4d %-4s %-10s %4d %-4s\r\n" %
+              [row[0], row[1], td.year, td.month, td.mday, td.hour, td.min, row[3], 
+               serialNum(row[4]), row[5], row[6], serialNum(row[7]), row[8] ])
+      case row[9]
+      when 'Dupe'
+        out << "   Duplicate QSO....removed without penalty...\r\n"
+      when 'PartialBye'
+        out << "   Half credit due received location mismatch (judged location is "
+        out << judgedLocation(row[12]) << ")\r\n"
+      when 'Unique'
+        out << "   QSO removed because unique callsign and high serial number (most likely a busted call)\r\n"
+      when 'OutsideContest'
+        out << "   QSO removed because it is outside the contest time period.\r\n"
+      when 'NIL'
+        out << "   This QSO was removed without penalty because it is not in the received stations log (NIL)\r\n"
+      when 'Removed'
+        out << "   This QSO was removed without penalty: " << row[10] << "\r\n"
+      when 'None'
+        out << "   This QSO was removed (may indicate bug in scoring program): " << row[10] << "\r\n"
+      when 'Full'
+        if row[10].index("time mismatch")
+          out << "   After inter-local clock reconciliation, the time in this log differs from the received stations log by more than 15 minutes.\r\n"
+          if row[11] == 1
+            out << "   Half-credit awarded for this QSO: " << row[10] << "\r\n"
+          elsif row[11] == 0
+            out << "   No credit awarded for this QSO: " << row[10] << "\r\n"
+          end
+        else
+          if row[11] == 1
+            out << "   Half-credit awarded for this QSO: " << row[10] << "\r\n"
+          elsif row[11] == 0
+            out << "   No credit awarded for this QSO: " << row[10] << "\r\n"
+          end
+        end
+      when 'Partial'
+        if row[11] == 1
+          out << "  Half-credit awarded for this QSO: " << row[10] << "\r\n"
+        elsif row[11] == 0
+          out << "  No credit award for this QSO: "  << row[10] << "\r\n"
+        end
+      end
+    }
+  end
+    
 
   def toxicLogReport(out = $stdout, contestID)
     logs = Array.new
@@ -186,18 +327,50 @@ class Report
     }
   end
 
-  def makeReport(out = $stdout, contestID)
-    logs = Array.new
-    @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev, l.isCCE, l.isYOUTH, l.isYL, l.isNEW, l.isSCHOOL, l.isMOBILE from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID  where contestID = ? order by callsign asc;", [contestID]) { |row|
-      log = Log.new(row[0], row[1], row[2], row[5], @db.toBool(row[6]), @db.toBool(row[7]), @db.toBool(row[8]), @db.toBool(row[9]), @db.toBool(row[10]), @db.toBool(row[11]))
-      scoreLog(row[3], row[4], log)
-      @db.query("update Log set verifiedscore = #{log.score}, verifiedCWQSOs = ?, verifiedPHQSOs = ?, verifiedMultipliers = ? where id = ? limit 1;",
-                [log.numCW, log.numPH, log.nummultipliers, row[3]]) { }
-      logs << log
+  def makeGreenReport(out = $stdout, contestID)
+    logs = scoredLogs(contestID)
+    logs.each { |log|
+      out.write(log.ls_line + "\r\n")
     }
-    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"QTH Class\",\"CCE?\",\"YOUTH?\",\"YL?\",\"NEW?\",\"SCHOOL?\",\"MOBILE?\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
+  end
+
+  def makeReport(out = $stdout, contestID)
+    logs = scoredLogs(contestID)
+    logs.each { |log|
+      @db.query("update Log set verifiedscore = ?, verifiedCWQSOs = ?, verifiedPHQSOs = ?, verifiedMultipliers = ? where id = ? limit 1;",
+                [log.score, log.numCW, log.numPH, log.nummultipliers, log.id]) { }
+    }
+    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"QTH Class\",\"Power\",\"CCE?\",\"YOUTH?\",\"YL?\",\"NEW?\",\"SCHOOL?\",\"MOBILE?\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
     logs.each { |log|
       out.write(log.to_s + "\r\n")
+    }
+  end
+
+
+  def timeTo58(id, multID, isCA)
+    result = nil
+    @db.query("select q.judged_multiplierID, min(q.time) as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA = #{isCA ? @db.false : @db.true} group by q.judged_multiplierID order by ftime desc limit 1;") { |row|
+      result = @db.toDateTime(row[1])
+    }
+    if result and isCA
+      @db.query("select min(q.time) as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchTYpe in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA limit 1;") { |row|
+        newtime = @db.toDateTime(row[0])
+        if newtime > result
+          result = newtime
+        end
+      }
+    end
+    return result
+  end
+
+  def firstTo58(out = $stdout, contestID)
+    results = Array.new
+    @db.query("select distinct l.id, q.sent_multiplierID, m.isCA, m.abbrev, l.callsign from Log as l join QSO as q  on q.logID = l.id join Multiplier as m on m.id = q.sent_multiplierID where l.contestID = #{contestID} and l.verifiedMultipliers = 58 order by l.id asc;") { |row|
+      results << [row[4], row[3], timeTo58(row[0], row[1], @db.toBool(row[2]))]
+    }
+    results.sort! { |x,y| x[2] <=> y[2] }
+    results.each { |row|
+      out.write("\"" + row[0] + "\",\"" + row[1] + "\",\"" + row[2].to_s + "\"\n")
     }
   end
 end
