@@ -554,7 +554,9 @@ class CrossMatch
         if answer
           if "YES" == answer
             matchtypes = m.record(@db, CrossMatch::PERFECT_TIME_MATCH)
-            print matchtypes.join(" ") + "\n\n"
+            if matchtypes
+              print matchtypes.join(" ") + "\n\n"
+            end
           else
             print "Not a match.\n"
           end

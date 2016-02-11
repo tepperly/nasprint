@@ -15,10 +15,12 @@ def showMatch(db, id1, timeadj1, id2, timeadj2, namecmp)
 end
 
 def lookupMult(db, id)
-  res = db.query("select abbrev from Multiplier where id = #{id} limit 1;")
-  res.each(:as => :array) { |row|
-    return row[0]
-  }
+  if id
+    res = db.query("select abbrev from Multiplier where id = #{id.to_i} limit 1;")
+    res.each(:as => :array) { |row|
+      return row[0]
+    }
+  end
   nil
 end
 

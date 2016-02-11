@@ -62,6 +62,7 @@ class QRZLookup
     if not @session_key
       startSession
     end
+    sleep 0.3
     myuri = @queryURI.clone
     myuri.query = URI.encode_www_form({ :s => @session_key, 
                                         :callsign => callsign} )

@@ -108,8 +108,9 @@ class Multiplier
     nil
   end
 
-  def askUser(list)
+  def askUser(callsign,list)
     list = list.sort { |x,y| y[2] <=> x[2] }
+    print "Callsign: " + callsign + "\n"
     list.each { |item|
       print "ID #{item[0]} #{item[1]} #{item[2]}\n"
     }
@@ -138,11 +139,11 @@ class Multiplier
   end
   
 
-  def resolveAmbiguous(id, res)
+  def resolveAmbiguous(id, callsign, res)
     list, total = toArray(res)
     choice, name = twoThirdsMajority(list, total)
     if not choice
-      choice, name = askUser(list)
+      choice, name = askUser(callsign, list)
     end
     if choice
       return markDiscentingQSOasRemoved(id, choice, name)
@@ -157,7 +158,7 @@ class Multiplier
     res.each(:as => :array) { |row|
       multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Exchange as e, Multiplier as m where e.callID=#{row[0]} and e.multiplierID=m.id and q.recvdID=e.id and q.matchType = 'Bye' group by m.id;")
       if multres.count > 1
-        count = count + resolveAmbiguous(row[0], multres)
+        count = count + resolveAmbiguous(row[0], row[1], multres)
       end
     }
     print "#{count} Bye QSOs changed to Removed\n"
