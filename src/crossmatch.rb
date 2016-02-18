@@ -115,8 +115,8 @@ class QSO
 
   def fullMatch?(qso, time)
     @band == qso.band and @mode == qso.mode and 
-      (qso.datetime >= (@datetime - 60*time) and
-       qso.datetime <= (@datetime + 60*time)) and
+# do not require time match
+#      (qso.datetime >= (@datetime - 60*time) and qso.datetime <= (@datetime + 60*time)) and
       @recvd.fullMatch?(qso.sent)
   end
 
@@ -425,7 +425,7 @@ class CrossMatch
 
   def ignoreDups
     count = 0
-    queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3, Exchange as e2, Exchange as e3 where q1.matchID is not null and q1.matchType in ('Partial', 'Full') and q1.logID in #{logSet} and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and q2.logID in #{logSet} and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and e2.id = q2.sentID and e3.id = q3.recvdID and e2.callID = e3.callID;"
+    queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3, Exchange as e2, Exchange as e3 where q1.matchID is not null and q1.matchType in ('Partial', 'Full') and q1.logID in #{logSet} and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and q2.logID in #{logSet} and q2.id = q1.matchID and q1.id = q2.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and e2.id = q2.recvdID and e3.id = q3.recvdID and e2.callID = e3.callID;"
     res = @db.query(queryStr)
     res.each(:as => :array) { |row|
       @db.query("update QSO set matchType = 'Dupe' where id = #{row[0].to_i} and matchType = 'None' and matchID is null limit 1;")

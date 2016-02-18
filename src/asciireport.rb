@@ -116,7 +116,7 @@ def columnReport(logs, title, full, columnHeading)
   print "\n"
 end
 
-def topReport(cdb, cid, num, title, full=true, opclass=nil, criteria="l.verifiedscore", columnHeading="Score")
+def topReport(cdb, cid, num, title, full=true, opclass=nil, criteria="verifiedscore", columnHeading="Score")
   logs = cdb.topLogs(cid, num, opclass, criteria)
   if not logs.empty?
     columnReport(logs, title, full, columnHeading)
@@ -180,8 +180,8 @@ if $name and $year
     topReport(cdb, contestID, 10, "High Power", true, "High")
     topReport(cdb, contestID, 10, "Low Power", true, "Low")
     topReport(cdb, contestID, 10, "QRP", true, "QRP")
-    topReport(cdb, contestID, 10, "QSO Totals", false, nil, "l.verifiedqsos", "# QSOs")
-    topReport(cdb, contestID, 10, "Multipliers", false, nil, "l.verifiedMultipliers", "# Multipliers")
+    topReport(cdb, contestID, 10, "QSO Totals", false, nil, "verifiedqsos", "# QSOs")
+    topReport(cdb, contestID, 10, "Multipliers", false, nil, "verifiedMultipliers", "# Multipliers")
     wasReport(cdb, contestID, 10)
     goldenReport(cdb, contestID)
     teamReport(cdb, contestID)

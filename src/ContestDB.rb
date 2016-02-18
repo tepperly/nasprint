@@ -208,7 +208,13 @@ class ContestDatabase
   end
 
   def findLog(callsign)
-    res =  @db.query("select l.id from Log as l join Callsign as c on c.id = l.callID where l.callsign=\"#{@db.escape(callsign)}\" or c.basecall=\"#{@db.escape(callsign)}\" limit 1;")
+    res = nil
+    if @contestID
+      res =  @db.query("select l.id from Log as l join Callsign as c on c.id = l.callID where l.callsign=\"#{@db.escape(callsign)}\" or c.basecall=\"#{@db.escape(callsign)}\" and l.contestID = #{@contestID} limit 1;")
+    else
+      print "No contest ID\n"
+      res =  @db.query("select l.id from Log as l join Callsign as c on c.id = l.callID where l.callsign=\"#{@db.escape(callsign)}\" or c.basecall=\"#{@db.escape(callsign)}\"  limit 1;")
+    end
     res.each(:as => :array) { |row| return row[0] }
     nil
   end
@@ -412,7 +418,7 @@ class ContestDatabase
       numHours = (tend - tstart).to_i/3600
       results = Array.new(numHours, 0)
       numHours.times {  |i|
-        queryStr = "select matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL') and time between #{dateOrNull(prev)} and #{dateOrNull(tstart + 3600*(i+1) - 1)} order by matchType asc;"
+        queryStr = "select matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL') and time between #{dateOrNull(prev)} and #{dateOrNull(tstart + 3600*(i+1) - 1)} group by matchType order by matchType asc;"
         res = @db.query(queryStr)
         res.each(:as => :array) { |row|
           case row[0]
@@ -563,10 +569,10 @@ class ContestDatabase
 
   def reportTeams(cid)
     teams = Array.new
-    res = @db.query("select t.id, t.name, sum(l.verifiedscore) as score, count(l.id) as nummembers from (Team as t join Log as l) join TeamMember as tm on tm.teamID = t.id and tm.logID = l.id where l.contestID = #{cid} and t.contestID = #{cid} and tm.contestID = #{cid} group by t.id order by score desc;")
+    res = @db.query("select t.id, t.name, sum(l.verifiedscore) as score, count(l.id) as nummembers from (Team as t join Log as l) join TeamMember as tm on tm.teamID = t.id and tm.logID = l.id where l.contestID = #{cid} and t.contestID = #{cid} and tm.contestID = #{cid} and l.contestID = #{cid} group by t.id order by score desc;")
     res.each(:as => :array) { |row|
       memlist = Array.new
-      members = @db.query("select l.callsign, l.verifiedscore from Log as l join TeamMember as tm on l.id = tm.logID and tm.teamID = #{row[0]} order by l.verifiedscore desc, l.callsign desc;")
+      members = @db.query("select l.callsign, l.verifiedscore from Log as l join TeamMember as tm on l.id = tm.logID and tm.teamID = #{row[0]} and l.contestID=#{cid} order by l.verifiedscore desc, l.callsign desc;")
       members.each(:as => :array) { |mrow|
         memlist << { "callsign" => mrow[0], "score" => mrow[1] }
       }

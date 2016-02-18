@@ -57,6 +57,8 @@ if $name and $year
   if not contestID
     print "Unknown contest #{$name} #{$year}\n"
     exit 2
+  else
+    cdb.contestID = contestID
   end
   if $restart
     cdb.clearTeams(contestID)
