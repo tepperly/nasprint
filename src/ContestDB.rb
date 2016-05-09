@@ -210,7 +210,7 @@ class ContestDatabase
   def findLog(callsign)
     res = nil
     if @contestID
-      res =  @db.query("select l.id from Log as l join Callsign as c on c.id = l.callID where l.callsign=\"#{@db.escape(callsign)}\" or c.basecall=\"#{@db.escape(callsign)}\" and l.contestID = #{@contestID} limit 1;")
+      res =  @db.query("select l.id from Log as l join Callsign as c on c.id = l.callID where (l.callsign=\"#{@db.escape(callsign)}\" or c.basecall=\"#{@db.escape(callsign)}\") and l.contestID = #{@contestID} limit 1;")
     else
       print "No contest ID\n"
       res =  @db.query("select l.id from Log as l join Callsign as c on c.id = l.callID where l.callsign=\"#{@db.escape(callsign)}\" or c.basecall=\"#{@db.escape(callsign)}\"  limit 1;")

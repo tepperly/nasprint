@@ -7,7 +7,7 @@
 def dumpLogs(db, contestID)
   res = db.query("select id, callsign from Log where contestID = #{contestID} order by callsign asc;")
   res.each(:as => :array) { |row|
-    open("output/" + row[1].to_s.upcase + "_cab.txt", "w:ascii") { |out|
+    open("output/" + row[1].to_s.upcase.gsub(/[^A-Z0-9]/,"_") + "_cab.txt", "w:ascii") { |out|
       dumpLog(out, db, row[0])
     }
   }
