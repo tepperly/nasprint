@@ -260,7 +260,11 @@ def reportContest(db, contestID, contestDB)
     r.toxicLogReport(out, contestID)
   }
   dir = "cqp" + $year.to_s + "_lcrs"
-  Dir.mkdir(dir)
+  begin
+    Dir.mkdir(dir)
+  rescue
+    # ignore exceptions
+  end
   r.logCheckReport(dir, contestID)
   print "Dumping logs\n"
   dumpLogs(db, contestID)

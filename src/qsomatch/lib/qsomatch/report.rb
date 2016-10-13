@@ -15,7 +15,8 @@ TEHA TRIN TULA TUOL VENT YOLO YUBA }).freeze
 IL IN KS KY LA MA MD ME MI MN MO MS MT NC ND NE NH NJ NM NV
 NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
 }).freeze
-  CAN_QTH = Set.new(%w{ AB BC MB MR NT ON QC SK })
+  CAN_QTH = Set.new(%w{ AB BC MB MR NT ON QC SK }).freeze
+  CA_STATION_CREDITS = (US_QTH + CAN_QTH + Set.new(%w{ CA })).freeze
 
   def qthClass
     if US_QTH.include?(@qth)
@@ -70,7 +71,7 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     @isSCHOOL = isSCHOOL
     @isMOBILE = isMOBILE
     @multipliers = Set.new
-    @claimedMults
+    @claimedMults = 0
   end
 
   attr_reader :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
@@ -136,8 +137,17 @@ class Report
     end
   end
 
-  def totalClaimed(id, multID)
-    @db.query("select count(*) from QSO where logID = ? and sent_multiplierID = ? limit 1;", [id, multID]) { |row|
+  def modeSet(str)
+    case str
+    when "PH"
+      return "('PH', 'FW')"
+    when "CW"
+      return "('CW')"
+    end
+  end
+
+  def totalClaimed(id, multID, mode=nil)
+    @db.query("select count(*) from QSO where logID = ? and sent_multiplierID = ? #{mode ? " and fixedMode in " + modeSet(mode) + " " : ""} limit 1;", [id, multID]) { |row|
       return row[0]
     }
     0
@@ -186,10 +196,10 @@ class Report
       matchType = %w{ Full Partial Bye PartialBye }
     end
     isCA = @db.true
-    @db.query("select m.isCA from Multiplier as m join Log as l on l.multiplierID = m.id where l.id = ? limit 1;", [ id ]) { |row|
+    @db.query("select m.isCA from Multiplier as m where m.id = ? limit 1;", [ multID ]) { |row|
       isCA = row[0]
     }
-    @db.query("select distinct m.abbrev from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.judged_multiplierID = m.id where l.id = ? and q.matchType in (#{matchType.map { |x| "'" + x + "'"}.join(", ")}) and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA != ?; ", 
+    @db.query("select distinct m.abbrev from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.#{claimed ? "recvd_multiplierID" : "judged_multiplierID" } = m.id where l.id = ? and q.matchType in (#{matchType.map { |x| "'" + x + "'"}.join(", ")}) and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA != ?; ", 
               [id, multID, isCA]) { |row|
       if claimed
         claimed << row[0]
@@ -199,7 +209,7 @@ class Report
     }
     if @db.toBool(isCA)
       # for CA stations any CA county counts as a CA multiplier
-      @db.query("select m.id from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.judged_multiplierID = m.id where l.id = ? and q.matchType in (#{matchType.map { |x| "'" + x + "'"}.join(", ")}) and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA limit 1;", [ id, multID ]) { |row|
+      @db.query("select m.id from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.#{claimed ? "recvd_multiplierID" : "judged_multiplierID" } = m.id where l.id = ? and q.matchType in (#{matchType.map { |x| "'" + x + "'"}.join(", ")}) and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA limit 1;", [ id, multID ]) { |row|
         if claimed
           claimed << "CA"
         else
@@ -243,27 +253,124 @@ class Report
   def logCheckReport(dir, contestID)
     logs = scoredLogs(contestID)
     logs.each { |log|
-      open(File.join(dir, log.call+"_" + log.qth + ".lcr"), "w") { |out|
+      open(File.join(dir, log.call.gsub(/[^a-z0-9]/i,"_") +"_" + log.qth + ".lcr"), "w") { |out|
         lcrHeader(out, log)
-        lcrQSOReport(out,log)
+        lcrQSOReport(out, log)
         lcrScoreSummary(out, log)
         lcrMultiplierHistogram(out, log)
       }
     }
   end
 
+  def multHistogram(id, multID, counts, claimed)
+    if claimed
+      matchType = %w{ None Full Partial Bye PartialBye Unique Dupe NIL OutsideContest Removed }
+    else
+      matchType = %w{ Full Partial Bye PartialBye }
+    end
+    isCA = @db.true
+    @db.query("select m.isCA from Multiplier as m  where m.id = ? limit 1;", [ multID ]) { |row|
+      isCA = row[0]
+    }
+    @db.query("select m.abbrev, count(*) from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.#{claimed ? "recvd_multiplierID" : "judged_multiplierID" } = m.id where l.id = ? and q.matchType in (#{matchType.map { |x| "'" + x + "'"}.join(", ")}) and q.sent_multiplierID = ? #{claimed ? "" : "and q.score >= 1"}  and m.ismultiplier group by m.abbrev order by m.abbrev asc; ", 
+              [id, multID]) { |row|
+      counts[row[0]] = row[1].to_i
+    }
+    catotal = 0
+    Log::CA_QTH.each { |county| catotal += counts[county] }
+    counts["CA"] = catotal
+  end
+
   def lcrHeader(out, log)
     out << log.call << "  QTH:" << log.qth << "\r\nCQP LOG CHECKING RESULTS\r\n\r\n"
+  end
+
+  def validQSOsByMode(id, multID, mode)
+    scores = [0, 0, 0]
+    @db.query("select score, count(*) from QSO where logID = ? and sent_multiplierID = ? and matchType in ('Full', 'Bye', 'Partial', 'PartialBye', 'NIL', 'Removed', 'OutsideContest', 'Unique') and fixedMode in " + modeSet(mode) + " group by score order by score asc;", [id, multID] ) { |row|
+      if row[0].to_i >= 0 and row[0].to_i < 3
+        scores[row[0].to_i] = row[1].to_i
+      end
+    }
+    return scores
+  end
+
+  def lcrScoreSummary(out, log)
+    multID = nil
+    isCA = nil
+    @db.query("select id, isCA from Multiplier where abbrev=? limit 1;", [log.qth]) { |row|
+      multID = row[0].to_i
+      isCA = @db.toBool(row[1])
+    }
+    out << "Score Summary:\r\n" << log.call << "  QTH: " << log.qth << "\r\n\r\nBefore Log Checking:\r\n"
+    claimedCW = totalClaimed(log.id, multID, "CW")
+    claimedPH = totalClaimed(log.id, multID, "PH")
+    cwScored = validQSOsByMode(log.id, multID, "CW")
+    phScored = validQSOsByMode(log.id, multID, "PH")
+    out << ("  Total Raw QSO's: %4d  CW: %4d  PH: %4d\r\n" % [log.numClaimed, claimedCW, claimedPH])
+    out << ("  Claimed Mults:   %4d\r\n" % log.claimedMults)
+    out << "  QSO Points Claimed: " << (3*claimedCW + 2*claimedPH) << "\r\n"
+    out << "  Claimed Score: " << log.claimedMults * (3*claimedCW + 2*claimedPH) << "\r\n"
+    out << "After Log Checking:\r\n"
+    out << "  Duplicate QSO's: " << log.numDupe << "\r\n"
+    out << "  Number of QSO's earning full or partial credit: " 
+    out << (cwScored[1] + cwScored[2] + phScored[1] + phScored[2]) << "\r\n"
+    out << ("  CW QSO's: Full Credit: %4d Half-Credit: %4d No-credit (NIL or Multiple Errors): %d\r\n" %
+            [cwScored[2], cwScored[1], cwScored[0]])
+    out << ("  PH QSO's: Full Credit: %4d Half-Credit: %4d No-credit (NIL or Multiple Errors): %d\r\n" %
+            [phScored[2], phScored[1], phScored[0]])
+    out << "  Checked Mults: " << log.nummultipliers << "\r\n"
+    out << "  QSO Points granted: " << (log.numPH*2 + log.numCW*3) << "\r\n"
+    out << "  FINAL SCORE: " << log.score << "\r\n"
+    out << "\r\n"
+  end
+
+  def histReport(out, id, multID, desc, claimed, isCA)
+    counts = Hash.new(0)
+    multHistogram(id, multID, counts, claimed)
+    out << "Histogram shows the number of #{desc} QSOs with each mult:\r\n\r\n"
+    mults = isCA ? Log::CA_STATION_CREDITS : Log::CA_QTH
+    count = 0
+    mults.sort.each { |mult|
+      out << (" %4d %-4s" % [counts[mult], mult])
+      count += 1
+      if ((count % 8) == 0)
+        out << "\r\n"
+      end
+    }
+    out << "\r\n\r\n"
+  end
+  
+  def lcrMultiplierHistogram(out, log)
+    multID = nil
+    isCA = nil
+    @db.query("select id, isCA from Multiplier where abbrev=? limit 1;", [log.qth]) { |row|
+      multID = row[0].to_i
+      isCA = @db.toBool(row[1])
+    }
+    if multID and not isCA.nil?
+      histReport(out, log.id, multID, "claimed", true, isCA)
+      histReport(out, log.id, multID, "verified", false, isCA)
+    else 
+      $stderr << "Unknown multiplier: '" << log.qth << "'\n"
+    end
   end
 
   def serialNum(num)
     num ? num.to_i : 9999
   end
 
+  def judgedLocation(qsoID)
+    @db.query("select m.abbrev from Multiplier as m join QSO as q on m.id = q.judged_multiplierID where q.id = ? limit 1;", [ qsoID ]) { |row|
+      return row[0]
+    }
+    return "XXXX"
+  end
+
   def lcrQSOReport(out, log)
-    @db.query("select q.frequency, q.fixedMode, q.time, qe.sent_callsign, q.sent_serial, coalesce(m1.abbrev,qe.sent_location) as sentmult,  qe.recvd_callsign, q.recvd_serial, coalesce(m2.abbrev,qe.recvd_location) as recvdmult, q.matchType, qe.comment, q.score, q.id from (QSO as q left join Multiplier as m1 on m1.id = q.sent_multiplierID) left join Multiplier as m2 on m2.id = q.recvd_multiplierID, QSOExtra as qe on q.id = qe.id where q.logID = ? and (q.matchType in ('None','PartialBye','Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed') or (q.score != 2) or (q.recvd_multipliedID != q.judged_multiplierID)) order by q.time asc, q.sent_serial asc;",
-             [logID]) { |row|
-      td = db.toDateTime(row[2]) + log.clockAdj
+    @db.query("select q.frequency, q.fixedMode, q.time, qe.sent_callsign, q.sent_serial, coalesce(m1.abbrev,qe.sent_location) as sentmult,  qe.recvd_callsign, q.recvd_serial, coalesce(m2.abbrev,qe.recvd_location) as recvdmult, q.matchType, qe.comment, q.score, q.id from (QSO as q left join Multiplier as m1 on m1.id = q.sent_multiplierID) left join Multiplier as m2 on m2.id = q.recvd_multiplierID, QSOExtra as qe on q.id = qe.id where q.logID = ? and m1.abbrev = ? and (q.matchType in ('None','PartialBye','Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed') or (q.score != 2) or (q.recvd_multiplierID != q.judged_multiplierID)) order by q.time asc, q.sent_serial asc;",
+             [ log.id, log.qth ]) { |row|
+      td = @db.toDateTime(row[2]) + log.clockadj
       out << ("QSO: %5d %2s %4d-%02d-%02d %02d%02d %-10s %4d %-4s %-10s %4d %-4s\r\n" %
               [row[0], row[1], td.year, td.month, td.mday, td.hour, td.min, row[3], 
                serialNum(row[4]), row[5], row[6], serialNum(row[7]), row[8] ])
@@ -306,6 +413,7 @@ class Report
         end
       end
     }
+    out << "\r\n"
   end
     
 
