@@ -8,8 +8,8 @@ require 'csv'
 require 'time'
 require 'set'
 
-CONTEST_START=Time.utc(2015,10,3,16, 00)
-CONTEST_END=Time.utc(2015,10,4,22,00)
+CONTEST_START=Time.utc(2016,10,1,16, 00)
+CONTEST_END=Time.utc(2016,10,2,22,00)
 
 def mySplit(str, pattern)
   result = [ ]
@@ -378,6 +378,8 @@ class Cabrillo
     when /\Acategory-station:\s*(home)\s*\Z/i
       trans(1, 1)
       @station = "fixed"
+    when /\Acategory-station:\s*((county-)?expedition)\s*\Z/i
+      @logCat.station = :expedition
     when /\Acategory-station:\s*\Z/i
       # ignore
     when /\Acategory-time:\s*((\d+)[- ]hours?)?\s*/i
@@ -489,7 +491,11 @@ class Cabrillo
     when /\Aofftime:\s*(.*)/i
       trans(1, 1)
       @offtimes << $1.strip
+    when /\Ax-cqp-email:\s*(.*)/i
+      @x_lines << line
+      @dbCat.email = $1.strip
     when /\Ax-cqp-confirm1:\s*(.*)/i
+      @x_lines << line
       # ignore
     # when /\Ax-cqp-comments:\s*(.*)\Z/i
     #   trans(1, 1)
@@ -500,6 +506,29 @@ class Cabrillo
     #       @dbcomments = $1.strip + "\n"
     #     end
     #   end
+    when /\Ax-cqp-sentqth:\s*(.*)/i
+      @x_lines << line
+      sqth = $1.strip
+      if not sqth.empty?
+        @dbCat.sentQTH = sqth
+      end
+    when /\Ax-cqp-phone:\s*(.*)/i
+      @x_lines << line
+      phn = $1.strip
+      if not phn.empty?
+        @dbCat.phone = phn
+      end
+    when /\Ax-cqp-power:\s*(qrp|low|high)\s*/i
+      @x_lines << line
+      @dbCat.power = $1.strip.downcase.to_sym
+    when /\Ax-cqp-categories:\s*(.*)\s*/i
+      @x_lines << line
+    when /\Ax-cqp-opclass:\s*(checklog|multi-single|multi-multi|single|single-assisted)\s*/i
+      @x_lines << line
+      dboptype=$1.downcase
+    when /\Ax-cqp-id:\s*(\d+)\s*/i
+      @x_lines << line
+      dblogID = $1.to_i
     when /\Ax(-[a-z]+)+:.*/i
       @x_lines << line          # ignore and save
     when /\Asoapbox:\s*(.*)/i
@@ -846,6 +875,11 @@ NAME: #{@name}
       @logCat.numtrans = :unlimited
       str.gsub!(/MULTI-MULTI|M-M/, " ")
     end
+    if (str =~ /MULTI-SINGLE|M-S/i) 
+      @logCat.numop = :multi
+      @logCat.numtrans = :one
+      str.gsub!(/MULTI-SINGLE|M-S/i," ")
+    end
     if (str =~ /NON-ASSIS?TED/)
       @logCat.assisted = false
       str.gsub!(/NON-ASSIS?TED/,"")
@@ -859,8 +893,12 @@ NAME: #{@name}
         @logCat.numop = :multi
       when "ONE"
         @logCat.numtrans = :one
+      when 'LIMITED'
+        @logCat.numtrans = :one
       when 'TWO'
         @logCat.numtrans = :unlimited
+      when "SCHOOL"
+        @logCat.station = :school
       when "HIGH", "LOW", "QRP"
         @logCat.power = tok.downcase.to_sym
       when "ASSISTED"
@@ -875,8 +913,12 @@ NAME: #{@name}
         @band = "ALL"
       when "15"
         @band = "15m"
+      when 'MOBILE'
+        @logCat.station = :mobile
       when 'MIXED', "SSB", "CW"
         @mode = tok
+      when 'YL'
+        # ignore
       when 'MM'
         @logCat.numop = :multi
         @logCat.numtrans = :unlimited
@@ -890,6 +932,8 @@ NAME: #{@name}
         @band = tok
       when /PHONE/
         @mode = "SSB"
+      when /\A(\s*|AND)\Z/
+        # ignore empty string and conjunctions
       else
         $stderr.write("Missing: '#{tok}'\n")
       end
@@ -920,6 +964,10 @@ NAME: #{@name}
     case value
     when "single", "single-op"
       @dbCat.assisted = false
+      @dbCat.numop = :single
+      @dbCat.numtrans = :one
+    when "single-assisted"
+      @dbCat.assisted = true
       @dbCat.numop = :single
       @dbCat.numtrans = :one
     when "multi-single"

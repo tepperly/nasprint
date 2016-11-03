@@ -21,6 +21,8 @@ class Multiplier
   def readPrevious
     if File.readable?("callmults.json")
       result = JSON.parse(File.read("callmults.json"))
+    else
+      result = Hash.new
     end
     result
   end
@@ -252,7 +254,7 @@ class Multiplier
     list.each { |item|
       print "ID #{item} #{hash[item][1]} #{hash[item][2]}\n"
     }
-    if @previousDecisions.has_key?(callsign)
+    if @previousDecisions and @previousDecisions.has_key?(callsign)
       num, entID = @cdb.lookupMultiplier(@previousDecisions[callsign])
       return num, @previousDecisions[callsign]
     else
@@ -260,9 +262,9 @@ class Multiplier
       item = STDIN.gets
       num = item.strip.to_i
       list.each { |item|
-        if item[0] == num
-          @previousDecisions[callsign] = item[1]
-          return num, item[1]
+        if item == num
+          @previousDecisions[callsign] = hash[item][1]
+          return num, hash[item][1]
         end
       }
     end
