@@ -7,8 +7,8 @@
 require 'csv'
 require 'time'
 
-CONTEST_START=Time.utc(2016,4,03, 00, 00)
-CONTEST_END=Time.utc(2016,4,03,04,00)
+CONTEST_START=Time.utc(2016,10,9,0,0)
+CONTEST_END=Time.utc(2016,10,9,4,0)
 
 def mySplit(str, pattern)
   result = [ ]
@@ -815,6 +815,8 @@ NAME: #{@name}
         @logCat.power = tok.downcase.to_sym
       when "ASSISTED"
         @logCat.assisted = true
+      when "UNASSISTED"
+        @logCat.assisted = false
       when "CHECKLOG"
         @logCat.numop = :checklog
       when "LO", "LP", "LOWW"
