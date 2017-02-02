@@ -13,3 +13,15 @@ specification, and they will also incorrect incorrect data in the various fields
 
 The overall approach of this software is to put all the relevent log and contact data into a SQL database. The
 verification and cross checking is processed using SQL queries and additional matches in the program.
+
+# Steps from logs to reports
+
+1. Review logs for matching system and other issues `ruby testcab.rb --checkonly *.log`. Use a powerful editor
+   like [GNU Emacs](https://www.gnu.org/s/emacs) to edit the logs. The rectangle-orient commands in GNU Emacs are
+   particularly useful.
+2. Send the list of "missing logs": `ruby testcab.rb --checkonly --missing *.log` to the contest chairman. The
+   chairman may choose to send email to try to get more logs. If successful, return to the previous step and check
+   the new logs.
+3. Read the logs into the MySQL database: `ruby testcab.rb --checkonly --new --name "Fall SSB Sprint" --year 2016
+   --populate *.log`
+4. 
