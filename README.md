@@ -53,6 +53,17 @@ issues that need to be fixed or more logs arrive.
    across multiple logs may indicate a mistake in the sent information of NS6T's log.  For example,
    NS6T's log might have a sent name of THOMAS, but if everything logged him as TOM giving the all
    partial matches, chances are that NS6T actually transmitted TOM instead of THOMAS. Use your judgement.
-   You may end up editing NS6T's log and going back to loading the QSOs from the log file.
- 
-
+   You may end up editing NS6T's log and going back to loading the QSOs from the log file.  Ultimately,
+   you may also decide that a log is so unreliable that it's better to leave it out of the scoring.
+   For example, it is taking QSO credit away from too many other stations because of errors most
+   like in the toxic logs logging or operating.
+7. Once we've got all the logs and you've come to terms with the toxic logs, it's time to load
+   in the team information.  Generally, someone from the SSB Sprint committee will be able to send
+   you a `team-registration-2017-02-05.csv` file or something
+   similar. It's a 13 column comma separated value file. Column 1 is
+   the team name. Column 2 is the number of members. The next ten
+   columns are two per team member. The first is the team operator's
+   callsign, and the second is the callsign used. The last column is
+   the date and time the team was registered.  The command to load
+   team information is:
+   `ruby loadteam.rb --name "Fall SSB Sprint" --year 2016 team-registration-2017-02-05.csv`
