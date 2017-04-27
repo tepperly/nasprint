@@ -7,8 +7,8 @@
 require 'csv'
 require 'time'
 
-CONTEST_START=Time.utc(2016,10,9,0,0)
-CONTEST_END=Time.utc(2016,10,9,4,0)
+CONTEST_START=Time.utc(2017,4,2,0,0)
+CONTEST_END=Time.utc(2017,4,2,4,0)
 
 def mySplit(str, pattern)
   result = [ ]
