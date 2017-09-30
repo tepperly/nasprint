@@ -105,6 +105,27 @@ class ContestDatabase
     
   end
 
+  def toxicStatistics(contestID)
+    results = Array.new
+    res = @db.query("select l.callsign, l.callID, count(*) from Log as l, QSO as q where q.logID = l.id and contestID = #{contestID.to_i} group by l.id order by l.callsign asc;") 
+    res.each(:as => :array) { |row|
+      item = Array.new(8)
+      item[0] = row[0]
+      item[1] = row[1].to_i
+      item[2] = row[2].to_i
+      results << item
+    }
+    results.each { |item|
+      res = @db.query("select count(*), sum(q.matchType = 'Full'), sum(q.matchType = 'Partial'), sum(q.matchType = 'NIL'), sum(q.matchType = 'Removed') from QSO as q join Exchange as e on q.recvdID = e.id where e.callID = #{item[1]} group by e.callID limit 1;")
+      res.each(:as => :array) { |row|
+        row.each_index { |i|
+          item[3+i] = row[i].to_i
+        }
+      }
+    }
+    results
+  end
+
   def createEntityTable
     @db.query("create table if not exists Entity (id integer primary key, name varchar(64) not null, prefix varchar(8), continent enum ('AS', 'EU', 'AF', 'OC', 'NA', 'SA', 'AN') not null);")
     open(File.dirname(__FILE__) + "/entitylist.txt", "r:ascii") { |inf|

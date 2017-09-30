@@ -7,8 +7,11 @@
 require 'set'
 require 'getoptlong'
 require 'humanize'
+require 'csv'
 require_relative 'database'
 require_relative 'ContestDB'
+require_relative 'report'
+require_relative 'dumplog'
 
 MULTIPLIERS_BY_CALLAREA = {
   "0" => [ "ND", "SD", "NE", "CO", "KS", "MO", "IA", "MN"].to_set.freeze,
@@ -141,6 +144,15 @@ def goldenReport(cdb, contestID)
   end
 end
 
+def toxicReport(out, cdb, contestID)
+  toxStats = cdb.toxicStatistics(contestID)
+  toxCSV = CSV.new(out)
+  toxCSV << ["Callsign", "Claimed QSOs", "# in other logs", "# Full", "# Partial", "# NIL", "# Removed", "% Toxic" ]
+  toxStats.each { |l|
+    toxCSV << [ l[0], l[2], l[3], l[4], l[5], l[6], l[7], ((l[5].to_i + l[6].to_i + l[7].to_i).to_f/ [1, l[3].to_i].max.to_f) ]
+  }
+end
+
 def teamReport(cdb, contestID)
   teams = cdb.reportTeams(contestID)
   print "\n\nTEAM REPORTS\n============\n\n"
@@ -163,6 +175,11 @@ if $name and $year
       print "Unknown contest #{$name} #{$year}\n"
       exit 2
     end
+    r = Report.new(db, contestID)
+    open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
+      r.makeReport(out)
+    }
+    dumpLogs(db, contestID)
     MULTIPLIERS_BY_CALLAREA.keys.sort.each { |key|
       logs = cdb.logsByMultipliers(contestID, MULTIPLIERS_BY_CALLAREA[key])
       if not logs.empty?
@@ -185,6 +202,9 @@ if $name and $year
     wasReport(cdb, contestID, 10)
     goldenReport(cdb, contestID)
     teamReport(cdb, contestID)
+    open("toxic_" + $name.gsub(/[^a-z0-9]/i,"_") + $year.to_s + ".csv", "w:ascii") { |out|
+      toxicReport(out, cdb, contestID)
+    }
   ensure
     db.close
   end
