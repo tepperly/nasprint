@@ -727,8 +727,8 @@ class CrossMatch
 
   def findUnreliable
     unreliableClock = Set.new
-    # logs with more than 10% time mismatches are considered unreliable
-    @db.query("select q1.logID, count(*) as numQ, sum(abs(#{@db.timediff('SECOND','q1.time','q2.time')} + l1.clockadj - l2.clockadj) > 60 * #{CrossMatch::PERFECT_TIME_MATCH}) as clockMis from (QSO as q1 join Log as l1 on q1.logID = l1.id) join (QSO as q2 join Log as l2 on q2.logID = l2.id) on q2.id = q1.matchID and q1.id = q2.matchID where #{@logs.membertest('q1.logID')} and #{@logs.membertest('q2.logID')} group by q1.logID having 10*clockMis > numQ order by q1.logID asc;") { |row|
+    # logs with more than max(2,0.05*numQ) time mismatches are considered unreliable
+    @db.query("select q1.logID, count(*) as numQ, sum(abs(#{@db.timediff('SECOND','q1.time','q2.time')} + l1.clockadj - l2.clockadj) > 60 * #{CrossMatch::PERFECT_TIME_MATCH}) as clockMis from (QSO as q1 join Log as l1 on q1.logID = l1.id) join (QSO as q2 join Log as l2 on q2.logID = l2.id) on q2.id = q1.matchID and q1.id = q2.matchID where #{@logs.membertest('q1.logID')} and #{@logs.membertest('q2.logID')} group by q1.logID having clockMis > max(2,0.05*numQ) order by q1.logID asc;") { |row|
       unreliableClock << row[0].to_i
     }
     unreliableClock.freeze
@@ -792,6 +792,8 @@ class CrossMatch
       end
       if (notMatch != 0 and row[7] == "Full")
         print "QSO ID #{row[0]} is a #{row[7]} match with #{notMatch} mismatches #{comment}\n"
+        @db.query("update QSO set matchType='Partial' where id = ? limit 1;",
+                  [ row[0] ])
       end
       case notMatch
       when 0
@@ -804,7 +806,7 @@ class CrossMatch
       @db.query("update QSO set score = ? where id = ? limit 1;",
                 [ score, row[0]])
     }
-    @db.query("update QSO set score = 2 where #{@logs.membertest("logID")} and matchType='Bye';")
+    @db.query("update QSO set score = 2 where #{@logs.membertest("logID")} and matchType = 'Bye';")
     @db.query("update QSO set score = 1 where #{@logs.membertest("logID")} and matchType='PartialBye';")
     @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType in ('None', 'Unique', 'Dupe', 'OutsideContest', 'Removed');")
     @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType = 'NIL';")

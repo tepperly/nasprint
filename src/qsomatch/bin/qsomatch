@@ -249,7 +249,15 @@ end
 
 def reportContest(db, contestID, contestDB)
   r = Report.new(db, contestID)
-  print "Making report\n"
+  dir = "cqp" + $year.to_s + "_reverse"
+  begin
+    Dir.mkdir(dir)
+  rescue
+    # ignore exception
+  end
+  print "Making reverse logs\n"
+  r.makeReverseLogs(dir, contestID)
+  print "Making general reports\n"
   open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
     r.makeReport(out, contestID)
   }

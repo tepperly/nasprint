@@ -3,6 +3,7 @@
 
 require 'set'
 require 'csv'
+require 'date'
 require_relative 'logset'
 
 class Log
@@ -441,6 +442,26 @@ class Report
       out.write(log.ls_line + "\r\n")
     }
   end
+
+  def makeReverseLogs(dir, contestID)
+    @db.query("select q.recvd_callID as callID, q.judged_multiplierID as multID, count(*) as numQ, c.basecall, m.abbrev from QSO as q join Log as l on q.logID = l.id join Callsign as c on c.id = q.recvd_callID join Multiplier as m on m.id = q.judged_multiplierID where q.matchType in ('Bye', 'PartialBye') and l.contestID = #{contestID} group by q.recvd_callID, q.judged_multiplierID having numQ > 1 order by q.recvd_callID asc;") { |row|
+      open(File.join(dir, row[3].upcase.gsub(/[^a-z0-9]/i,"_") + "_" + row[4] + "_reverse.txt"), "w:ascii") { |out|
+        @db.query("select q.frequency, q.judged_mode, #{@db.dateAdd("q.time", "l.clockadj","second")} as dtime, c.basecall, q.sent_serial, m.abbrev, q.recvd_serial from QSO as q join Log as l on q.logID = l.id join Callsign as c on q.sent_callID = c.id left outer join Multiplier as m on q.sent_multiplierID = m.id where l.contestID = #{contestID} and q.recvd_callID = #{row[0]} and q.judged_multiplierID = #{row[1]} order by q.recvd_serial asc, dtime asc;") { |qrow|
+          begin
+            td = @db.toDateTime(qrow[2])
+          rescue
+            td = DateTime.parse(qrow[2]).to_time
+          end
+          out.write("QSO: %5d %2s %10s %4s %-11s %04d %-4s %-11s %04d %-4s\n" % 
+                    [ qrow[0], qrow[1],  td.strftime("%Y-%m-%d"), td.strftime("%H%M"),
+                      row[3].upcase, qrow[6].to_i, row[4].upcase,
+                      qrow[3], qrow[4].to_i, qrow[5].to_s ])
+        }
+      }
+      
+    }
+  end
+
 
   def makeReport(out = $stdout, contestID)
     logs = scoredLogs(contestID)
