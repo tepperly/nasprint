@@ -13,3 +13,11 @@ specification, and they will also incorrect incorrect data in the various fields
 
 The overall approach of this software is to put all the relevent log and contact data into a SQL database. The
 verification and cross checking is processed using SQL queries and additional matches in the program.
+
+# Steps in Scoring CQP
+
+1. Copy the latest log for each entrant from the log retrieval system into
+   a working directory.
+   ```sh
+   $ cp `ruby -I/var/www/cqp/cqp/server /var/www/cqp/cqp/server/contestlogs.rb` .
+   ```
