@@ -128,7 +128,10 @@ def loadFiles(args, cdb, contestID, ctl)
             $stdout.flush
           end
           if not cab.defaultSentQTH  or cab.defaultSentQTH == "CA"
-            print "Station: #{cab.logcall}:#{filename} has bad sent QTH #{cab.defaultSentQTH}\n"
+            print "Station: #{cab.logcall}:#{filename} has bad sent QTH #{cab.defaultSentQTH} in the header\n"
+          end
+          if not cab.badSentMults.empty?
+            print "Station: #{cab.logcall}:#{filename} has bad sent QTHs in QSO lines: #{cab.badSentMults.to_a.join(" ")}\n"
           end
         else
           $stderr.flush

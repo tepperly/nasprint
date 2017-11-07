@@ -8,8 +8,8 @@ require 'csv'
 require 'time'
 require 'set'
 
-CONTEST_START=Time.utc(2016,10,1,16, 00)
-CONTEST_END=Time.utc(2016,10,2,22,00)
+CONTEST_START=Time.utc(2017,10,7,16, 00)
+CONTEST_END=Time.utc(2017,10,8,22,00)
 
 def mySplit(str, pattern)
   result = [ ]
@@ -227,11 +227,13 @@ class Cabrillo
     @country = nil
     @operators = nil
     @badmults = Set.new
+    @badSentMults = Set.new
     @qsos = [ ]
     parse
   end
 
-  attr_reader :cleanparse, :logcall, :qsos, :club, :name, :badmults
+  attr_reader :cleanparse, :logcall, :qsos, :club, :name, :badmults,
+              :badSentMults
 
   def trans(oldstate, newstate)
     if @parsestate <= oldstate
@@ -541,6 +543,9 @@ class Cabrillo
       qso.sentExch.qth = normalizeMult($9)
       if qso.sentExch.qth and not @logCat.sentQTH
         @logCat.sentQTH = qso.sentExch.qth
+      end
+      if not qso.sentExch.qth or qso.sentExch.qth == "CA"
+        @badSentMults << qso.sentExch.qth
       end
       qso.recdExch.callsign = $10.upcase
       qso.recdExch.serial = $13

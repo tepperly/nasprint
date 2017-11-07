@@ -21,3 +21,9 @@ verification and cross checking is processed using SQL queries and additional ma
    ```sh
    $ cp `ruby -I/var/www/cqp/cqp/server /var/www/cqp/cqp/server/contestlogs.rb` .
    ```
+1. Check the CONTEST_START and CONTEST_END constants in cabrillo.rb to make
+   sure they reflect the actual start and ending time for the contest.
+1. Check the logs for mistakes
+   ```sh
+   $ ../qsomatch --check *.log
+   ```
