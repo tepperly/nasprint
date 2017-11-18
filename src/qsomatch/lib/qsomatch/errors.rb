@@ -21,7 +21,7 @@ def lookupMult(db, id)
 end
 
 def fillInComment(db, contestID)
-  db.query("select q1.id, q1.band, q1.fixedMode, q1.time, l1.clockadj, c1.basecall, q1.recvd_serial, qe1.recvd_location, q1.recvd_multiplierID, q2.band, q2.fixedMode, q2.time, l2.clockadj, c2.basecall, q2.sent_serial, qe2.sent_location, q1.judged_multiplierID, q1.matchID from QSO as q1 join QSOExtra as qe1 on q1.id = qe1.id, QSO as q2 join QSOExtra as qe2 on q2.id = qe2.id, Callsign as c1, Callsign as c2, Log as l1, Log as l2 where q1.logID = l1.id  and q2.logID = l2.id and l1.contestID = ? and l2.contestID = ? and (q1.matchType in ('Partial','PartialBye') or (q1.matchType = 'Full' and q1.score < 2)) and q1.matchID is not null and q2.id = q1.matchID and q1.id = q2.matchID and qe1.comment is null and c1.id = q1.recvd_callID and c2.id = q2.sent_callID;",
+  db.query("select q1.id, q1.band, q1.fixedMode, q1.time, l1.clockadj, c1.basecall, q1.recvd_serial, qe1.recvd_location, q1.recvd_multiplierID, q2.band, q2.fixedMode, q2.time, l2.clockadj, c2.basecall, q2.sent_serial, qe2.sent_location, q1.judged_multiplierID, q1.matchID, l1.trustedclock, l2.trustedclock from QSO as q1 join QSOExtra as qe1 on q1.id = qe1.id, QSO as q2 join QSOExtra as qe2 on q2.id = qe2.id, Callsign as c1, Callsign as c2, Log as l1, Log as l2 where q1.logID = l1.id  and q2.logID = l2.id and l1.contestID = ? and l2.contestID = ? and (q1.matchType in ('Partial','PartialBye') or (q1.matchType = 'Full' and q1.score < 2)) and q1.matchID is not null and q2.id = q1.matchID and q1.id = q2.matchID and qe1.comment is null and c1.id = q1.recvd_callID and c2.id = q2.sent_callID;",
            [contestID, contestID]) { |row|
     comments = Array.new
     if row[5] != row[13]
@@ -34,7 +34,8 @@ def fillInComment(db, contestID)
       comments << "mode mismatch #{row[10]}"
     end
     if ((db.toDateTime(row[3]) + row[4]) - 
-        (db.toDateTime(row[11]) + row[12])).abs > CrossMatch::PERFECT_TIME_MATCH*60
+        (db.toDateTime(row[11]) + row[12])).abs > CrossMatch::PERFECT_TIME_MATCH*60 and
+        db.toBool(row[19]) or not db.toBool(row[18])
       comments << "time mismatch #{(db.toDateTime(row[11])+row[12]).to_s}"
     end
     if (row[6].to_i - row[14].to_i).abs > 1

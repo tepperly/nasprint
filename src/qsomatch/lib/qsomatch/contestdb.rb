@@ -311,10 +311,13 @@ class ContestDatabase
     @db.query("update Callsign set logrecvd = 1 where id = ? limit 1;", [callID.to_i]) { }
   end
 
-  def addLog(contID, callsign, callID, email, powclass, opclass, multID, entID, name, club, numops)
-    @db.query("insert into Log (contestID, callsign, callID, email, powclass, opclass, multiplierID, entityID, name, club, numops) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+  def addLog(contID, callsign, callID, email, powclass, opclass, multID, entID, name, club, numops, isCCE, isMobile, isNew, isSchool, isYL, isYouth)
+    @db.query("insert into Log (contestID, callsign, callID, email, powclass, opclass, multiplierID, entityID, name, club, numops, isCCE, isMOBILE, isNEW, isSCHOOL, isYL, isYOUTH) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
               [contID.to_i, capOrNull(callsign), callID.to_i, email, powclass, 
-               opclass, multID.to_i, numOrNull(entID), name, club, numops]) { }
+                opclass, multID.to_i, numOrNull(entID), name, club, numops,
+                @db.boolToDB(isCCE), @db.boolToDB(isMobile), @db.boolToDB(isNew),
+                @db.boolToDB(isSchool), @db.boolToDB(isYL), @db.boolToDB(isYouth)
+              ]) { }
 
     return @db.last_id
   end

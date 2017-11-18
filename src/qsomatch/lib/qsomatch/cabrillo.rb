@@ -192,6 +192,8 @@ end
 
 class Cabrillo
   MULTIPLIER_ALIASES = readMultipliers(File.dirname(__FILE__) + "/multipliers.csv")
+  KNOWN_CATEGORIES = %w{ COUNTY MOBILE NEW_CONTESTER SCHOOL YL YOUTH }.to_set
+  KNOWN_CATEGORIES.freeze
 
   def initialize(filename)
     @logID = nil
@@ -214,6 +216,7 @@ class Cabrillo
     @parsestate = 0
     @logCat = OperatorClass.new
     @dbCat = OperatorClass.new
+    @dbSpecialCategories = Set.new
     @dbcomments = nil
     @stationType = nil
     @band = nil
@@ -247,6 +250,10 @@ class Cabrillo
   def self.normalMult(str)
     str = str.strip.upcase.gsub(/\s{2,}/, " ")
     return MULTIPLIER_ALIASES.has_key?(str) ? MULTIPLIER_ALIASES[str] : "????"
+  end
+
+  def hasSpecialCategory?(str)
+    return @dbSpecialCategories.include?(str)
   end
 
   def normalizeMult(str)
@@ -375,13 +382,16 @@ class Cabrillo
       @stationType = $1.upcase
     when /\Acategory-station:\s*(mobile|rover|hq)\s*\Z/i
       trans(1, 1)
+      @dbSpecialCategories << "MOBILE"
     when /\Acategory-station:\s*(school)\s*\Z/i
       trans(1, 1)
+      @dbSpecialCategories << "SCHOOL"
     when /\Acategory-station:\s*(home)\s*\Z/i
       trans(1, 1)
       @station = "fixed"
     when /\Acategory-station:\s*((county-)?expedition)\s*\Z/i
       @logCat.station = :expedition
+      @dbSpecialCategories << "COUNTY"
     when /\Acategory-station:\s*\Z/i
       # ignore
     when /\Acategory-time:\s*((\d+)[- ]hours?)?\s*/i
@@ -524,13 +534,20 @@ class Cabrillo
       @x_lines << line
       @dbCat.power = $1.strip.downcase.to_sym
     when /\Ax-cqp-categories:\s*(.*)\s*/i
+      $1.split.each { |cat|
+        if KNOWN_CATEGORIES.include?(cat) 
+          @dbSpecialCategories << cat
+        else
+          $stderr.write("Unknown category #{cat} in X-CQP-CATEGORIES line\n")
+        end
+      }
       @x_lines << line
     when /\Ax-cqp-opclass:\s*(checklog|multi-single|multi-multi|single|single-assisted)\s*/i
       @x_lines << line
-      dboptype=$1.downcase
+      self.dboptype=$1.downcase
     when /\Ax-cqp-id:\s*(\d+)\s*/i
       @x_lines << line
-      dblogID = $1.to_i
+      self.dblogID = $1.to_i
     when /\Ax(-[a-z]+)+:.*/i
       @x_lines << line          # ignore and save
     when /\Asoapbox:\s*(.*)/i
@@ -918,12 +935,15 @@ NAME: #{@name}
         @band = "ALL"
       when "15"
         @band = "15m"
-      when 'MOBILE'
+      when 'COUNTY'
+        @dbSpecialCategories << "COUNTY"
+      when 'MOBILE', "ROVER"
         @logCat.station = :mobile
+        @dbSpecialCategories << "MOBILE"
       when 'MIXED', "SSB", "CW"
         @mode = tok
       when 'YL'
-        # ignore
+        @dbSpecialCategories << "YL"
       when 'MM'
         @logCat.numop = :multi
         @logCat.numtrans = :unlimited

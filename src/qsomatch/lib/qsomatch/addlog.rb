@@ -105,7 +105,14 @@ def addLog(db, cID, cab, ct)
       logID = db.addLog(cID, cab.logcall, bcID, cab.logEmail,
                         calcPowClass(cab),
                         opclass,
-                        multID, entID, cab.name, cab.club, calcNumOps(opclass,cab))
+                        multID, entID, cab.name, cab.club, calcNumOps(opclass,cab),
+                        cab.hasSpecialCategory?("COUNTY"),
+                        cab.hasSpecialCategory?("MOBILE"),
+                        cab.hasSpecialCategory?("NEW_CONTESTER"),
+                        cab.hasSpecialCategory?("SCHOOL"),
+                        cab.hasSpecialCategory?("YL"),
+                        cab.hasSpecialCategory?("YOUTH"),
+                        )
       addQSOs(db, cID, logID, cab.qsos)
     else
       print "!!Can't add a log for #{cab.logcall} with no location\n"

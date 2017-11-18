@@ -107,44 +107,53 @@ end
 
 dbopts.merge!(cmddbopts)
 
-def loadFiles(args, cdb, contestID, ctl)
-  args.each { |filename|
-    begin
-      cab = Cabrillo.new(filename)
-      if cab and cdb
-        addLog(cdb, contestID, cab, ctl)
-      end
-      if $action == :check
-        if cab
-          if not cab.cleanparse
-            $stderr.flush
-            print "Station: #{cab.logcall}:#{filename} failed to parse.\n"
-            $stdout.flush
-          end
-          if not cab.badmults.empty?
-            $stderr.flush
-            print "Station: #{cab.logcall}:#{filename} has bad #{cab.badmults.size} multipliers in #{cab.qsos.size} QSO(s).\n"
-            print "Multipliers: " + cab.badmults.to_a.join(" ") + "\n"
-            $stdout.flush
-          end
-          if not cab.defaultSentQTH  or cab.defaultSentQTH == "CA"
-            print "Station: #{cab.logcall}:#{filename} has bad sent QTH #{cab.defaultSentQTH} in the header\n"
-          end
-          if not cab.badSentMults.empty?
-            print "Station: #{cab.logcall}:#{filename} has bad sent QTHs in QSO lines: #{cab.badSentMults.to_a.join(" ")}\n"
-          end
-        else
-          $stderr.flush
-          print "#{filename} failed to parse at all.\n"
-          $stdout.flush
-        end
-      end
-    rescue ArgumentError => e
-      $stderr.flush
-      print "#{filename} caused an exception #{e}\n"
-      $stdout.flush
+def loadFiles(args, cdb, contestID, ctl, db)
+  begin
+    if db and cdb
+      db.begin_transaction
     end
-  }
+    args.each { |filename|
+      begin
+        cab = Cabrillo.new(filename)
+        if cab and cdb
+          addLog(cdb, contestID, cab, ctl)
+        end
+        if $action == :check
+          if cab
+            if not cab.cleanparse
+              $stderr.flush
+              print "Station: #{cab.logcall}:#{filename} failed to parse.\n"
+              $stdout.flush
+            end
+            if not cab.badmults.empty?
+              $stderr.flush
+              print "Station: #{cab.logcall}:#{filename} has bad #{cab.badmults.size} multipliers in #{cab.qsos.size} QSO(s).\n"
+              print "Multipliers: " + cab.badmults.to_a.join(" ") + "\n"
+              $stdout.flush
+            end
+            if not cab.defaultSentQTH  or cab.defaultSentQTH == "CA"
+              print "Station: #{cab.logcall}:#{filename} has bad sent QTH #{cab.defaultSentQTH} in the header\n"
+            end
+            if not cab.badSentMults.empty?
+              print "Station: #{cab.logcall}:#{filename} has bad sent QTHs in QSO lines: #{cab.badSentMults.to_a.join(" ")}\n"
+            end
+          else
+            $stderr.flush
+            print "#{filename} failed to parse at all.\n"
+            $stdout.flush
+          end
+        end
+      rescue ArgumentError => e
+        $stderr.flush
+        print "#{filename} caused an exception #{e}\n"
+        $stdout.flush
+      end
+    }
+  ensure
+    if db and cdb
+      db.end_transaction
+    end
+  end
   if cdb
     cdb.checkDupeLogs(contestID)
   end
@@ -343,6 +352,7 @@ def scoreContest(db, contestID, contestDB)
   ct = nil
   print "QSOs outside contest time period: #{timeviolation}\n"
   $stdout.flush
+  badClocks = cm.determineUnreliableClocks
   num1, num2 = cm.resolveShifted
   print "Time shift resolved #{num1} full and #{num2} partial\n"
   $stdout.flush
@@ -370,7 +380,7 @@ def scoreContest(db, contestID, contestDB)
   bmm = BandModeMismatch.new(db, contestID, contestDB)
   bmm.resolve
   print "Assigning initial scores to QSO(s)\n"
-  cm.initialScore
+  cm.initialScore(badClocks)
   print "Final dupe check\n"
   num = singles.finalDupeCheck
   print "#{num} Dupe QSOs identified during final check\n."
@@ -399,7 +409,7 @@ begin
   end  
   case $action
   when :load, :check
-    loadFiles(ARGV, cdb, contestID, ctl)
+    loadFiles(ARGV, cdb, contestID, ctl, db)
   when :score
     scoreContest(db, contestID, cdb)
     reportContest(db, contestID, cdb)
