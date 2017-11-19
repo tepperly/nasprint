@@ -137,9 +137,24 @@ class OperatorClass
               :email, :phone,
               :comment, :sentQTH
   attr_writer :email, :phone, :comment, :sentQTH
-  
+
   def assisted=(value)
     @assisted = (value ? true : false)
+  end
+
+  def consistent?(other)
+    return ((@assisted.nil? or other.assisted.nil? or
+            (@assisted == other.assisted)) and
+            (@numop.nil? or other.numop.nil? or
+              (@numop == other.numop)) and
+            (@power.nil? or other.power.nil? or
+              (@power == other.power)) and
+            (@numtrans.nil? or other.numtrans.nil? or
+              (@numtrans == other.numtrans)))
+  end
+
+  def conflicted?(other)
+     not self.consistent?(other)
   end
 
   ALLOWED_OP_VALUES = { :single => true, :multi => true, :checklog => true }
@@ -254,6 +269,10 @@ class Cabrillo
 
   def hasSpecialCategory?(str)
     return @dbSpecialCategories.include?(str)
+  end
+
+  def conflicted?
+    return @dbCat.conflicted?(@logCat)
   end
 
   def normalizeMult(str)
@@ -542,7 +561,7 @@ class Cabrillo
         end
       }
       @x_lines << line
-    when /\Ax-cqp-opclass:\s*(checklog|multi-single|multi-multi|single|single-assisted)\s*/i
+    when /\Ax-cqp-opclass:\s*(checklog|multi-single|multi-multi|single|single-assisted)\s*\Z/i
       @x_lines << line
       self.dboptype=$1.downcase
     when /\Ax-cqp-id:\s*(\d+)\s*/i
@@ -1029,6 +1048,6 @@ NAME: #{@name}
     @dbCat.email = value
   end
 
-  attr_accessor :dbphone
+  attr_accessor :dbphone, :dbCat, :logCat
 
 end

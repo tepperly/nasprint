@@ -37,6 +37,7 @@ opts = GetoptLong.new(
                       [ '--new', '-N', GetoptLong::NO_ARGUMENT],
                       [ '--check', '-C', GetoptLong::NO_ARGUMENT],
                       [ '--check-dupe', '-c', GetoptLong::NO_ARGUMENT],
+                      [ '--category-check', '-A', GetoptLong::NO_ARGUMENT],
                       [ '--calc-clock-adj', '-x', GetoptLong::NO_ARGUMENT],
                       [ '--no-init', '-I', GetoptLong::NO_ARGUMENT],
                       [ '--qrzuser', '-u', GetoptLong::REQUIRED_ARGUMENT],
@@ -74,6 +75,8 @@ opts.each { |opt, arg|
     cmddbopts['filename'] = arg
   when '--report'
     $action = :report
+  when '--category-check'
+    $action = :catcheck
   when '--fifty-eight'
     $action = :fifty_eight
   when '--rare'
@@ -112,6 +115,11 @@ def loadFiles(args, cdb, contestID, ctl, db)
     if db and cdb
       db.begin_transaction
     end
+    catout = nil
+    if $action == :catcheck
+      catout = open("category_check.csv", "w:ascii")
+      catout.write('"Callsign","Cab Power","Cab Class","Web Power","Web Class","Power","Class"' + "\n")
+    end
     args.each { |filename|
       begin
         cab = Cabrillo.new(filename)
@@ -142,6 +150,16 @@ def loadFiles(args, cdb, contestID, ctl, db)
             print "#{filename} failed to parse at all.\n"
             $stdout.flush
           end
+        elsif $action == :catcheck
+          if cab.conflicted?
+            catout.write( '"' + cab.logCall + '","' +
+              ((not cab.logCat.power.nil?) ? cab.logCat.power.to_s.upcase :
+               cab.dbCat.power.to_s.upcase) + '","' +
+              ((not cab.logCat.numop.nil?) ? cab.classFromCat(cab.logCat) :
+               cab.classFromCat(cab.dbCat)) + '","' +
+              cab.logPower + '","' + cab.cqpOpClass + '","' +
+              cab.logPower + '","' + cab.cqpOpClass + "\"\n")
+          end
         end
       rescue ArgumentError => e
         $stderr.flush
@@ -152,6 +170,9 @@ def loadFiles(args, cdb, contestID, ctl, db)
   ensure
     if db and cdb
       db.end_transaction
+    end
+    if catout
+      catout.close
     end
   end
   if cdb
@@ -408,7 +429,7 @@ begin
     end
   end  
   case $action
-  when :load, :check
+  when :load, :check, :catcheck
     loadFiles(ARGV, cdb, contestID, ctl, db)
   when :score
     scoreContest(db, contestID, cdb)
