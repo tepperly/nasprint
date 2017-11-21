@@ -121,6 +121,10 @@ class CrossMatch
     end
   end
 
+  def wipeScores
+    @db.query("delete from Scores where #{@logs.membertest("logID")};") { }
+  end
+
   def notMatched(qso)
     return "#{qso}.matchID is null and #{qso}.matchType = \"None\""
   end

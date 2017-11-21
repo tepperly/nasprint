@@ -331,14 +331,14 @@ class Cabrillo
 
   def processLine(line)
     case line
-    when /\Astart-of-log:\s*([23].0)?\s*/i
+    when /\Astart-of-log:\s*([23].0)?\s*\Z/i
       if $1
         @cabversion = $1
       end
       trans(0,1)
-    when /\Aend-of-log:\s*/i
+    when /\Aend-of-log:\s*\Z/i
       trans(2, 3)
-    when /\Acallsign:\s*([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?)?\s*/i
+    when /\Acallsign:\s*([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9])?)?)?\s*\Z/i
       trans(1, 1)
       if $1
         @logcall = $1.upcase
@@ -348,42 +348,42 @@ class Cabrillo
         @logCat.assisted = ($1.upcase == "ASSISTED")
       end
       trans(1, 1)
-    when /\Acategory-assisted:\s*no(\s+assisted)?\s*/i
+    when /\Acategory-assisted:\s*no(\s+assisted)?\s*\Z/i
       trans(1, 1)
       @logCat.assisted = false
-    when /\Acategory-band:\s*(\S*)?\s*/i
+    when /\Acategory-band:\s*(\S*)?\s*\Z/i
       trans(1, 1)
       @band = $1
-    when /\Acategory-dxpedition:\s*(\S*)\s/i
+    when /\Acategory-dxpedition:\s*(\S*)\s\Z/i
       @dxpedition = $1
       trans(1, 1)
-    when /\Acategory-mode:\s*(ssb|cw|rtty|mixed)\s*/i
+    when /\Acategory-mode:\s*(ssb|cw|rtty|mixed)\s*\Z/i
       @mode = $1
       trans(1, 1)
-    when /\Acategory-mode:\s*ph\s*/i
+    when /\Acategory-mode:\s*ph\s*\Z/i
       trans(1, 1)
       @mode = "SSB"
     when /\Acategory-operator:\s*(single-op|single\s+operator|single)\s*\Z/i
       trans(1, 1)
       @logCat.numop = :single
-    when /\Acategory-operator:\s*checklog\s*/i
+    when /\Acategory-operator:\s*checklog\s*\Z/i
       trans(1, 1)
       @logCat.numop = :checklog
-    when /\Acategory-operator:\s*multi-op|multiple\s*/i
+    when /\Acategory-operator:\s*multi-op|multiple\s*\Z/i
       trans(1,1)
       @logCat.numop = :multi
-    when /\Acategory-operator:\s*multi-single\s*/i
+    when /\Acategory-operator:\s*multi-single\s*\Z/i
       trans(1, 1)
       @logCat.numop = :multi
       @logCat.numtrans = :one
-    when /\Acategory-operator:\s*multi-multi\s*/i
+    when /\Acategory-operator:\s*multi-multi\s*\Z/i
       trans(1, 1)
       @logCat.numop = :multi
       @logCat.numtrans = :unlimited
-    when /\Acategory-power:\s*(low|qrp|high)\s*/i
+    when /\Acategory-power:\s*(low|qrp|high)\s*\Z/i
       trans(1, 1)
       @logCat.power = $1.downcase.to_sym
-    when /\Acategory-power:\s*(\d+)(\s*w)?\s*/i
+    when /\Acategory-power:\s*(\d+)(\s*w)?\s*\Z/i
       trans(1, 1)
       pow = $1.to_i
       if (pow <= 5)
@@ -413,7 +413,7 @@ class Cabrillo
       @dbSpecialCategories << "COUNTY"
     when /\Acategory-station:\s*\Z/i
       # ignore
-    when /\Acategory-time:\s*((\d+)[- ]hours?)?\s*/i
+    when /\Acategory-time:\s*((\d+)[- ]hours?)?\s*\Z/i
       trans(1, 1)
       if $1
         hours = $2.to_i
@@ -442,7 +442,7 @@ class Cabrillo
     when /\Acategory:\s*(.*)\Z/i
       trans(1, 1)
       processCategories($1.upcase)
-    when /\Acategory-transmitter:\s*(one|two|limited|unlimited|swl)?\s*/i
+    when /\Acategory-transmitter:\s*(one|two|limited|unlimited|swl)?\s*\Z/i
       trans(1, 1)
       if $1
         if $1.upcase == "ONE"
@@ -458,7 +458,7 @@ class Cabrillo
       if $1
         processOverlay($1.upcase)
       end
-    when /\Acertificate:\s*(yes|no)\s*/i
+    when /\Acertificate:\s*(yes|no)\s*\Z/i
       trans(1, 1)
       @certificate = ($1.upcase == "YES")
     when /\Aclaimed-score:\s*(\S*)\s*/i
@@ -466,7 +466,7 @@ class Cabrillo
       if $1 and $1.length > 0
         @claimed = $1
       end
-    when /\Aarrl-section:\s*(\S+)?\s*/i
+    when /\Aarrl-section:\s*(\S+)?\s*\Z/i
       trans(1, 1)
       if $1
         @section = normalizeString($1)
@@ -474,58 +474,58 @@ class Cabrillo
           @logCat.sentQTH = MULTIPLIER_ALIASES[@section]
         end
       end
-    when /\A(team|club(-name)?):\s*(.*)/i
+    when /\A(team|club(-name)?):\s*(.*)\Z/i
       trans(1, 1)
       @club = $3.strip.gsub(/\s+/, " ")
-    when /\Aiota-island-name:\s*(.*)/i
+    when /\Aiota-island-name:\s*(.*)\Z/i
       trans(1, 1)
       @iota = $1.strip.gsub(/s+/, " ")
-    when /\Acontest:\s*(.*)/i
+    when /\Acontest:\s*(.*)\Z/i
       trans(1, 1)
       # ignore
-    when /\Acreated-by:\s*(.*)/i
+    when /\Acreated-by:\s*(.*)\Z/i
       trans(1, 1)
       @creator = $1.strip
-    when /\A(e-?mail|address-email):\s*(.*)/i
+    when /\A(e-?mail|address-email):\s*(.*)\Z/i
       trans(1, 1)
       @logCat.email = $2.strip
-    when /\Alocation:\s*(.*)/i
+    when /\Alocation:\s*(.*)\Z/i
       trans(1, 1)
       @location = normalizeString($1)
       if MULTIPLIER_ALIASES[@location]
         @logCat.sentQTH = MULTIPLIER_ALIASES[@location]
       end
-    when /\A(category-)?name:\s*(.*)/i
+    when /\A(category-)?name:\s*(.*)\Z/i
       trans(1, 1)
       @name = $2.strip.gsub(/\s+/, " ")
-    when /\Aaddress:\s*(.*)/i
+    when /\Aaddress:\s*(.*)\Z/i
       trans(1, 1)
       @address << $1.strip
-    when /\Aaddress-city:\s*(.*)/i
+    when /\Aaddress-city:\s*(.*)\Z/i
       trans(1, 1)
       @city = $1.strip
-    when /\A(address-)?state-province:\s*(.*)/i
+    when /\A(address-)?state-province:\s*(.*)\Z/i
       trans(1, 1)
       @state = $2.strip
-    when /\Aaddress-postalcode:\s*(.*)/i
+    when /\Aaddress-postalcode:\s*(.*)\Z/i
       trans(1, 1)
       @postcode = $1.strip
-    when /\Aaddress-country:\s*(.*)/i
+    when /\Aaddress-country:\s*(.*)\Z/i
       trans(1, 1)
       @country = $1.strip
-    when /\Aoperators:\s*(.*)/i
+    when /\Aoperators:\s*(.*)\Z/i
       trans(1, 1)
       @operators = $1.strip
-    when /x-ssbsprint-email:\s*(.*)/i
+    when /x-ssbsprint-email:\s*(.*)\Z/i
       @dbCat.email = $1.strip
       @x_lines << line          # save
-    when /\Aofftime:\s*(.*)/i
+    when /\Aofftime:\s*(.*)\Z/i
       trans(1, 1)
       @offtimes << $1.strip
-    when /\Ax-cqp-email:\s*(.*)/i
+    when /\Ax-cqp-email:\s*(.*)\Z/i
       @x_lines << line
       @dbCat.email = $1.strip
-    when /\Ax-cqp-confirm1:\s*(.*)/i
+    when /\Ax-cqp-confirm1:\s*(.*)\Z/i
       @x_lines << line
       # ignore
     # when /\Ax-cqp-comments:\s*(.*)\Z/i
@@ -537,22 +537,22 @@ class Cabrillo
     #       @dbcomments = $1.strip + "\n"
     #     end
     #   end
-    when /\Ax-cqp-sentqth:\s*(.*)/i
+    when /\Ax-cqp-sentqth:\s*(.*)\Z/i
       @x_lines << line
       sqth = $1.strip
       if not sqth.empty?
         @dbCat.sentQTH = sqth
       end
-    when /\Ax-cqp-phone:\s*(.*)/i
+    when /\Ax-cqp-phone:\s*(.*)\Z/i
       @x_lines << line
       phn = $1.strip
       if not phn.empty?
         @dbCat.phone = phn
       end
-    when /\Ax-cqp-power:\s*(qrp|low|high)\s*/i
+    when /\Ax-cqp-power:\s*(qrp|low|high)\s*\Z/i
       @x_lines << line
       @dbCat.power = $1.strip.downcase.to_sym
-    when /\Ax-cqp-categories:\s*(.*)\s*/i
+    when /\Ax-cqp-categories:\s*(.*)\s*\Z/i
       $1.split.each { |cat|
         if KNOWN_CATEGORIES.include?(cat) 
           @dbSpecialCategories << cat
@@ -567,9 +567,9 @@ class Cabrillo
     when /\Ax-cqp-id:\s*(\d+)\s*/i
       @x_lines << line
       self.dblogID = $1.to_i
-    when /\Ax(-[a-z]+)+:.*/i
+    when /\Ax(-[a-z]+)+:.*\Z/i
       @x_lines << line          # ignore and save
-    when /\Asoapbox:\s*(.*)/i
+    when /\Asoapbox:\s*(.*)\Z/i
       trans(1, 1)
       @soapbox << $1.strip
     when /\Aqso: +(\d+) +([a-z]{2,3}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+)( +(\d+) *| *)(\{GP(.*)GP\})?$/i

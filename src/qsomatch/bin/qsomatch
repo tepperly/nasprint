@@ -7,6 +7,7 @@ require 'bandmode'
 require 'contestdb'
 require 'callsign'
 require 'addlog'
+require 'spreadsheet'
 require 'cabrillo'
 require 'qrzdb'
 require 'crossmatch'
@@ -294,6 +295,11 @@ def reportContest(db, contestID, contestDB)
   open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
     r.makeReport(out, contestID)
   }
+  s = Spreadsheet.new(db, contestID)
+  s.addCategories
+  s.addWineWinners
+  s.addSpecialAwards
+  s.saveTo("categories_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".xlsx")
   open("green_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".txt", "w:ascii") { |out|
     r.makeGreenReport(out, contestID)
   }
@@ -317,6 +323,7 @@ def scoreContest(db, contestID, contestDB)
   if $restart
     restartContest(cm)
   end
+  cm.wipeScores
   checkCallsigns(db, contestID, $qrzuser, $qrzpwd)
   num1, dupeCount = cm.perfectMatch
   print "Perfect matches: #{num1} (dupes #{dupeCount})\n"

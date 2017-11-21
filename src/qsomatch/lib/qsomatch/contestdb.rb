@@ -43,6 +43,9 @@ class ContestDatabase
     if not (tables.include?("Callsign") and tables.include?("Log"))
       createLogTable
     end
+    if not (tables.include?("Scores"))
+      createScoresTable
+    end
     if not (tables.include?("QSOExtra") and tables.include?("QSO") and tables.include?("QSOGreen"))
       createQSOTable
     end
@@ -168,6 +171,10 @@ class ContestDatabase
         end
       end
     }
+  end
+
+  def createScoresTable
+    @db.query("create table if not exists Scores (logID integer not null, multID integer not null, verified_mult integer not null default 0, verified_score integer not null default 0, verified_ph integer not null default 0, verified_cw integer not null default 0, primary key (logID, multID));") { }
   end
   
   def createLogTable
@@ -445,6 +452,7 @@ class ContestDatabase
     logs = logsForContest(contestID)
     if not logs.empty?
       @db.query("delete from QSO where logID in (?);", [logs]) { }
+      @db.query("delete from Scores where logID in (?);", [logs]) { }
       @db.query("delete from QSOExtra where logID in (?));", [logs]) { }
       @db.query("delete from QSOGreen where logID in (?));", [logs]) { }
     end
