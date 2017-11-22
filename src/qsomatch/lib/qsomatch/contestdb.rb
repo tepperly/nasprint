@@ -61,6 +61,9 @@ class ContestDatabase
     if not tables.include?("TeamMember")
       createTeamMemberTable
     end
+    if not tables.include?("Operator")
+      createOperatorTable
+    end
   end
 
   def createContestTable
@@ -246,6 +249,11 @@ class ContestDatabase
     @db.query("create index if not exists logind on QSOGreen (logID);")  { }
   end
 
+  def createOperatorTable
+    @db.query("create table if not exists Operator (id integer primary key #{@db.autoincrement}, logID integer not null, callsign varchar(16) not null, clubID integer, clubAlloc double);") { }
+    @db.query("create index if not exists logind on Operator (logID);") { }
+  end
+
   def addOrLookupCall(callsign, contestIDVar=nil)
     callsign = callsign.upcase
     if not contestIDVar
@@ -327,6 +335,11 @@ class ContestDatabase
               ]) { }
 
     return @db.last_id
+  end
+
+  def addOperator(logID, operator, allocation)
+    @db.query("insert into Operator (logID, callsign, clubAlloc) values (?, ?, ?);",
+              [ logID, operator, allocation ]) { }
   end
 
   def lookupMultiplier(str)

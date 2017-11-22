@@ -251,7 +251,7 @@ class Cabrillo
   end
 
   attr_reader :cleanparse, :logcall, :qsos, :club, :name, :badmults,
-              :badSentMults
+              :badSentMults, :operators
 
   def trans(oldstate, newstate)
     if @parsestate <= oldstate
@@ -753,6 +753,16 @@ class Cabrillo
 
   def normalizeOps
     @operators ? @operators.split(/\s*,\s*|\s+/).join(" ") : ""
+  end
+
+  def opList
+    if @operators
+      ops = @operators.strip.upcase
+      if not ops.empty?
+        return ops.split(/\s*,\s*|\s+/)
+      end
+    end
+    nil
   end
 
   def classFromCat(cat)

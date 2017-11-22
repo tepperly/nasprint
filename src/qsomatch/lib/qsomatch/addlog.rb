@@ -94,6 +94,25 @@ def addQSOs(db, contestID, logID, qsos)
   }
 end
 
+def addOperators(db, logID, ops, basecall)
+  numops = 0
+  if ops and ops.respond_to?(:each)
+    ops.each { |op|
+      if not op.start_with?("@")
+        numops += 1
+      end
+    }
+    ops.each { |op|
+      db.addOperator(logID, op, (op.start_with?("@") ? 0 : 1.0/numops))
+    }
+  end
+  if 0 == numops
+    # every log has at least one operator
+    db.addOperator(logID, basecall, 1)
+  end
+end
+
+
 def addLog(db, cID, cab, ct)
   if cab.logcall
     multID, entID = checkLocation(db, cab)
@@ -114,6 +133,7 @@ def addLog(db, cID, cab, ct)
                         cab.hasSpecialCategory?("YOUTH"),
                         )
       addQSOs(db, cID, logID, cab.qsos)
+      addOperators(db, logID, cab.opList, basecall)
     else
       print "!!Can't add a log for #{cab.logcall} with no location\n"
     end

@@ -246,10 +246,8 @@ class Spreadsheet
         specialAward(num, sheet, constraint, "Single-Op County Expedition", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isCCE")
         specialAward(num, sheet, constraint, "Multi-Single County Expedition", "opclass = 'MULTI_SINGLE' and isCCE")
         specialAward(num, sheet, constraint, "Multi-Multi County Expedition", "opclass = 'MULTI_MULTI' and isCCE")
-        firstToAllMults(3, sheet, region + " First to 58", " and m.isCA")
-      else
-        firstToAllMults(3, sheet, region + " First to 58", " and not m.isCA")
       end
+      firstToAllMults(3, sheet, region + " First to 58", " and " + constraint)
       qsoAward(2, sheet, constraint, "Most Phone QSOs", "verified_ph", "PH")
       qsoAward(2, sheet, constraint, "Most CW QSOs", "verified_cw", "CW")
     }
