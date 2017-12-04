@@ -83,9 +83,10 @@ def printArea(cdb, logs, key)
   print "CALL   NAME        CLS  LOC  20m  40m  80m #QSOs #Mults #State Score     BandChgs  Team\n"
   print "====== =========== ===  ===  ===  ===  === ===== ====== ====== ========= ========  ==================================================\n"
   logs.each { |log|
-    callsign, name, location, dxprefix, team, phqsos, cwqsos, mults, score, powclass, opclass, numstates = cdb.logInfo(log)
+    callsign, name, location, dxprefix, team, phqsos, cwqsos, mults, score, powclass, opclass= cdb.logInfo(log)
     bandQSOs = cdb.qsosByBand(log)
     bandChanges = cdb.numBandChanges(log)
+    numstates = 0
     values = [callsign.upcase, name, opclass[0], location.to_s,  bandQSOs["20m"], bandQSOs["40m"],
               bandQSOs["80m"], qsos, mults, numstates, commaScore(score.to_i), bandChanges, team.to_s.upcase]
     print ("%-6s %-11s  %1s   %-3s %4d %4d %4d %5d %6d %6d %8s    %3d     %s\n" % values)
@@ -120,13 +121,6 @@ def topReport(cdb, cid, num, title, full=true, opclass=nil, criteria="l.verified
   logs = cdb.topLogs(cid, num, opclass, criteria)
   if not logs.empty?
     columnReport(logs, title, full, columnHeading)
-  end
-end
-
-def wasReport(cdb, contestID, num)
-  logs = cdb.topNumStates(contestID, num)
-  if not logs.empty?
-    columnReport(logs, "States Worked", false, "#States Worked")
   end
 end
 
@@ -182,7 +176,6 @@ if $name and $year
     topReport(cdb, contestID, 10, "QRP", true, "QRP")
     topReport(cdb, contestID, 10, "QSO Totals", false, nil, "l.verifiedqsos", "# QSOs")
     topReport(cdb, contestID, 10, "Multipliers", false, nil, "l.verifiedMultipliers", "# Multipliers")
-    wasReport(cdb, contestID, 10)
     goldenReport(cdb, contestID)
     teamReport(cdb, contestID)
   ensure

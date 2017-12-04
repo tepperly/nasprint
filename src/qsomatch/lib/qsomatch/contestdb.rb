@@ -33,6 +33,9 @@ class ContestDatabase
     if not tables.include?("Contest")
       createContestTable
     end
+    if not tables.include?("Clubs")
+      createClubsTable
+    end
     if not tables.include?("Entity")
       createEntityTable
     end
@@ -85,6 +88,11 @@ class ContestDatabase
     
   end
 
+  def createClubsTable
+    @db.query("create table if not exists Clubs (id integer primary key, contestID integer not null, fullname varchar(128), type char(6));") { }
+    @db.query("create index if not exists nameind on Clubs (fullname);") { }
+  end
+
   def createEntityTable
     if @db.has_enum?
       @db.query("create table if not exists Entity (id integer primary key, name varchar(64) not null, prefix varchar(8), continent enum ('AS', 'EU', 'AF', 'OC', 'NA', 'SA', 'AN') not null);") { }
@@ -124,15 +132,15 @@ class ContestDatabase
   end
 
   def createMultiplierTable
-    @db.query("create table if not exists Multiplier (id integer primary key #{@db.autoincrement}, abbrev char(4) not null unique, wasstate char(2), entityID integer, ismultiplier bool not null default #{@db.false}, isCA bool not null default #{@db.false});") { }
+    @db.query("create table if not exists Multiplier (id integer primary key #{@db.autoincrement}, abbrev char(4) not null unique, fullname char(32), entityID integer, ismultiplier bool not null default #{@db.false}, isCA bool not null default #{@db.false});") { }
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii") { |row|
       begin
         if row[0] == row[1]
           entity = row[2].to_i
           abbrev = row[1].strip.upcase
           if entity > 0
-            @db.query("insert into Multiplier (abbrev, entityID, wasstate, ismultiplier, isCA) values (?, ?, ?, #{@db.true}, #{(abbrev.length == 4 and abbrev != "XXXX") ? @db.true : @db.false});",
-                      [abbrev, entity, row[3]]) { }
+            @db.query("insert into Multiplier (abbrev, entityID, ismultiplier, isCA, fullname) values (?, ?, #{(abbrev!='CA') ? @db.true : @db.false}, #{(abbrev.length == 4 and abbrev != 'XXXX') ? @db.true : @db.false}, ?);",
+                      [abbrev, entity, row[3] ] ) { }
           else
             # DX gets a null for entityID and ismultiplier
             @db.query("insert into Multiplier (abbrev) values (?);",
@@ -595,13 +603,6 @@ class ContestDatabase
     nil
   end
 
-  def numStates(logID)
-    @db.query("select count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = ? and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID where l.id = ? group by l.id order by numstates desc, l.callsign asc limit 1;", [logID, logID]) { |row|
-      return row[0]
-    }
-    0
-  end
-
   def baseCall(callID)
     @db.query("select basecall from Callsign where id = ? limit 1;", [callID]) { |row|
       return row[0]
@@ -620,7 +621,7 @@ class ContestDatabase
     @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedPHQSOs, l.verifiedCWQSOs, l.verifiedMultipliers, l.verifiedscore, l.powclass l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = ? limit 1;",
               [ logID ]) { |row|
       name = firstName(row[1])
-      return row[0], name, row[2], row[3], lookupTeam(row[10], logID), row[4], row[5], row[6], row[7], row[8], row[9], numStates(logID)
+      return row[0], name, row[2], row[3], lookupTeam(row[10], logID), row[4], row[5], row[6], row[7], row[8], row[9]
     }
     return nil
   end
@@ -630,18 +631,6 @@ class ContestDatabase
               [logID ] ) { |row|
       return row[0] + 2*row[1]
     }
-  end
-
-  def topNumStates(contestID, num)
-    logs = Array.new
-    limit = nil
-    @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = ? and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID group by l.id order by numstates desc, l.callsign asc limit ?, 1;", [ contestID, num-1 ]) { |row|
-      limit = row[2]
-    }
-    @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = ? and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID group by l.id  having numstates >= ? order by numstates desc, l.callsign asc;", [contestID, limit]) { |row|
-      logs << [ row[1], row[2] ]
-    }
-    logs
   end
 
   # In the case of ties, this can return more than num

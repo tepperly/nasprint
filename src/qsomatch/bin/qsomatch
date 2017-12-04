@@ -5,6 +5,7 @@ require 'database'
 require 'dxmap'
 require 'bandmode'
 require 'contestdb'
+require 'pdfreport'
 require 'callsign'
 require 'addlog'
 require 'spreadsheet'
@@ -281,6 +282,114 @@ def report58(db, contestID, contestDB)
   r.firstTo58($stdout, contestID)
 end
 
+def hdrl(str)
+  return AString.new(str.to_s, :style => :bold, :align => :left)
+end
+
+def hdr(str)
+  return AString.new(str.to_s, :style => :bold, :align => :center)
+end
+
+def n(str)
+  return AString.new(str.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse, :align => :right)
+end
+
+def powAbbrev(power)
+  case power
+  when 'QRP'
+    return " Q"
+  when "LOW"
+    return " L"
+  when "HIGH"
+    return ""
+  end
+end
+
+def extras(isCCE, isYL, isMOBILE)
+  result = ""
+  if isCCE
+    result += " E"
+  end
+  if isYL
+    result += " YL"
+  end
+  if isMOBILE
+    result += " M"
+  end
+  result
+end
+
+def abbrevType(opclass, power, isCCE, isYL, isMOBILE)
+  result = ""
+  case opclass
+  when 'SINGLE'
+    result = "SO" + powAbbrev(power) + extras(isCCE, isYL, isMOBILE)
+  when 'SINGLE_ASSISTED'
+    result = "SOA" + powAbbrev(power) + extras(isCCE, isYL, isMOBILE)
+  when 'MULTI_SINGLE'
+    result = 'M/S' + powAbbrev(power) + extras(isCCE, isYL, isMOBILE)
+  when 'MULTI_MULTI'
+    result = 'M/M' + powAbbrev(power) + extras(isCCE, isYL, isMOBILE)
+  when 'CHECKLOG'
+    result = 'C'
+  end
+  return AString.new(result, :align => :center)
+end
+
+def lookupOperatorList(db, callsign, id)
+  callsign = AString.new(callsign)
+  oplist = [ ]
+  db.query("select callsign from Operator where logID = ? order by id;", [id]) { |row|
+    oplist << row[0]
+  }
+  if not oplist.empty?
+    callsign.addAttributes(:ops => oplist)
+  end
+  return callsign
+end
+
+def checkFill
+  AString.new("-", :align => :right)
+end
+
+def makeGroups(db, contestID, extraCon)
+  groups = [ ]
+  curName = nil
+  curGroup = nil
+  db.query("select m.fullname, l.callsign, l.opclass, l.powclass, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.isCCE, l.isYL, l.isMOBILE, l.id from Multiplier as m left outer join (Log as l join Scores as s on l.id = s.logID and  l.contestID = ?) on s.multID = m.id where #{extraCon} order by m.fullname asc, CASE l.opclass WHEN 'SINGLE' THEN 0 WHEN 'SINGLE_ASSISTED' THEN 0 WHEN 'MULTI_SINGLE' THEN 1 WHEN 'MULTI_MULTI' THEN 2  WHEN 'CHECKLOG' THEN 10 END asc, s.verified_score desc;", [contestID]) { |row|
+    if row[0] != curName
+      curName = row[0].to_s
+      curGroup = Group.new([hdrl(row[0]),hdr("CW"),hdr("PH"), hdr("Total"), hdr("Mult"), hdr("Score"), hdr("Type")],
+                           [0, 250, 290, 330, 370, 410, 470],
+                           [250, 40, 40, 40, 40, 60, 70])
+      groups << curGroup
+    end
+    if row[1]
+      callsign = lookupOperatorList(db, row[1], row[11])
+      if row[2] != "CHECKLOG"
+        curGroup.rows << [ callsign, n(row[4]), n(row[5]), n(row[4].to_i+row[5].to_i),
+          n(row[6]), n(row[7]), abbrevType(row[2], row[3], db.toBool(row[8]),db.toBool(row[9]),
+                                           db.toBool(row[10]) )]
+      else
+        curGroup.rows << [ callsign,checkFill,checkFill,checkFill,checkFill,checkFill,
+          abbrevType(row[2], row[3], db.toBool(row[8]),db.toBool(row[9]), db.toBool(row[10]) )]
+      end
+    else
+      curGroup.rows << "No logs submitted for scoring"
+    end
+  }
+  return groups
+end
+
+def makePDFReports(db, contestID)
+  print "Making PDF reports\n"
+  pr = ReportPDF.new("California QSO Party\nUS Regional")
+  g = makeGroups(db, contestID, "m.isCA")
+  pr.pageHeader
+  pr.printGroups(g)
+  pr.render("test.pdf")
+end
+
 def reportContest(db, contestID, contestDB)
   r = Report.new(db, contestID)
   dir = "cqp" + $year.to_s + "_reverse"
@@ -289,12 +398,13 @@ def reportContest(db, contestID, contestDB)
   rescue
     # ignore exception
   end
-  print "Making reverse logs\n"
-  r.makeReverseLogs(dir, contestID)
   print "Making general reports\n"
   open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
     r.makeReport(out, contestID)
   }
+  makePDFReports(db, contestID)
+  print "Making reverse logs\n"
+  r.makeReverseLogs(dir, contestID)
   s = Spreadsheet.new(db, contestID)
   s.addCategories
   s.addWineWinners
