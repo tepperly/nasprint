@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
 require 'prawn'
 require 'set'
+require_relative 'callsign'
 
 class AString < String
   def initialize(str, options={})
@@ -25,15 +27,62 @@ class Group
   end
 
   attr_reader :header, :rows, :columnStarts, :columnWidths
+  attr_writer :rows
 end
 
 class ReportPDF
   LOGO_FILE=File.dirname(__FILE__)+"/images/nccc_generic.png"
   HEADER_HEIGHT=44
+  LEGEND = [
+    "C = <i>Checklog</i>",
+    "E = Country Expedition",
+    "L = Low Power",
+    "M = Mobile",
+    "M/M = Multi-Multi",
+    "M/S = Multi-Single",
+    "Q = QRP",
+    "YL = Female Operator"
+  ]
+  LEGEND.freeze
 
-  def initialize(title)
+  def initialize(title, legend=LEGEND)
     @title = title
-    @pdf = Prawn::Document.new(:page_style => "LETTER", :page_layout => :portrait)
+    @legend = legend
+    @pdf = Prawn::Document.new(:page_style => "LETTER", :page_layout => :portrait,
+                               :top_margin => 95,
+                               :info => {
+                                 :Title => title.gsub("\n"," : "),
+                                 :Author => "Northern California Contest Club",
+                                 :Subject => "Contest results published by the NCCC",
+                                 :Keywords => "NCCC, ham radio, contest, radiosport",
+                                 :CreationDate => Time.now
+                               })
+    @pdf.font_families.update( "Verdana" => {
+                                 :normal => "/usr/share/fonts/truetype/msttcorefonts/Verdana.ttf",
+                                 :bold => "/usr/share/fonts/truetype/msttcorefonts/Verdana_Bold.ttf",
+                                 :italic => "/usr/share/fonts/truetype/msttcorefonts/Verdana_Italic.ttf",
+                                 :fold_italic => "/usr/share/fonts/truetype/msttcorefonts/Verdana_Bold_Italic.ttf"
+                               })
+    @pdf.font_families.update( "Arial" => {
+                                 :normal => "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+                                 :black => "/usr/share/fonts/truetype/msttcorefonts/Arial_Black.ttf",
+                                 :bold => "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+                                 :italic => "/usr/share/fonts/truetype/msttcorefonts/Arial_Italic.ttf",
+                                 :fold_italic => "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold_Italic.ttf"
+                               })
+    @pdf.font_families.update( "Trebuchet MS" => {
+                                 :normal => "/usr/share/fonts/truetype/msttcorefonts/Trebuchet_MS.ttf",
+                                 :bold => "/usr/share/fonts/truetype/msttcorefonts/Trebuchet_MS_Bold.ttf",
+                                 :italic => "/usr/share/fonts/truetype/msttcorefonts/Trebuchet_MS_Italic.ttf",
+                                 :fold_italic => "/usr/share/fonts/truetype/msttcorefonts/Trebuchet_MS_Bold_Italic.ttf"
+                               })
+    @pdf.font "Trebuchet MS"
+    @pdf.default_leading = (0.25 * @pdf.font_size).to_i
+    @baselineskip = @pdf.default_leading + @pdf.font_size
+    @footnotes = [ ]
+    @pdf.repeat(:all) {
+      pageHeader
+    }
   end
 
   def fillBounding(color)
@@ -46,6 +95,7 @@ class ReportPDF
   end
 
   def pageHeader
+    y = @pdf.cursor
     @pdf.image(LOGO_FILE, :at => [0, 720], :height => HEADER_HEIGHT,
                :resize => true)
     @pdf.bounding_box([114,720], :width => 350, :height => HEADER_HEIGHT) {
@@ -53,16 +103,16 @@ class ReportPDF
       @pdf.stroke_bounds
       @pdf.text(@title, :align =>:center, :valign => :center, :kerning => true, :size => 16, :style => :bold)
     }
-    @pdf.move_down 8
+    @pdf.move_cursor_to( y)
   end
 
   STYLE_ATTRIBUTES = [
     :kerning, :style, :size, :align, :color
   ].to_set
   STYLE_ATTRIBUTES.freeze
-  
+
   def selectStyles(text)
-    result = Hash.new
+    result = { :inline_format => true }
     if text.respond_to?(:attributes)
       text.attributes.each { |k,v|
         if STYLE_ATTRIBUTES.include?(k)
@@ -73,21 +123,29 @@ class ReportPDF
     result
   end
 
-  def shortOpsText(str, oplist)
-    if oplist and (not oplist.empty?) and (oplist != [ str ])
-      if oplist.include?(str)
+  def shortOpsText(call, oplist)
+    ct = CallsignTools.new
+    basecall = ct.callBase(call)
+    station = "@" + basecall.to_s
+    if oplist and (not oplist.empty?) and (oplist != [ basecall.to_s ]) and (oplist != [ basecall.to_s, station]) and (oplist != [ station, basecall.to_s ]) and (oplist != [ station ] )
+      if oplist.include?(call) || oplist.include?(basecall)
         oplist = oplist.clone
-        oplist.delete(str)
-        return " (" + oplist.join(",") + ")"
+        oplist.delete(call)
+        oplist.delete(basecall)
+        return AString.new(" (+ " + oplist.join(",") + ")")
       else
         if oplist.length == 1
-          return " (" + oplist[0] + " op)"
+          return AString.new(" (" + oplist[0] + " op)")
         else
-          return " (" + oplist.join(", ") + ")"
+          return AString.new(" (" + oplist.join(", ") + ")")
         end
       end
     end
     ""
+  end
+
+  def footnoteStr(num)
+    "<sup>" + num.to_s + "</sup>"
   end
 
   def longOpsText(callsign, oplist)
@@ -96,26 +154,35 @@ class ReportPDF
 
   def processAttributes(text, opts)
     nextLine = nil
+    fstr = ""
     if text.respond_to?(:attributes)
+      if text.attributes.has_key?(:footnote)
+        @footnotes << text.attributes[:footnote]
+        fstr = footnoteStr(@footnotes.length)
+      end
       if text.attributes.has_key?(:ops)
-        opsTxt = shortOpsText(text.to_str, text.attributes[:ops])
-        if @pdf.width_of(text.to_str+opsTxt) <= opts[:width]
-          text = text.to_str+opsTxt
+        opsTxt = shortOpsText(text.to_s, text.attributes[:ops])
+        if @pdf.width_of(text.to_s+fstr+opsTxt, :inline_format => true) <= opts[:width]
+          text = text.to_s+fstr+opsTxt
         else
-          nextLine = longOpsText(text.to_str, text.attributes[:ops])
+          nextLine = longOpsText(text.to_s, text.attributes[:ops])
+          text << fstr
+          nextLine.attributes.merge!(selectStyles(text))
         end
       end
     end
     return text, nextLine
   end
 
-  def printLine(text, columnStarts, columnWidths)
+  def printLine(text, columnStarts, columnWidths, hdrText=nil)
     nextLine = [ text ]
     while not nextLine.empty?
       text = nextLine.pop
-      if @pdf.cursor <= 0
+      if @pdf.cursor <= (0 + ((not hdrText) ? @baselineskip + 4 : 0))
         @pdf.start_new_page
-        pageHeader
+        if hdrText
+          printLine(hdrText, columnStarts, columnWidths)
+        end
       end
       y = @pdf.cursor
       if text.length == columnStarts.length
@@ -126,9 +193,16 @@ class ReportPDF
           if nl
             nextLine << nl
           end
+          oldfill = @pdf.fill_color
+          if opts.has_key?(:color)
+            @pdf.fill_color(opts[:color])
+          end
           @pdf.text_box(textstr, opts)
+          if opts.has_key?(:color)
+            @pdf.fill_color(oldfill)
+          end
         }
-        @pdf.move_down 16
+        @pdf.move_down (@baselineskip)
       else
         if text.instance_of? Array
           text = text[0]
@@ -139,18 +213,40 @@ class ReportPDF
   end
 
   def printGroups(groups)
+    @footnotes = [ ]
     first = true
     groups.each { |g|
       if first
         first = false
       else
-        @pdf.move_down 16
+        @pdf.move_down @baselineskip
       end
       printLine(g.header, g.columnStarts, g.columnWidths)
       g.rows.each { |r|
-        printLine(r, g.columnStarts, g.columnWidths)
+        printLine(r, g.columnStarts, g.columnWidths, g.header)
       }
     }
+    @pdf.move_down @baselineskip
+    @legend.each { |l|
+      if @pdf.cursor <= 0
+        @pdf.start_new_page
+#        pageHeader
+      end
+      @pdf.text(l, :inline_format => true)
+    }
+    if @footnotes.length > 0
+      @pdf.move_down @baselineskip
+      @pdf.fill_color "ff0000"
+      @footnotes.each_index { |i|
+        if @pdf.cursor <= 0
+          @pdf.start_new_page
+#          pageHeader
+        end
+        note = @footnotes[i]
+        @pdf.text(footnoteStr(i+1) + note, :inline_format => true)
+      }
+      @pdf.fill_color "000000"
+    end
   end
 
   def render(filename)

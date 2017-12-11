@@ -102,8 +102,8 @@ class Spreadsheet
         "Non-California" => s.add_style(:b => true, :bg_color => "ead1dc", :alignment => { :horizontal => :center})
       }
       callsign = s.add_style :b => true
-      index = s.add_style :alignment => {:horizontal => :center}
-      score = s.add_style :b => true, :alignment => {:horizontal => :right}
+      index = s.add_style :alignment => {:horizontal => :center}, :edges => [:top, :bottom, :left, :right ]
+      score = s.add_style :b => true, :alignment => {:horizontal => :right}, :edges => [:top, :bottom, :left, :right ]
       diff_warn = s.add_style :b => true, :alignment => {:horizontal => :right}, :bg_color => "ff0000"
       @workbook.add_worksheet(:name => "Top #{num} Wine Contenders") { |sheet|
         sheet.add_row
@@ -256,6 +256,230 @@ class Spreadsheet
   def addSpecialAwards
     REGIONS.each { |region, constraint|
       regionSpecialAwards(2, region, constraint)
+    }
+  end
+
+  def callWithOp(basecall, logID)
+    result = basecall
+    @db.query("select callsign from Operator where logID = ? and substr(callsign,1,1) != '@' and callsign != ? limit 1;",
+              [ logID, basecall ]) { |row|
+      result = basecall + " ("+row[0]+" op)"
+    }
+    result
+  end
+
+  def wineWinners(region)
+    result = Array.new
+    @db.query("select l.id, c.basecall, m.abbrev, s.verified_score from Scores as s,Log as l, Multiplier as m, Callsign as c where s.logID = l.id and l.contestID = ? and s.multID = m.id and l.callID = c.id and l.opclass in ('SINGLE', 'SINGLE_ASSISTED') and #{region} order by s.verified_score desc limit 20;",
+              [@contestID ]) { |row|
+      result << [ callWithOp(row[1], row[0].to_i), row[2], row[3] ]
+    }
+    result
+  end
+  
+  def wineFinalReport
+    @workbook.styles { |s|
+      font = {:font_name => "Verdana"}
+      border = {:border => { :style => :medium, :color => "000000"}}
+      leftborder = s.add_style(:border => { :style => :medium, :color => "000000", :edges => [:left]} )
+      lrborder = s.add_style(:border => { :style => :medium, :color => "000000", :edges => [:left, :right]})
+      align = {:alignment => { :horizontal => :center, :vertical => :center }}
+      ralign = {:alignment => { :horizontal => :right, :vertical => :center }}
+      lalign = {:alignment => { :horizontal => :left, :vertical => :center }}
+      titlestyle = s.add_style({:b => true, :bg_color => "ffff00"}.merge(align).merge(border).merge(font ))
+      subtitlestyle = s.add_style({:b => true, :bg_color => "ccffcc"}.merge(border).merge( align).merge(font))
+      regstyle = { "California" => s.add_style({:b => true, :bg_color => "fde9d9"}.merge( border).merge( align).merge(font)),
+        "Non-California" => s.add_style({:b => true, :bg_color => "fde9d9"}.merge(border).merge(align).merge(font)) }
+      num = s.add_style align.merge(font).merge(border)
+      callsign = s.add_style({:b => true}.merge(border).merge(lalign).merge(font))
+      qth = s.add_style( align.merge( border).merge(font))
+      score = s.add_style( ralign.merge( border).merge(font).merge({:format_code => "#,##0"}))
+      @workbook.add_worksheet(:name => "CQP #{$year} Wine Results",
+                              :page_margins => {
+                                :left => 0.5, :right => 0.5, :top => 0.5, :bottom => 0.5,
+                                :header => 0, :footer => 0}
+                              ) { |sheet|
+        sheet.add_row ["#{$year} California QSO Party Awards", nil,nil,nil,nil,nil,nil,nil,nil]
+        sheet.merge_cells("A1:I1")
+        sheet["A1:I1"].each { |c| c.style = titlestyle }
+        sheet.add_row ["Wine Winners", nil,nil,nil,nil,nil,nil,nil,nil ]
+        sheet.merge_cells("A2:I2")
+        sheet["A2:I2"].each { |c| c.style = subtitlestyle }
+        sheet.add_row ["CALIFORNIA",nil,nil,nil,nil,"NON-CALIFORNIA",nil,nil,nil]
+        sheet.merge_cells("A3:D3")
+        sheet.merge_cells("F3:I3")
+        sheet["A3:D3"].each { |c| c.style = regstyle["California"] }
+        sheet["F3:I3"].each { |c| c.style = regstyle["Non-California"] }
+        caWinners = wineWinners("isCA")
+        nonCAWinners = wineWinners("not isCA")
+        20.times { |i|
+          row = Array.new(9)
+          row[0] = (i+1).to_s
+          if caWinners[i]
+            3.times { |j| row[j+1] = caWinners[i][j] }
+          end
+          row[5] = (i+1).to_s
+          if nonCAWinners[i]
+            3.times { |j| row[j+6] = nonCAWinners[i][j] }
+          end
+          sheet.add_row(row, :style =>
+                        [num, callsign, qth, score, nil,
+                          num, callsign, qth, score ])
+        }
+        sheet.column_widths 5, 21.3, 6.5, 10.5, 1.8, 5, 21.3, 6.5, 10.5
+      }
+    }
+  end
+
+  def topPlaqCat(region, power, opclass, num=1, withNum = false, extracon="", criteria="s.verified_score")
+    i = 1
+    result = Array.new
+    @db.query("select l.id, c.basecall, m.fullname, s.verified_ph, s.verified_cw, s.verified_mult, s.verified_score from Log as l, Callsign as c on c.id = l.callID, Multiplier as m on m.id = s.multID, Scores as s on s.logID = l.id where l.contestID = ? and l.powclass in ( #{power.map{|x| '"'+x+'"'}.join(', ')} ) and l.opclass in (#{opclass.map{|x| '"'+x+'"'}.join(', ')}) and #{region}  #{extracon} order by #{criteria} desc limit ?;",
+              [@contestID, num.to_i]) { |row|
+      result << [ (withNum ? (i.to_s + ". ") : "") + callWithOp(row[1], row[0].to_i),
+        row[2], row[5], row[4], row[3], row[6] ]
+      i += 1
+    }
+    result
+  end
+
+  def addTwoRegions(sheet, name, namestyle, headstyle, powclass, opclass, num,
+                    callsign, qth, numstyle, score, numbered=false, extracon="",
+                    criteria="s.verified_score")
+    sheet.add_row [name,nil,"Mults", "CW", "PH", "Score", nil,
+                   name,nil,"Mults", "CW", "PH", "Score"]
+    sheet.merge_cells(sheet.rows.last.cells[(0..1)])
+    sheet.rows.last.cells[0].style = namestyle
+    sheet.rows.last.cells[7].style = namestyle
+    sheet.rows.last.cells[(2..5)].each { |c| c.style = headstyle }
+    sheet.rows.last.cells[(9..12)].each { |c| c.style = headstyle }
+    sheet.merge_cells(sheet.rows.last.cells[(7..8)])
+    ca = topPlaqCat("m.isCA", powclass, opclass, num, numbered, extracon)
+    nonca = topPlaqCat("not m.isCA", powclass, opclass, num, numbered, extracon)
+    [ca.length, nonca.length].max.times { |i|
+      sheet.add_row((ca[i] ? ca[i] : [ "None", nil, nil, nil, nil. nil]) +
+                    [ nil ] +
+                    (nonca[i] ? nonca[i] : [ "None", nil, nil, nil, nil, nil]) ,
+                    :style => [ callsign, qth, numstyle, numstyle, numstyle, score, nil,
+                      callsign, qth, numstyle, numstyle, numstyle, score ] )
+    }
+  end
+
+  ALLPOWERS = %w{ LOW HIGH QRP }
+  ALLPOWERS.freeze
+
+  def addMostQSOs(sheet, name, namestyle, headstyle, callsign, qth, num,
+                  criteria, column)
+    sheet.add_row [name,nil,"Num QSOs", nil, nil, nil, nil,
+                   name,nil,"Num QSOs", nil, nil, nil]
+    sheet.merge_cells(sheet.rows.last.cells[(0..1)])
+    sheet.rows.last.cells[(2..5)].each { |c| c.style = headstyle }
+    sheet.merge_cells(sheet.rows.last.cells[(2..3)])
+    sheet.merge_cells(sheet.rows.last.cells[(4..5)])
+    sheet.rows.last.cells[0].style = namestyle
+    sheet.rows.last.cells[7].style = namestyle
+    sheet.rows.last.cells[(9..12)].each { |c| c.style = headstyle }
+    sheet.merge_cells(sheet.rows.last.cells[(7..8)])
+    sheet.merge_cells(sheet.rows.last.cells[(9..10)])
+    sheet.merge_cells(sheet.rows.last.cells[(11..12)])
+    ca = topPlaqCat("m.isCA", ALLPOWERS, %w{SINGLE SINGLE_ASSISTED}, 1, false, "",
+                    criteria)
+    nonca = topPlaqCat("not m.isCA", ALLPOWERS, %w{SINGLE SINGLE_ASSISTED}, 1, false, "",
+                       criteria)
+    [ca.length, nonca.length].max.times { |i|
+      sheet.add_row((ca[i] ? [ca[i][0], ca[i][1], ca[i][column].to_s + " QSOs",
+                        nil, nil, nil]
+                      : [ "None", nil, nil, nil, nil. nil]) +
+                    [ nil ] +
+                    (nonca[i] ? [nonca[i][0], nonca[i][1], nonca[i][column].to_s + " QSOs",
+                        nil, nil, nil]
+                      : [ "None", nil, nil, nil, nil, nil]) ,
+                    :style => [ callsign, qth, num, nil, nil, nil, nil,
+                      callsign, qth, num, nil, nil, nil ] )
+      sheet.merge_cells(sheet.rows.last.cells[(2..3)])
+      sheet.merge_cells(sheet.rows.last.cells[(4..5)])
+      sheet.merge_cells(sheet.rows.last.cells[(9..10)])
+      sheet.rows.last.cells[(4..5)].each { |c| c.style = num }
+      sheet.merge_cells(sheet.rows.last.cells[(11..12)])
+      sheet.rows.last.cells[(11..12)].each { |c| c.style = num }
+
+    }
+  end
+
+  ALLOPS = %w{ SINGLE SINGLE_ASSISTED MULTI_SINGLE MULTI_MULTI }
+  ALLOPS.freeze
+  
+  def plaqueAwards(recdb)
+    @workbook.styles { |s|
+      font = {:font_name => "Verdana", :sz => 9}
+      border = {:border => { :style => :medium, :color => "000000"}}
+      leftborder = s.add_style(:border => { :style => :medium, :color => "000000", :edges => [:left]} )
+      lrborder = s.add_style(:border => { :style => :medium, :color => "000000", :edges => [:left, :right]})
+      align = {:alignment => { :horizontal => :center, :vertical => :center }}
+      ralign = {:alignment => { :horizontal => :right, :vertical => :center }}
+      lalign = {:alignment => { :horizontal => :left, :vertical => :center }}
+      awardname = s.add_style({:b => true, :bg_color => "fde9d9", :fg_color => "0000ff"}.merge(font).merge(border).merge(lalign))
+      header = s.add_style({:b => true, :bg_color => "fde9d9", :fg_color => "000000"}.merge(font).merge(border).merge(align))
+      titlestyle = s.add_style({:b => true, :bg_color => "ffff00"}.merge(align).merge(border).merge(font ))
+      subtitlestyle = s.add_style({:b => true, :bg_color => "ccffcc"}.merge(border).merge( align).merge(font))
+      regstyle = { "California" => s.add_style({:b => true, :bg_color => "ffffff", :fg_color => "ff0000"}.merge( border).merge( align).merge(font)),
+        "Non-California" => s.add_style({:b => true, :bg_color => "ffffff", :fg_color => "ff0000"}.merge(border).merge(align).merge(font)) }
+      num = s.add_style align.merge(font).merge(border)
+      callsign = s.add_style({:b => true}.merge(border).merge(lalign).merge(font))
+      qth = s.add_style( align.merge( border).merge(font))
+      score = s.add_style( ralign.merge( border).merge(font).merge({:format_code => "#,##0"}))
+      @workbook.add_worksheet(:name => "CQP #{$year} Plaque Awards",
+                              :page_margins => {
+                                :left => 0.5, :right => 0.5,
+                                :top => 0.25, :bottom => 0.25,
+                                :header => 0, :footer => 0}) { |sheet|
+        sheet.add_row ["#{$year} CALIFORNIA QSO PARTY AWARDS",
+                       nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil]
+        sheet.merge_cells("A1:M1")
+        sheet["A1:M1"].each { |c| c.style = titlestyle } 
+        sheet.add_row ["PLAQUE AWARDS", nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil]
+        sheet.merge_cells("A2:M2")
+        sheet["A2:M2"].each { |c| c.style = subtitlestyle }
+        sheet.add_row [ "CALIFORNIA", nil,nil,nil,nil,nil,nil,
+                       "NON-CALIFORNIA = USA, VE, DX",
+                       nil,nil,nil,nil,nil]
+        sheet.merge_cells("A3:F3")
+        sheet["A3:F3"].each { |c| c.style = regstyle["California"] }
+        sheet.merge_cells("H3:M3")
+        sheet["H3:M3"].each { |c| c.style = regstyle["Non-California"] }
+        addTwoRegions(sheet, "Single-Op HP", awardname, header,
+                      %w{HIGH}, %w{SINGLE}, 2,
+                      callsign, qth, num, score, true)
+        addTwoRegions(sheet, "Single-Op LP", awardname, header,
+                      %w{LOW}, %w{SINGLE}, 2,
+                      callsign, qth, num, score, true)
+        addTwoRegions(sheet, "Single-Op QRP", awardname, header,
+                      %w{QRP}, %w{SINGLE}, 1, callsign, qth, num, score)
+        addTwoRegions(sheet, "Single-Op HP, Assisted", awardname, header,
+                      %w{HIGH}, %w{SINGLE_ASSISTED}, 2,
+                      callsign, qth, num, score, true)
+        addTwoRegions(sheet, "Single-Op LP, Assisted",  awardname, header,
+                      %w{LOW}, %w{SINGLE_ASSISTED}, 2,
+                      callsign, qth, num, score, true)
+        addTwoRegions(sheet, "Single-Op QRP, Assisted", awardname, header,
+                      %w{QRP}, %w{SINGLE_ASSISTED}, 1, callsign, qth, num, score)
+        addTwoRegions(sheet, "Single-Op YL", awardname, header,
+                      ALLPOWERS, %w{SINGLE SINGLE_ASSISTED}, 1, callsign, qth, num, score,
+                      false, " and l.isYL")
+        addTwoRegions(sheet, "Single-Op Youth", awardname, header,
+                      ALLPOWERS, [ "SINGLE", "SINGLE_ASSISTED"], 1, callsign, qth, num, score,
+                      false, " and l.isYOUTH")
+        addTwoRegions(sheet, "Top School", awardname, header,
+                      ALLPOWERS, ALLOPS, 1, callsign, qth, num, score,
+                      false, " and l.isSCHOOL")
+        addTwoRegions(sheet, "Top Multi-Single", awardname, header,
+                      ALLPOWERS, %w{MULTI_SINGLE}, 1, callsign, qth, num, score,
+                      false, " and l.isSCHOOL")
+        addMostQSOs(sheet, "Most CW QSOs", awardname, header, callsign, qth, num,
+                    "s.verified_cw", 3)
+        addMostQSOs(sheet, "Most PH QSOs", awardname, header, callsign, qth, num,
+                    "s.verified_ph", 4)
+      }
     }
   end
 

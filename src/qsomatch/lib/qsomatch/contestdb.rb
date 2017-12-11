@@ -89,7 +89,7 @@ class ContestDatabase
   end
 
   def createClubsTable
-    @db.query("create table if not exists Clubs (id integer primary key, contestID integer not null, fullname varchar(128), type char(6));") { }
+    @db.query("create table if not exists Clubs (id integer primary key, contestID integer not null, fullname varchar(128), type char(6), bool isCA not null default #{@db.false});") { }
     @db.query("create index if not exists nameind on Clubs (fullname);") { }
   end
 

@@ -26,6 +26,7 @@ $name = nil
 $explain = false
 $totallydestroy = false
 $skipclock = true
+$recordsdb = nil
 $restart = false
 $create = false
 $readinit = true
@@ -47,6 +48,7 @@ opts = GetoptLong.new(
                       [ '--qrzpwd', '-p', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--sqlite', '-S', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--reset', '-R', GetoptLong::NO_ARGUMENT],
+                      [ '--all-time-records', '-a', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--name', '-n', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--year', '-y', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--verbose', '-V', GetoptLong::NO_ARGUMENT],
@@ -89,6 +91,8 @@ opts.each { |opt, arg|
     $action = :checkdupes
   when '--load'
     $action = :load
+  when '--all-time-records'
+    $recordsdb = arg
   when '--score'
     $action = :score
   when '--reset'
@@ -294,14 +298,14 @@ def n(str)
   return AString.new(str.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse, :align => :right)
 end
 
-def powAbbrev(power)
+def powAbbrev(power, long)
   case power
   when 'QRP'
-    return " Q"
+    return long ? " QRP" : " Q"
   when "LOW"
-    return " L"
+    return long ? " LP" : " L"
   when "HIGH"
-    return ""
+    return long ? " HP" : ""
   end
 end
 
@@ -319,17 +323,17 @@ def extras(isCCE, isYL, isMOBILE)
   result
 end
 
-def abbrevType(opclass, power, isCCE, isYL, isMOBILE)
+def abbrevType(opclass, power, isCCE=nil, isYL=nil, isMOBILE=nil)
   result = ""
   case opclass
   when 'SINGLE'
-    result = "SO" + powAbbrev(power) + extras(isCCE, isYL, isMOBILE)
+    result = "SO" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
   when 'SINGLE_ASSISTED'
-    result = "SOA" + powAbbrev(power) + extras(isCCE, isYL, isMOBILE)
+    result = "SOA" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
   when 'MULTI_SINGLE'
-    result = 'M/S' + powAbbrev(power) + extras(isCCE, isYL, isMOBILE)
+    result = 'M/S' + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
   when 'MULTI_MULTI'
-    result = 'M/M' + powAbbrev(power) + extras(isCCE, isYL, isMOBILE)
+    result = 'M/M' + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
   when 'CHECKLOG'
     result = 'C'
   end
@@ -352,14 +356,31 @@ def checkFill
   AString.new("-", :align => :right)
 end
 
-def makeGroups(db, contestID, extraCon)
+def lookupRecord(recdb, mult, opclass, power)
+  if recdb and "CHECKLOG" != opclass
+    recdb.query("select score from Regional where mult_abbrev = ? and opclass = ? and powclass = ? order by score desc limit 1;",[mult, opclass, power]) { |row|
+      return row[0].to_i
+    }
+  end
+  nil
+end
+
+def markAsRecord(regionName, row, opclass, powclass)
+  if not row.empty?
+#    print "New record by #{row[0].to_s} for #{regionName} #{opclass} #{powclass}\n"
+    row.each { |e| e.attributes[:color] = "ff0000" }
+    row[0].attributes[:footnote] = "New record for #{abbrevType(opclass, powclass)} #{regionName}"
+  end
+end
+
+def makeGroups(db, contestID, extraCon, recdb)
   groups = [ ]
   curName = nil
   curGroup = nil
-  db.query("select m.fullname, l.callsign, l.opclass, l.powclass, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.isCCE, l.isYL, l.isMOBILE, l.id from Multiplier as m left outer join (Log as l join Scores as s on l.id = s.logID and  l.contestID = ?) on s.multID = m.id where #{extraCon} order by m.fullname asc, CASE l.opclass WHEN 'SINGLE' THEN 0 WHEN 'SINGLE_ASSISTED' THEN 0 WHEN 'MULTI_SINGLE' THEN 1 WHEN 'MULTI_MULTI' THEN 2  WHEN 'CHECKLOG' THEN 10 END asc, s.verified_score desc;", [contestID]) { |row|
-    if row[0] != curName
+  db.query("select m.fullname, l.callsign, l.opclass, l.powclass, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.isCCE, l.isYL, l.isMOBILE, l.id, m.abbrev from Multiplier as m left outer join (Log as l join Scores as s on l.id = s.logID and  l.contestID = ?) on s.multID = m.id where #{extraCon} order by m.fullname asc, CASE l.opclass WHEN 'SINGLE' THEN 0 WHEN 'SINGLE_ASSISTED' THEN 0 WHEN 'MULTI_SINGLE' THEN 1 WHEN 'MULTI_MULTI' THEN 2  WHEN 'CHECKLOG' THEN 10 END asc, s.verified_score desc, l.callsign asc;", [contestID]) { |row|
+    if row[0] != curName or row[0].nil?
       curName = row[0].to_s
-      curGroup = Group.new([hdrl(row[0]),hdr("CW"),hdr("PH"), hdr("Total"), hdr("Mult"), hdr("Score"), hdr("Type")],
+      curGroup = Group.new([hdrl(curName),hdr("CW"),hdr("PH"), hdr("Total"), hdr("Mult"), hdr("Score"), hdr("Type")],
                            [0, 250, 290, 330, 370, 410, 470],
                            [250, 40, 40, 40, 40, 60, 70])
       groups << curGroup
@@ -370,6 +391,10 @@ def makeGroups(db, contestID, extraCon)
         curGroup.rows << [ callsign, n(row[4]), n(row[5]), n(row[4].to_i+row[5].to_i),
           n(row[6]), n(row[7]), abbrevType(row[2], row[3], db.toBool(row[8]),db.toBool(row[9]),
                                            db.toBool(row[10]) )]
+        rec = lookupRecord(recdb, row[12], row[2], row[3])
+        if rec and (row[7] > rec)
+          markAsRecord(curName, curGroup.rows[-1], row[2], row[3])
+        end
       else
         curGroup.rows << [ callsign,checkFill,checkFill,checkFill,checkFill,checkFill,
           abbrevType(row[2], row[3], db.toBool(row[8]),db.toBool(row[9]), db.toBool(row[10]) )]
@@ -381,13 +406,160 @@ def makeGroups(db, contestID, extraCon)
   return groups
 end
 
-def makePDFReports(db, contestID)
+def clubScore(db, contestID, clubID, limit=1000000)
+  result = 0
+  numlog = 0
+  db.query("select round(s.verified_score*sum(o.clubAlloc)) as contrib from Log as l join Operator as o on (o.logID = l.id and o.clubID = c.id) join Scores as s on s.logID = l.id join Clubs as c on o.clubID = c.id where l.contestID = ? and c.id = ? and l.opclass != 'CHECKLOG' group by l.id, s.multID, c.id order by contrib desc;", [contestID, clubID]) { |row|
+    if numlog < limit
+      result += row[0].to_i
+    end
+    numlog += 1
+  }
+  return result, numlog
+end
+
+CLUB_CONSTRAINT = { "California" => "c.isCA", "Non-California" => "not c.isCA" }
+CLUB_CONSTRAINT.freeze
+CLUB_REGIONS = CLUB_CONSTRAINT.keys.sort
+CLUB_REGIONS.freeze
+CLUB_LOG_CAP = { "Large" => 10000000, "Medium" => 35, "Small" => 10 }
+CLUB_LOG_CAP.freeze
+def makeClubGroups(db, contestID, recdb)
+  groups = [ ]
+  header = [nil, hdr("Num Logs"), hdr("Score")]
+  starts = [0, 396, 468]
+  widths = [396, 72, 72]
+  CLUB_REGIONS. each { |region|
+    %w{ Large Medium Small }.each { |size|
+      h = header.clone
+      h[0] = hdrl(size + " " + region + " Clubs")
+      g = Group.new(h, starts,widths)
+      groups << g
+      clubs = [ ]
+      db.query("select distinct c.id, c.fullname from Clubs as c join Operator as o on o.clubID = c.id join Log as l on o.logID = l.id where l.contestID = ? and l.opclass != 'CHECKLOG' and c.type = ? and #{CLUB_CONSTRAINT[region]};",
+               [contestID, size.upcase]) { |row|
+        score, numlogs = clubScore(db, contestID, row[0].to_i, CLUB_LOG_CAP[size])
+        clubs << [row[1].to_s, numlogs, score]
+      }
+      if (not clubs.empty?)
+        clubs.sort! { |x,y| y[2] <=> x[2] }
+        clubs.each { |c|
+          g.rows << [AString.new(c[0]), n(c[1]), n(c[2]) ]
+        }
+      else
+        g.rows << AString.new("No entries submitted in this category", :style => :italic)
+      end
+    }
+  }
+  return groups
+end
+
+def opmetric(str)
+  if str.start_with?("SO")
+    return 0
+  elsif str.start_with?("M/S")
+    return 1
+  elsif str.start_with?("M/M")
+    return 2
+  elsif str.start_with?("C")
+    return 10
+  else
+    return -1
+  end
+end
+
+ABBREV_TO_CONTINENT = {
+  "NA" => "North America",
+  "SA" => "South America",
+  "AS" => "Asia",
+  "EU" => "Europe",
+  "AF" => "Africa",
+  "OC" => "Oceana"
+}
+ABBREV_TO_CONTINENT.freeze
+
+def continentName(abbrev)
+  ABBREV_TO_CONTINENT.has_key?(abbrev) ? ABBREV_TO_CONTINENT[abbrev] : abbrev
+end
+
+def repackageGroups(g)
+  locate = CallsignLocator.new
+  newGroups = nil
+  entries = Hash.new
+  header = nil
+  columnStarts = nil
+  columnWidths = nil
+  count = 0
+  g.each { |group|
+    if not header
+      header = group.header 
+      columnStarts = group.columnStarts
+      columnWidths = group.columnWidths
+    end
+    count += group.rows.length
+    group.rows.each { |row|
+      entity = locate.lookup(row[0])
+      if entity
+        continent = entity.continent
+      else
+        continent = "Unknown"
+      end
+      if not entries.has_key?(entity.continent)
+        entries[entity.continent] = Array.new
+      end
+      entries[entity.continent] << row
+    }
+  }
+  if header and columnStarts and columnWidths and count > 0
+    newGroups = Array.new
+    entries.keys.sort.each { |continent|
+      h = header.clone
+      h[0] = hdrl(continentName(continent))
+      g = Group.new(h, columnStarts, columnWidths)
+      g.rows = entries[continent].sort { |x,y|
+        m = (opmetric(x[6]) <=> opmetric(y[6]))
+        if 0 == m
+          m = (y[5].gsub(",","").to_i <=> x[5].gsub(",","").to_i)
+          if 0 == m
+            m = (x[0] <=> y[0])
+          end
+        end
+        m
+      }
+      newGroups << g
+    }
+  end
+  newGroups
+end
+
+def makePDFReports(db, contestID, recdb)
   print "Making PDF reports\n"
-  pr = ReportPDF.new("California QSO Party\nUS Regional")
-  g = makeGroups(db, contestID, "m.isCA")
-  pr.pageHeader
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nCalifornia Stations")
+  g = makeGroups(db, contestID, "m.isCA",recdb)
   pr.printGroups(g)
-  pr.render("test.pdf")
+  pr.render("test_CA.pdf")
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nUS Stations outside California")
+  g = makeGroups(db, contestID, "(not m.isCA) and (m.entityID in (291,6,110)) and m.fullname != 'California'", recdb)
+  pr.printGroups(g)
+  pr.render("test_US.pdf")
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nCanadian Stations")
+  g = makeGroups(db, contestID, "(not m.isCA) and (m.entityID = 1)", recdb)
+  pr.printGroups(g)
+  pr.render("test_VE.pdf")
+  g = makeGroups(db, contestID, "m.abbrev = 'DX'", recdb)
+  if g and not g.empty?
+    pr = ReportPDF.new($year.to_s + " California QSO Party\nDX Results")
+    g = repackageGroups(g)        # Sub divide DX by region
+    pr.printGroups(g)
+    pr.render("test_DX.pdf")
+  end
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nClub Results", [
+                       "Large clubs score all logs",
+                       "Medium clubs score the top 35 logs",
+                       "Small clubs score the top 10 logs"])
+  g = makeClubGroups(db, contestID, recdb)
+  pr.printGroups(g)
+  pr.render("test_Club.pdf")
 end
 
 def reportContest(db, contestID, contestDB)
@@ -402,14 +574,21 @@ def reportContest(db, contestID, contestDB)
   open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
     r.makeReport(out, contestID)
   }
-  makePDFReports(db, contestID)
-  print "Making reverse logs\n"
-  r.makeReverseLogs(dir, contestID)
+  recdb = nil
+  if $recordsdb
+    recdb = makeDB({'type' => 'sqlite3', 'filename' => $recordsdb})
+  end
+  makePDFReports(db, contestID, recdb)
+  print "Making spreadsheets\n"
   s = Spreadsheet.new(db, contestID)
   s.addCategories
   s.addWineWinners
+  s.wineFinalReport
+  s.plaqueAwards(recdb)
   s.addSpecialAwards
   s.saveTo("categories_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".xlsx")
+  print "Making reverse logs\n"
+  r.makeReverseLogs(dir, contestID)
   open("green_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".txt", "w:ascii") { |out|
     r.makeGreenReport(out, contestID)
   }
