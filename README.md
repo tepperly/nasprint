@@ -27,6 +27,7 @@ verification and cross checking is processed using SQL queries and additional ma
    --populate *.log`
 4. If you need to start over (reload all the logs), it's `ruby testcab.rb --checkonly --new --name "Fall SSB Sprint"
    --year 2016 --restart --populate *.log`
+5. If there are callsigns whose multiplier or entity ID come up wrong, you can make an overrides.yaml file and add `--overrides overrides.yaml` to the command line when you upload the logs into the database.
 
 # Cross matching the QSOs in the database
 
