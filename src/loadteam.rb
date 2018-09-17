@@ -41,7 +41,7 @@ end
 def addMember(cdb, cid, name, tid, call1, call2)
   logID = cdb.findLog(call1)
   print "Lookup 1: " + call1 + " in contest " + cdb.contestID.to_s + " => " + logID.to_s + "\n"
-  if not logID
+  if not logID and call2
     logID = cdb.findLog(call2)
     print call2 + " => " + logID.to_s + "\n"
   end

@@ -116,7 +116,7 @@ class ContestDatabase
       results << item
     }
     results.each { |item|
-      res = @db.query("select count(*), sum(q.matchType = 'Full'), sum(q.matchType = 'Partial'), sum(q.matchType = 'NIL'), sum(q.matchType = 'Removed') from QSO as q join Exchange as e on q.recvdID = e.id where e.callID = #{item[1]} group by e.callID limit 1;")
+      res = @db.query("select count(*), sum(q.matchType in ('Full')), sum(q.matchType = 'Partial'), sum(q.matchType = 'NIL'), sum(q.matchType = 'Removed') from QSO as q join Exchange as e on q.recvdID = e.id where e.callID = #{item[1]} group by e.callID limit 1;")
       res.each(:as => :array) { |row|
         row.each_index { |i|
           item[3+i] = row[i].to_i
@@ -302,6 +302,15 @@ class ContestDatabase
   def removeOverrides(contestID)
     @db.query("delete from Overrides where contestID = #{contestID};")
   end
+
+  def addOverride(contestID,
+                  callsign,
+                  multiplierID,
+                  entityID)
+    if contestID and callsign and multiplierID and entityID then
+      @db.query("insert into Overrides (contestID, callsign, multiplierID, entityID) values (#{contestID.to_i}, #{capOrNull(callsign)}, #{multiplierID.to_i}, #{entityID.to_i});")
+    end 
+  end
   
   def createPairs
     @db.query("create table if not exists Pairs (id integer primary key auto_increment, contestID integer not null, line1 varchar(128) not null, line2 varchar(128) not null, ismatch bool, index contind (contestID), index lineind (line1, line2));")
@@ -416,11 +425,11 @@ class ContestDatabase
   end
 
   def qsosByBand(logID)
-    res = @db.query("select band, matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL') group by band, matchType order by band asc, matchType asc;")
+    res = @db.query("select band, matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye','Unique', 'NIL') group by band, matchType order by band asc, matchType asc;")
     results = Hash.new(0)
     res.each(:as => :array) { |row|
       case row[1]
-      when 'Full', 'Bye'
+      when 'Full', 'Bye', 'Unique'
         results[row[0]] = results[row[0]] + row[2].to_i
       when 'NIL'
         results[row[0]] = results[row[0]] - row[2].to_i
@@ -439,11 +448,11 @@ class ContestDatabase
       numHours = (tend - tstart).to_i/3600
       results = Array.new(numHours, 0)
       numHours.times {  |i|
-        queryStr = "select matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL') and time between #{dateOrNull(prev)} and #{dateOrNull(tstart + 3600*(i+1) - 1)} group by matchType order by matchType asc;"
+        queryStr = "select matchType, count(*) from QSO where logID = #{logID} and matchType in ('Full', 'Bye', 'NIL', 'Unique') and time between #{dateOrNull(prev)} and #{dateOrNull(tstart + 3600*(i+1) - 1)} group by matchType order by matchType asc;"
         res = @db.query(queryStr)
         res.each(:as => :array) { |row|
           case row[0]
-          when 'Full', 'Bye'
+          when 'Full', 'Bye', 'Unique'
             results[i] = results[i] + row[1].to_i
           when 'NIL'
             results[i] = results[i] - row[1].to_i
@@ -468,11 +477,11 @@ class ContestDatabase
 
   def logMultipliers(logID)
     multipliers = Set.new
-    res = @db.query("select distinct m.abbrev from QSO as q join Exchange as e on e.id = q.recvdID join Multiplier as m on m.id = e.multiplierID where q.logID = #{logID} and q.matchType in ('Full', 'Bye') and m.abbrev != 'DX';")
+    res = @db.query("select distinct m.abbrev from QSO as q join Exchange as e on e.id = q.recvdID join Multiplier as m on m.id = e.multiplierID where q.logID = #{logID} and q.matchType in ('Full', 'Bye', 'Unique') and m.abbrev != 'DX';")
     res.each(:as => :array) { |row|
       multipliers.add(row[0])
     }
-    res = @db.query("select distinct en.name from (QSO as q join Exchange as e on e.id = q.recvdID join Multiplier as m on m.id = e.multiplierID and m.abbrev='DX') join Entity as en on en.id = e.entityID where q.logID = #{logID} and q.matchType in ('Full', 'Bye') and en.continent = 'NA';")
+    res = @db.query("select distinct en.name from (QSO as q join Exchange as e on e.id = q.recvdID join Multiplier as m on m.id = e.multiplierID and m.abbrev='DX') join Entity as en on en.id = e.entityID where q.logID = #{logID} and q.matchType in ('Full', 'Bye', 'Unique') and en.continent = 'NA';")
     res.each(:as => :array) { |row|
       multipliers.add(row[0])
     }
@@ -498,7 +507,7 @@ class ContestDatabase
   end
   
   def numStates(logID)
-    res = @db.query("select count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = #{logID} and matchType in ('Full', 'Bye') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID where l.id = #{logID} group by l.id order by numstates desc, l.callsign asc limit 1;")
+    res = @db.query("select count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = #{logID} and matchType in ('Full', 'Bye', 'Unique') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID where l.id = #{logID} group by l.id order by numstates desc, l.callsign asc limit 1;")
     res.each(:as => :array) { |row|
       return row[0]
     }
@@ -527,7 +536,7 @@ class ContestDatabase
   end
 
   def lostQSOs(logID)
-    res = @db.query("select sum(matchType in ('None','Unique','Partial','Dupe','OutsideContest','Removed')) as numremoved, sum(matchType = 'NIL') as numnil from QSO where logID = #{logID} group by logID;")
+    res = @db.query("select sum(matchType in ('None','Partial','Dupe','OutsideContest','Removed')) as numremoved, sum(matchType = 'NIL') as numnil from QSO where logID = #{logID} group by logID;")
     res.each(:as => :array) { |row|
       return row[0] + 2*row[1]
     }
@@ -535,12 +544,12 @@ class ContestDatabase
 
   def topNumStates(contestID, num)
     logs = Array.new
-    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID group by l.id order by numstates desc, l.callsign asc limit #{num-1}, 1;")
+    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye', 'Unique') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID group by l.id order by numstates desc, l.callsign asc limit #{num-1}, 1;")
     limit = nil
     res.each(:as => :array) { |row|
       limit = row[2]
     }
-    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID group by l.id  having numstates >= #{limit} order by numstates desc, l.callsign asc;")
+    res = @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = #{contestID} and matchType in ('Full', 'Bye', 'Unique') join Exchange as e on q.recvdID = e.id join Multiplier as m on m.id = e.multiplierID group by l.id  having numstates >= #{limit} order by numstates desc, l.callsign asc;")
     res.each(:as => :array) { |row|
       logs << [ row[1], row[2] ]
     }
@@ -613,7 +622,7 @@ class ContestDatabase
 
   def goldenLogs(contestID)
     golden = Array.new
-    res = @db.query("select l.id, l.callsign, l.verifiedQSOs, sum(q.matchType in ('Unique','Partial','NIL','OutsideContest','Removed')) as nongolden from Log as l join QSO as q on l.id = q.logID where l.contestID = #{contestID} group by l.id having nongolden = 0 order by l.verifiedQSOs desc, l.callsign asc;")
+    res = @db.query("select l.id, l.callsign, l.verifiedQSOs, sum(q.matchType in ('Partial','NIL','OutsideContest','Removed')) as nongolden from Log as l join QSO as q on l.id = q.logID where l.contestID = #{contestID} group by l.id having nongolden = 0 order by l.verifiedQSOs desc, l.callsign asc;")
     res.each(:as => :array) { |row|
       golden << { "callsign" => row[1], "numQSOs" => row[2] }
     }
@@ -621,7 +630,7 @@ class ContestDatabase
   end
 
   def scoreSummary(logID)
-    res = @db.query("select count(*) as rawQSOs, sum(matchType='Dupe') as dupeQSOs, sum(matchType in ('Unique','Partial','Removed')) as bustedQSOs, sum(matchType = 'NIL') as penaltyQSOs, sum(matchType = 'OutsideContest') as outside from QSO where logID = #{logID} group by logID;")
+    res = @db.query("select count(*) as rawQSOs, sum(matchType='Dupe') as dupeQSOs, sum(matchType in ('Partial','Removed')) as bustedQSOs, sum(matchType = 'NIL') as penaltyQSOs, sum(matchType = 'OutsideContest') as outside from QSO where logID = #{logID} group by logID;")
     res.each(:as => :array) { |row|
       return row[0], row[1], row[2], row[3], row[4]
     }

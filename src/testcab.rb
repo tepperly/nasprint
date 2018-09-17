@@ -2,6 +2,7 @@
 # -*- encoding: utf-8 -*-
 require 'getoptlong'
 require 'set'
+require 'yaml'
 require_relative 'cabrillo'
 require_relative 'database'
 require_relative 'ContestDB'
@@ -9,6 +10,7 @@ require_relative 'addlog'
 
 $overwritefile = false
 $makeoutput = true
+$overrides = nil
 $year = nil
 $name = nil
 $addToDB = false
@@ -20,6 +22,7 @@ $stationsworked = nil
 
 opts = GetoptLong.new(
                       [ '--overwrite', '-O', GetoptLong::NO_ARGUMENT],
+                      [ '--overrides', '-J', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--help', '-h', GetoptLong::NO_ARGUMENT],
                       [ '--checkonly', '-C', GetoptLong::NO_ARGUMENT],
                       [ '--missing', '-M', GetoptLong::NO_ARGUMENT],
@@ -36,6 +39,8 @@ opts.each { |opt,arg|
     $overwritefile = true
   when '--checkonly'
     $makeoutput = false
+  when '--overrides'
+    $overrides = arg
   when '--missing'
     $stationsworked = Hash.new(0)
     $logsinhand = Set.new
@@ -52,9 +57,27 @@ opts.each { |opt,arg|
   when '--year'
     $year = arg.to_i
   when '--help'
-    print "testcab.rb [--overwrite] [--checkonly] [--help] filenames"
+    print "testcab.rb [--overwrite] [--overrides foo.yaml] [--checkonly] [--help] filenames"
   end
 }
+
+def addOverrides(filename, cdb, cid)
+  print "Loading #{filename}...\n"
+  obj = YAML.load_file(filename)
+  if obj
+    obj.each { |override|
+      if override.has_key?("basecall") and
+        override.has_key?("multiplier") and
+        override.has_key?("entity")
+        print "Adding override #{override["basecall"]}\n"
+        mid = cdb.lookupMultiplier(override["multiplier"])[0]
+        eid = override["entity"].to_i
+        cdb.addOverride(cid, override["basecall"], mid, eid)
+      end
+    }
+  end
+  print "Done #{filename}\n"
+end
 
 $addToDB = ($addToDB and $year and $name)
 if $addToDB
@@ -89,6 +112,9 @@ if $addToDB
       exit 2
     end
     
+  end
+  if $overrides
+    addOverrides($overrides, contestDB, contestID)
   end
 end
 

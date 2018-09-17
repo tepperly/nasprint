@@ -39,7 +39,7 @@ class Multiplier
   end
 
   def resolveDX
-    res = @db.query("select distinct c.id, c.basecall from QSO as q, Exchange as e, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye') and q.recvdID = e.id and m.abbrev='DX' and c.id = e.callID and m.entityID is null and m.id = e.multiplierID and q.logID in (#{@logs.join(", ")});")
+    res = @db.query("select distinct c.id, c.basecall from QSO as q, Exchange as e, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye','Unique') and q.recvdID = e.id and m.abbrev='DX' and c.id = e.callID and m.entityID is null and m.id = e.multiplierID and q.logID in (#{@logs.join(", ")});")
     res.each(:as => :array) { |row|
       entity = checkOverride(row[1])
       override = entity

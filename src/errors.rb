@@ -57,7 +57,7 @@ def fillInComment(db, contestID)
       db.query("update QSO set comment='#{comments.join(", ")}' where id = #{row[0]} limit 1;")
     end
   }
-  res = db.query("select q.id, e.name, e.continent from QSO as q join Exchange as r on q.recvdID = r.id join Multiplier as m on (r.multiplierID = m.id and m.abbrev = 'DX') join Entity as e on e.id = r.entityID where q.matchType in ('Full', 'Bye');")
+  res = db.query("select q.id, e.name, e.continent from QSO as q join Exchange as r on q.recvdID = r.id join Multiplier as m on (r.multiplierID = m.id and m.abbrev = 'DX') join Entity as e on e.id = r.entityID where q.matchType in ('Full', 'Bye','Unique');")
   res.each(:as => :array) { |row|
     db.query("update QSO set comment = 'DX=#{row[1]} (#{row[2]})' where id = #{row[0].to_i} limit 1;")
   }

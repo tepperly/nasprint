@@ -41,7 +41,7 @@ class Log
   end
 
   def numqsos
-    @numFull+@numBye-@numNIL
+    @numFull+@numUnique+@numBye-@numNIL
   end
 
   def nummultipliers
@@ -62,7 +62,7 @@ class Log
   end
 
   def to_s
-    "\"#{@call}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{@location}\",\"#{@entity}\",\"#{@continent}\",#{@numFull},#{@numBye},#{@numUnique},#{@numDupe},#{@numPartial+@numRemoved},#{@numNIL},#{@numOutsideContest},#{was? ? 1 : 0},#{@numFull+@numBye-@numNIL},#{@multipliers.size},#{(@numFull+@numBye-@numNIL)*@multipliers.size},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{@location}\",\"#{@entity}\",\"#{@continent}\",#{@numFull},#{@numBye},#{@numUnique},#{@numDupe},#{@numPartial+@numRemoved},#{@numNIL},#{@numOutsideContest},#{was? ? 1 : 0},#{@numFull+@numUnique+@numBye-@numNIL},#{@multipliers.size},#{(@numFull+@numUnique+@numBye-@numNIL)*@multipliers.size},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -104,7 +104,7 @@ class Report
     res = @db.query("select q.matchType, q.id from QSO as q where q.logID = #{id} order by q.time asc;")
     res.each(:as => :array) { |row|
       log.incCount(row[0])
-      if ["Full", "Bye"].include?(row[0]) # QSO counts for credit
+      if ["Full", "Bye","Unique"].include?(row[0]) # QSO counts for credit
         addMultiplier(log, row[1])
       end
     }
