@@ -1,12 +1,14 @@
 #!/usr/bin/env ruby
 
 require 'getoptlong'
+require 'csv'
 require 'database'
 require 'dxmap'
 require 'bandmode'
 require 'contestdb'
 require 'pdfreport'
 require 'callsign'
+require 'club'
 require 'addlog'
 require 'spreadsheet'
 require 'cabrillo'
@@ -362,7 +364,14 @@ def lookupRecord(recdb, mult, opclass, power)
       return row[0].to_i
     }
   end
-  nil
+  return (mult == "DX") ? nil : 0
+end
+
+def addRecord(recdb, mult, callsign, year, score, numQSOs, numMults, opclass, powclass)
+  if recdb
+    recdb.query("insert into Regional (mult_abbrev, station, year, score, qsos, multipliers, opclass, powclass) values (?, ?, ?, ?, ?, ?, ?, ?);",
+                [ mult, callsign, year, score, numQSOs, numMults, opclass, powclass ])
+  end
 end
 
 def markAsRecord(regionName, row, opclass, powclass)
@@ -394,6 +403,8 @@ def makeGroups(db, contestID, extraCon, recdb)
         rec = lookupRecord(recdb, row[12], row[2], row[3])
         if rec and (row[7] > rec)
           markAsRecord(curName, curGroup.rows[-1], row[2], row[3])
+          addRecord(recdb, row[12], row[1], $year.to_i, row[7].to_i,
+                    row[4].to_i+row[5].to_i, row[6].to_i, row[2], row[3])
         end
       else
         curGroup.rows << [ callsign,checkFill,checkFill,checkFill,checkFill,checkFill,
@@ -406,49 +417,35 @@ def makeGroups(db, contestID, extraCon, recdb)
   return groups
 end
 
-def clubScore(db, contestID, clubID, limit=1000000)
-  result = 0
-  numlog = 0
-  db.query("select round(s.verified_score*sum(o.clubAlloc)) as contrib from Log as l join Operator as o on (o.logID = l.id and o.clubID = c.id) join Scores as s on s.logID = l.id join Clubs as c on o.clubID = c.id where l.contestID = ? and c.id = ? and l.opclass != 'CHECKLOG' group by l.id, s.multID, c.id order by contrib desc;", [contestID, clubID]) { |row|
-    if numlog < limit
-      result += row[0].to_i
-    end
-    numlog += 1
-  }
-  return result, numlog
-end
 
-CLUB_CONSTRAINT = { "California" => "c.isCA", "Non-California" => "not c.isCA" }
-CLUB_CONSTRAINT.freeze
-CLUB_REGIONS = CLUB_CONSTRAINT.keys.sort
-CLUB_REGIONS.freeze
-CLUB_LOG_CAP = { "Large" => 10000000, "Medium" => 35, "Small" => 10 }
-CLUB_LOG_CAP.freeze
+CLUB_FOOTNOTES = { "Large" => "Large clubs score all logs",
+  "Medium" => "Total score of the Club's Top 35 logs",
+  "Small" => "Total score of the Club's Top 10 logs"
+}
+CLUB_FOOTNOTES.freeze
+
 def makeClubGroups(db, contestID, recdb)
+  
   groups = [ ]
-  header = [nil, hdr("Num Logs"), hdr("Score")]
   starts = [0, 396, 468]
   widths = [396, 72, 72]
+  count = 0
   CLUB_REGIONS. each { |region|
     %w{ Large Medium Small }.each { |size|
-      h = header.clone
-      h[0] = hdrl(size + " " + region + " Clubs")
-      g = Group.new(h, starts,widths)
+      count += 1
+      header = [ hdrl(size + " " + region + " Clubs"),
+        hdr("Num Logs"), hdr("Score<sup><color rgb=\"ff0000\">#{count}</color></sup>")]
+      g = Group.new(header, starts,widths)
       groups << g
-      clubs = [ ]
-      db.query("select distinct c.id, c.fullname from Clubs as c join Operator as o on o.clubID = c.id join Log as l on o.logID = l.id where l.contestID = ? and l.opclass != 'CHECKLOG' and c.type = ? and #{CLUB_CONSTRAINT[region]};",
-               [contestID, size.upcase]) { |row|
-        score, numlogs = clubScore(db, contestID, row[0].to_i, CLUB_LOG_CAP[size])
-        clubs << [row[1].to_s, numlogs, score]
-      }
+      clubs = clubList(db, contestID, size, region)
       if (not clubs.empty?)
-        clubs.sort! { |x,y| y[2] <=> x[2] }
         clubs.each { |c|
           g.rows << [AString.new(c[0]), n(c[1]), n(c[2]) ]
         }
       else
         g.rows << AString.new("No entries submitted in this category", :style => :italic)
       end
+      g.rows << AString.new("<color rgb=\"ff0000\"><sup>#{count}</sup>#{CLUB_FOOTNOTES[size]}</color>")
     }
   }
   return groups
@@ -553,16 +550,67 @@ def makePDFReports(db, contestID, recdb)
     pr.printGroups(g)
     pr.render("test_DX.pdf")
   end
-  pr = ReportPDF.new($year.to_s + " California QSO Party\nClub Results", [
-                       "Large clubs score all logs",
-                       "Medium clubs score the top 35 logs",
-                       "Small clubs score the top 10 logs"])
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nClub Results", [ ])
   g = makeClubGroups(db, contestID, recdb)
   pr.printGroups(g)
   pr.render("test_Club.pdf")
 end
 
+CONVERT_OPCLASS = {
+  "SINGLE_ASSISTED" => "SINGLE-OP-ASSISTED",
+  "SINGLE" => "SINGLE-OP",
+  "MULTI_MULTI" => "MULTI-MULTI",
+  "MULTI_SINGLE" => "MULTI-SINGLE"
+}
+CONVERT_OPCLASS.freeze
+
+def quoteStrings(line)
+  line.map { |item|
+    (item.kind_of?(String) and not item.empty?) ? ('"' + item + '"') : item
+  }
+end
+
+def certificateCSV(db, contestID, contestDB)
+  CSV.open("certificate_#{$year}.csv", "wb", :headers => true, :quote_char => "'" ) { |csv|
+    csv << quoteStrings([ "Callsign", "Name", "Operator Calls", "Station Callsign", "CW QSOs", "PH QSOs", "Total QSOs", "Multipliers", "Score", "Operator Class", "Power", "QTH", "Type", "Country" ])
+    db.query("select l.id, l.callsign, l.name, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.opclass, l.powclass, m.fullname, m.entityID, m.isCA, e.name from Log as l, Scores as s on s.logID = l.id, Multiplier as m on m.id = s.multID, Entity as e on e.id = l.entityID where contestID = ? and l.opclass != 'CHECKLOG' order by l.callsign asc;",
+             [ contestID ]) { |row|
+      line = Array.new(14)
+      line[0] = row[1]
+      line[1] = row[2]
+      line[4] = row[3].to_i
+      line[5] = row[4].to_i
+      line[6] = (line[4]+line[5])
+      line[7] = row[5].to_i
+      line[8] = row[6].to_i
+      line[9] = CONVERT_OPCLASS[row[7]]
+      line[10] = row[8].upcase
+      if row[10] and row[9] and (not row[9].empty?) and row[10] != 0
+        line[11] = row[9]
+        if db.toBool(row[11])
+          line[12] = "COUNTY"
+        else
+          line[12] = ((row[10] != 1) ? "STATE" : "PROVINCE")
+        end
+      else
+        line[11] = "DX Country"
+        line[12] = "COUNTRY"
+      end
+      line[13] = row[12]
+      ops = [ ]
+      db.query("select callsign from Operator where logID = ? order by id asc;", [row[0].to_i]) { |oprow|
+        ops << oprow[0]
+      }
+      if not ops.empty?
+        line[3] = ops.join(" ")
+      end
+      csv << quoteStrings(line)
+    }
+  }
+end
+
 def reportContest(db, contestID, contestDB)
+  certificateCSV(db, contestID,  contestDB)
   r = Report.new(db, contestID)
   dir = "cqp" + $year.to_s + "_reverse"
   begin
@@ -581,10 +629,12 @@ def reportContest(db, contestID, contestDB)
   makePDFReports(db, contestID, recdb)
   print "Making spreadsheets\n"
   s = Spreadsheet.new(db, contestID)
+  s.plaqueAwards(recdb)
+  s.wineFinalReport
+  s.saveTo("summary_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".xlsx")
+  s = Spreadsheet.new(db, contestID)
   s.addCategories
   s.addWineWinners
-  s.wineFinalReport
-  s.plaqueAwards(recdb)
   s.addSpecialAwards
   s.saveTo("categories_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".xlsx")
   print "Making reverse logs\n"

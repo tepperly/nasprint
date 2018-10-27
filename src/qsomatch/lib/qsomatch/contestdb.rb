@@ -89,7 +89,7 @@ class ContestDatabase
   end
 
   def createClubsTable
-    @db.query("create table if not exists Clubs (id integer primary key, contestID integer not null, fullname varchar(128), type char(6), bool isCA not null default #{@db.false});") { }
+    @db.query("create table if not exists Clubs (id integer primary key, contestID integer not null, fullname varchar(128), type char(6), isCA bool not null default #{@db.false});") { }
     @db.query("create index if not exists nameind on Clubs (fullname);") { }
   end
 
@@ -222,6 +222,13 @@ class ContestDatabase
     m.keys.sort.map { |field|
       prefix + field + " " + m[field]
     }.join(", ")
+  end
+
+  def getFullname(abbrev)
+    @db.query("select fullname from Multiplier where abbrev = ? limit 1;", [abbrev]) { |row|
+      return row[0]
+    }
+    abbrev
   end
 
 

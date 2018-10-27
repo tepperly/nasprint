@@ -55,7 +55,8 @@ class ReportPDF
                                  :Author => "Northern California Contest Club",
                                  :Subject => "Contest results published by the NCCC",
                                  :Keywords => "NCCC, ham radio, contest, radiosport",
-                                 :CreationDate => Time.now
+                                 :CreationDate => Time.now,
+                                 :ModDate => Time.now
                                })
     @pdf.font_families.update( "Verdana" => {
                                  :normal => "/usr/share/fonts/truetype/msttcorefonts/Verdana.ttf",
@@ -132,7 +133,9 @@ class ReportPDF
         oplist = oplist.clone
         oplist.delete(call)
         oplist.delete(basecall)
-        return AString.new(" (+ " + oplist.join(",") + ")")
+        if not oplist.empty?
+          return AString.new(" (+ " + oplist.join(",") + ")")
+        end
       else
         if oplist.length == 1
           return AString.new(" (" + oplist[0] + " op)")
@@ -145,7 +148,7 @@ class ReportPDF
   end
 
   def footnoteStr(num)
-    "<sup>" + num.to_s + "</sup>"
+    "<sup><color rgb=\"ff0000\">" + num.to_s + "</color></sup>"
   end
 
   def longOpsText(callsign, oplist)
@@ -169,6 +172,8 @@ class ReportPDF
           text << fstr
           nextLine.attributes.merge!(selectStyles(text))
         end
+      else
+        text = text.to_s + fstr
       end
     end
     return text, nextLine
@@ -178,7 +183,7 @@ class ReportPDF
     nextLine = [ text ]
     while not nextLine.empty?
       text = nextLine.pop
-      if @pdf.cursor <= (0 + ((not hdrText) ? @baselineskip + 4 : 0))
+      if @pdf.cursor <=  @baselineskip
         @pdf.start_new_page
         if hdrText
           printLine(hdrText, columnStarts, columnWidths)

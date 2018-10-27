@@ -3,6 +3,7 @@
 
 # require 'jaro_winkler'
 require 'qsomatch'
+require 'set'
 require_relative 'crossmatch'
 require_relative 'dxmap'
 
@@ -38,6 +39,9 @@ class ResolveSingletons
     }
   end
 
+  OTHERCONTEST_ENTITIES = [223, 294, 106, 114, 122, 265, 279 , 209].to_set
+  OTHERCONTEST_ENTITIES.freeze
+
   def queryCallsigns
     loc = CallsignLocator.new
     callList = Array.new
@@ -45,7 +49,7 @@ class ResolveSingletons
       c = Call.new(row[0].to_i, row[1], @db.toBool(row[2]), @db.toBool(row[5]), @db.toBool(row[3]), row[4].to_i)
       callList << c
       ent = loc.lookup(row[1])
-      if ent and ("OC" == ent.continent) and not c.illegal
+      if ent and ("OC" == ent.continent or OTHERCONTEST_ENTITIES.include?(ent.entityID))  and not c.illegal
         c.otherContest = true   # might be participant in Oceana DX
       end
     }
