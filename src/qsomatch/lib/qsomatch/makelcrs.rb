@@ -32,7 +32,7 @@ class LCR
     @cdb = contestDB
     @contestName = name
     @contestYear = year
-    @callsign, @name, @location, @dxprefix, @team, @verifiedPHQSOs, @verifiedCWQSOs, @verifiedMultipliers, @verifiedScore, @powclass, @opclass, @numStates = @cdb.logInfo(logID)
+    @callsign, @name, @location, @dxprefix, @team, @verifiedPHQSOs, @verifiedCWQSOs, @verifiedMultipliers, @verifiedScore, @powclass, @opclass = @cdb.logInfo(logID)
     @filename = filename
     @out = out
   end
@@ -107,7 +107,6 @@ minimize discrepancies between logs.\r
     if column > 0
       @out << "\r\n"
     end
-    @out << "Number of US states worked: " + @numStates.to_s + "\r\n"
   end
 
   def dupeSummary

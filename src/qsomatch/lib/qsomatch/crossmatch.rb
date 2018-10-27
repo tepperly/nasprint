@@ -121,6 +121,10 @@ class CrossMatch
     end
   end
 
+  def wipeScores
+    @db.query("delete from Scores where #{@logs.membertest("logID")};") { }
+  end
+
   def notMatched(qso)
     return "#{qso}.matchID is null and #{qso}.matchType = \"None\""
   end
@@ -352,6 +356,12 @@ class CrossMatch
       @db.query("update QSO set matchType=? where id = ? limit 1;", [oneType, row[0].to_i])
       @db.query("update QSO set matchType=? where id = ? limit 1;", [twoType, row[2].to_i])
     }
+    @db.query("select q1.id, q1.matchType, q2.id from QSO as q1, QSO as q2, Log as l1, Log as l2 where q1.matchType = 'TimeShiftFull' and q1.matchID = q2.id and q1.id = q2.matchID and q2.matchType in ('TimeShiftFull', 'TimeShiftPartial') and l1.id = q1.logID and l2.id = q2.logID and l1.contestID = ? and l2.contestID = ? and l1.trustedclock and not l2.trustedclock order by q1.id asc;", [@contestID, @contestID]) { |row|
+      oneType, num1, num2 = chooseType(row[1], num1, num2)
+      twoType, num1, num2 = chooseType('TimeShiftPartial', num1, num2)
+      @db.query("update QSO set matchType=? where id = ? limit 1;", [oneType, row[0].to_i])
+      @db.query("update QSO set matchType=? where id = ? limit 1;", [twoType, row[2].to_i])
+    }
     @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and " +
               @logs.membertest("logID") + ";") { }
     num2 = num2 + @db.affected_rows
@@ -369,7 +379,7 @@ class CrossMatch
       list << row[0].to_i
     }
     
-    @db.query("update QSO set matchType = 'Dupe' where id in (#{list.join(",")}) and matchType = 'None' and matchID is null limit 1;") { }
+    @db.query("update QSO set matchType = 'Dupe' where id in (#{list.join(",")}) and matchType = 'None' and matchID is null limit #{list.length};") { }
     return @db.affected_rows
   end
   
@@ -378,10 +388,15 @@ class CrossMatch
     queryStr = "select q.id from QSO as q, Callsign as c where q.matchID is null and q.matchType = 'None' and " +
       @logs.membertest("q.logID") +
       " and q.recvd_callID = c.id and c.logrecvd;"
-    @db.query(queryStr) { |row|
-      @db.query("update QSO set matchType = 'NIL' where id = ? and matchType = 'None' and matchID is null limit 1;", [ row[0].to_i] ) { }
-      count = count + @db.affected_rows
-    }
+    begin
+      @db.begin_transaction
+      @db.query(queryStr) { |row|
+        @db.query("update QSO set matchType = 'NIL' where id = ? and matchType = 'None' and matchID is null limit 1;", [ row[0].to_i] ) { }
+        count = count + @db.affected_rows
+      }
+    ensure
+      @db.end_transaction
+    end
     count
   end
 
@@ -725,13 +740,31 @@ class CrossMatch
     return 0
   end
 
+  def determineUnreliableClocks
+    result = Set.new
+    begin
+      @db.begin_transaction
+      # every log starts out as trusted
+      @db.query("update Log set trustedclock = #{@db.true} where #{@logs.membertest('id')};")
+      done = false
+      while (not done)
+        done = true
+        # find the log with the highest percentage of clock errors
+        @db.query("select q1.logID, count(*) as numQ, sum(abs(#{@db.timediff('SECOND','q1.time','q2.time')} + l1.clockadj - l2.clockadj) > 60 * #{CrossMatch::PERFECT_TIME_MATCH}) as clockMis from (QSO as q1 join Log as l1 on q1.logID = l1.id) join (QSO as q2 join Log as l2 on q2.logID = l2.id) on q2.id = q1.matchID and q1.id = q2.matchID where #{@logs.membertest('q1.logID')} and #{@logs.membertest('q2.logID')} and l1.trustedclock and l2.trustedclock group by q1.logID having clockMis > max(2,0.05*numQ) order by (clockMis/max(clockMis,numQ,1)) desc limit 1;") { |row|
+          # mark it as untrusted
+          result << row[0].to_i
+          done = false
+          @db.query("update Log set trustedclock = #{@db.false} where id = #{row[0].to_i} limit 1;") { }
+        }
+      end
+    ensure
+      @db.end_transaction
+    end
+    result.freeze
+    return result
+  end
+
   def findUnreliable
-    unreliableClock = Set.new
-    # logs with more than max(2,0.05*numQ) time mismatches are considered unreliable
-    @db.query("select q1.logID, count(*) as numQ, sum(abs(#{@db.timediff('SECOND','q1.time','q2.time')} + l1.clockadj - l2.clockadj) > 60 * #{CrossMatch::PERFECT_TIME_MATCH}) as clockMis from (QSO as q1 join Log as l1 on q1.logID = l1.id) join (QSO as q2 join Log as l2 on q2.logID = l2.id) on q2.id = q1.matchID and q1.id = q2.matchID where #{@logs.membertest('q1.logID')} and #{@logs.membertest('q2.logID')} group by q1.logID having clockMis > max(2,0.05*numQ) order by q1.logID asc;") { |row|
-      unreliableClock << row[0].to_i
-    }
-    unreliableClock.freeze
     unreliableBand = Set.new
     # logs with more than 4% band mismatches are consider unreliable
     @db.query("select q.logID, count(*) as numQ, sum(q.band != q2.band) as bandMis from QSO as q join QSO as q2 on (q.matchID=q2.id and q2.matchID = q.id) join Log as l1 on q.logID = l1.id where #{@logs.membertest("q.logID")} group by q.logID having bandMis > 0.04*numQ order by q.logID asc;") { |row|
@@ -744,71 +777,76 @@ class CrossMatch
       unreliableMode << row[0].to_i
     }
     unreliableMode.freeze
-    return unreliableClock, unreliableBand, unreliableMode
+    return unreliableBand, unreliableMode
   end
 
-  def initialScore
-    unreliableClock, unreliableBand, unreliableMode = findUnreliable
-    @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q1.judged_multiplierID, q1.recvd_serial, q1.matchType, q1.band, q1.fixedMode, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial, q1.judged_band, q1.judged_mode from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc;") { |row|
-      row[2] = row[2].to_i
-      log1Adj = logAdj(row[2])
-      row[12] = row[12].to_i
-      log2Adj = logAdj(row[12])
-      comment = ""
-      notMatch = 0
-      if ((@db.toDateTime(row[1])+log1Adj) - (@db.toDateTime(row[11])+log2Adj)).abs > PERFECT_TIME_MATCH*60
-        if unreliableClock.include?(row[2].to_i) or not unreliableClock.include?(row[12])
-          notMatch += 1
-          comment << " clock"
+  def initialScore(unreliableClock)
+    begin
+      @db.begin_transaction
+      unreliableBand, unreliableMode = findUnreliable
+      @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q1.judged_multiplierID, q1.recvd_serial, q1.matchType, q1.band, q1.fixedMode, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial, q1.judged_band, q1.judged_mode from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc;") { |row|
+        row[2] = row[2].to_i
+        log1Adj = logAdj(row[2])
+        row[12] = row[12].to_i
+        log2Adj = logAdj(row[12])
+        comment = ""
+        notMatch = 0
+        if ((@db.toDateTime(row[1])+log1Adj) - (@db.toDateTime(row[11])+log2Adj)).abs > PERFECT_TIME_MATCH*60
+          if unreliableClock.include?(row[2].to_i) or not unreliableClock.include?(row[12])
+            notMatch += 1
+            comment << " clock"
+          end
         end
-      end
-      if row[3].nil? or (row[3] != row[13]) # call signs mismatch
-        notMatch += 1
-        comment << " callsign"
-      end
-      if row[4].nil? or (row[4] != row[5]) # multiplier mismatch
-        notMatch += 1
-        comment << " multiplier"
-      end
-      if row[8].nil? or ((not (row[15].nil?)) and (row[8] != row[15]))
-        if unreliableBand.include?(row[2]) or not unreliableBand.include?(row[12])
+        if row[3].nil? or (row[3] != row[13]) # call signs mismatch
           notMatch += 1
-          comment << " band"
+          comment << " callsign"
         end
-      end
-      if row[9].nil? or ((not (row[16].nil?)) and (row[9] != row[16]))
-        if unreliableMode.include?(row[2]) or not unreliableMode.include?(row[12])
+        if row[4].nil? or (row[4] != row[5]) # multiplier mismatch
           notMatch += 1
-          comment << " mode"
+          comment << " multiplier"
         end
-      end
-      if row[6].nil? or ((not (row[14].nil?)) and ((row[6] < (row[14]-1)) or (row[6] > (row[14]+1)))) # serial mismatch
-        notMatch += 1
-        comment << " serial"
-      end
-      if (notMatch == 0 and row[7] != "Full")
-        @db.query("update QSO set matchType='Full' where id = ? limit 1;",
-                  [ row[0] ])
-      end
-      if (notMatch != 0 and row[7] == "Full")
-        print "QSO ID #{row[0]} is a #{row[7]} match with #{notMatch} mismatches #{comment}\n"
-        @db.query("update QSO set matchType='Partial' where id = ? limit 1;",
-                  [ row[0] ])
-      end
-      case notMatch
-      when 0
-        score = 2
-      when 1
-        score = 1
-      else
-        score = 0
-      end
-      @db.query("update QSO set score = ? where id = ? limit 1;",
-                [ score, row[0]])
-    }
-    @db.query("update QSO set score = 2 where #{@logs.membertest("logID")} and matchType = 'Bye';")
-    @db.query("update QSO set score = 1 where #{@logs.membertest("logID")} and matchType='PartialBye';")
-    @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType in ('None', 'Unique', 'Dupe', 'OutsideContest', 'Removed');")
-    @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType = 'NIL';")
+        if row[8].nil? or ((not (row[15].nil?)) and (row[8] != row[15]))
+          if unreliableBand.include?(row[2]) or not unreliableBand.include?(row[12])
+            notMatch += 1
+            comment << " band"
+          end
+        end
+        if row[9].nil? or ((not (row[16].nil?)) and (row[9] != row[16]))
+          if unreliableMode.include?(row[2]) or not unreliableMode.include?(row[12])
+            notMatch += 1
+            comment << " mode"
+          end
+        end
+        if row[6].nil? or ((not (row[14].nil?)) and ((row[6] < (row[14]-1)) or (row[6] > (row[14]+1)))) # serial mismatch
+          notMatch += 1
+          comment << " serial"
+        end
+        if (notMatch == 0 and row[7] != "Full")
+          @db.query("update QSO set matchType='Full' where id = ? limit 1;",
+                    [ row[0] ])
+        end
+        if (notMatch != 0 and row[7] == "Full")
+          print "QSO ID #{row[0]} is a #{row[7]} match with #{notMatch} mismatches #{comment}\n"
+          @db.query("update QSO set matchType='Partial' where id = ? limit 1;",
+                    [ row[0] ])
+        end
+        case notMatch
+        when 0
+          score = 2
+        when 1
+          score = 1
+        else
+          score = 0
+        end
+        @db.query("update QSO set score = ? where id = ? limit 1;",
+                  [ score, row[0]])
+      }
+      @db.query("update QSO set score = 2 where #{@logs.membertest("logID")} and matchType = 'Bye';")
+      @db.query("update QSO set score = 1 where #{@logs.membertest("logID")} and matchType='PartialBye';")
+      @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType in ('None', 'Unique', 'Dupe', 'OutsideContest', 'Removed');")
+      @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType = 'NIL';")
+    ensure
+      @db.end_transaction
+    end
   end
 end

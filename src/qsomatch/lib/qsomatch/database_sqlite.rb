@@ -37,6 +37,10 @@ class DatabaseSQLite
     0
   end
 
+  def boolToDB(val)
+    return val ? 1 : 0
+  end
+
   def toBool(val)
     (val and (val.to_i != 0)) ? true : false
   end
@@ -149,6 +153,7 @@ class DatabaseSQLite
   end
 
   def close
+    @db.execute("PRAGMA optimize;") unless @db.closed?
     @db.close
   end
 end

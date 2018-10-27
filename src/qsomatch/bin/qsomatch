@@ -1,12 +1,16 @@
 #!/usr/bin/env ruby
 
 require 'getoptlong'
+require 'csv'
 require 'database'
 require 'dxmap'
 require 'bandmode'
 require 'contestdb'
+require 'pdfreport'
 require 'callsign'
+require 'club'
 require 'addlog'
+require 'spreadsheet'
 require 'cabrillo'
 require 'qrzdb'
 require 'crossmatch'
@@ -24,6 +28,7 @@ $name = nil
 $explain = false
 $totallydestroy = false
 $skipclock = true
+$recordsdb = nil
 $restart = false
 $create = false
 $readinit = true
@@ -37,6 +42,7 @@ opts = GetoptLong.new(
                       [ '--new', '-N', GetoptLong::NO_ARGUMENT],
                       [ '--check', '-C', GetoptLong::NO_ARGUMENT],
                       [ '--check-dupe', '-c', GetoptLong::NO_ARGUMENT],
+                      [ '--category-check', '-A', GetoptLong::NO_ARGUMENT],
                       [ '--calc-clock-adj', '-x', GetoptLong::NO_ARGUMENT],
                       [ '--no-init', '-I', GetoptLong::NO_ARGUMENT],
                       [ '--qrzuser', '-u', GetoptLong::REQUIRED_ARGUMENT],
@@ -44,6 +50,7 @@ opts = GetoptLong.new(
                       [ '--qrzpwd', '-p', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--sqlite', '-S', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--reset', '-R', GetoptLong::NO_ARGUMENT],
+                      [ '--all-time-records', '-a', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--name', '-n', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--year', '-y', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--verbose', '-V', GetoptLong::NO_ARGUMENT],
@@ -74,6 +81,8 @@ opts.each { |opt, arg|
     cmddbopts['filename'] = arg
   when '--report'
     $action = :report
+  when '--category-check'
+    $action = :catcheck
   when '--fifty-eight'
     $action = :fifty_eight
   when '--rare'
@@ -84,6 +93,8 @@ opts.each { |opt, arg|
     $action = :checkdupes
   when '--load'
     $action = :load
+  when '--all-time-records'
+    $recordsdb = arg
   when '--score'
     $action = :score
   when '--reset'
@@ -107,54 +118,81 @@ end
 
 dbopts.merge!(cmddbopts)
 
-def loadFiles(args, cdb, contestID, ctl)
-  args.each { |filename|
-    begin
-      cab = Cabrillo.new(filename)
-      if cab and cdb
-        addLog(cdb, contestID, cab, ctl)
-      end
-      if $action == :check
-        if cab
-          if not cab.cleanparse
-            $stderr.flush
-            $stdout.flush
-            print "Station: #{cab.logcall}:#{filename} failed to parse.\n"
-            $stdout.flush
-          end
-          if not cab.badmults.empty?
-            $stderr.flush
-            $stdout.flush
-            print "Station: #{cab.logcall}:#{filename} has bad #{cab.badmults.size} multipliers in #{cab.qsos.size} QSO(s).\n"
-            print "Multipliers: " + cab.badmults.to_a.join(" ") + "\n"
-            $stdout.flush
-          end
-          if not cab.defaultSentQTH  or cab.defaultSentQTH == "CA"
-            $stderr.flush
-            $stdout.flush
-            print "Station: #{cab.logcall}:#{filename} has bad sent QTH #{cab.defaultSentQTH} in the header\n"
-            $stdout.flush
-          end
-          if not cab.badSentMults.empty?
-            $stderr.flush
-            $stdout.flush
-            print "Station: #{cab.logcall}:#{filename} has bad sent QTHs in QSO lines: #{cab.badSentMults.to_a.join(" ")}\n"
-            $stdout.flush
-          end
-        else
-          $stderr.flush
-          $stdout.flush
-          print "#{filename} failed to parse at all.\n"
-          $stdout.flush
-        end
-      end
-    rescue ArgumentError => e
-      $stderr.flush
-      $stdout.flush
-      print "#{filename} caused an exception #{e}\n"
-      $stdout.flush
+def loadFiles(args, cdb, contestID, ctl, db)
+  begin
+    if db and cdb
+      db.begin_transaction
     end
-  }
+    catout = nil
+    if $action == :catcheck
+      catout = open("category_check.csv", "w:ascii")
+      catout.write('"Callsign","Cab Power","Cab Class","Web Power","Web Class","Power","Class"' + "\n")
+    end
+    args.each { |filename|
+      begin
+        cab = Cabrillo.new(filename)
+        if cab and cdb
+          addLog(cdb, contestID, cab, ctl)
+        end
+        if $action == :check
+          if cab
+            if not cab.cleanparse
+              $stderr.flush
+              $stdout.flush
+              print "Station: #{cab.logcall}:#{filename} failed to parse.\n"
+              $stdout.flush
+            end
+            if not cab.badmults.empty?
+              $stderr.flush
+              $stdout.flush
+              print "Station: #{cab.logcall}:#{filename} has bad #{cab.badmults.size} multipliers in #{cab.qsos.size} QSO(s).\n"
+              print "Multipliers: " + cab.badmults.to_a.join(" ") + "\n"
+              $stdout.flush
+            end
+            if not cab.defaultSentQTH  or cab.defaultSentQTH == "CA"
+              $stderr.flush
+              $stdout.flush
+              print "Station: #{cab.logcall}:#{filename} has bad sent QTH #{cab.defaultSentQTH} in the header\n"
+              $stdout.flush
+            end
+            if not cab.badSentMults.empty?
+              $stderr.flush
+              $stdout.flush
+              print "Station: #{cab.logcall}:#{filename} has bad sent QTHs in QSO lines: #{cab.badSentMults.to_a.join(" ")}\n"
+              $stdout.flush
+            end
+          else
+            $stdout.flush
+            $stderr.flush
+            print "#{filename} failed to parse at all.\n"
+            $stdout.flush
+          end
+        elsif $action == :catcheck
+          if cab.conflicted?
+            catout.write( '"' + cab.logCall + '","' +
+              ((not cab.logCat.power.nil?) ? cab.logCat.power.to_s.upcase :
+               cab.dbCat.power.to_s.upcase) + '","' +
+              ((not cab.logCat.numop.nil?) ? cab.classFromCat(cab.logCat) :
+               cab.classFromCat(cab.dbCat)) + '","' +
+              cab.logPower + '","' + cab.cqpOpClass + '","' +
+              cab.logPower + '","' + cab.cqpOpClass + "\"\n")
+          end
+        end
+      rescue ArgumentError => e
+        $stderr.flush
+        $stdout.flush
+        print "#{filename} caused an exception #{e}\n"
+        $stdout.flush
+      end
+    }
+  ensure
+    if db and cdb
+      db.end_transaction
+    end
+    if catout
+      catout.close
+    end
+  end
   if cdb
     cdb.checkDupeLogs(contestID)
   end
@@ -260,7 +298,329 @@ def report58(db, contestID, contestDB)
   r.firstTo58($stdout, contestID)
 end
 
+def hdrl(str)
+  return AString.new(str.to_s, :style => :bold, :align => :left)
+end
+
+def hdr(str)
+  return AString.new(str.to_s, :style => :bold, :align => :center)
+end
+
+def n(str)
+  return AString.new(str.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse, :align => :right)
+end
+
+def powAbbrev(power, long)
+  case power
+  when 'QRP'
+    return long ? " QRP" : " Q"
+  when "LOW"
+    return long ? " LP" : " L"
+  when "HIGH"
+    return long ? " HP" : ""
+  end
+end
+
+def extras(isCCE, isYL, isMOBILE)
+  result = ""
+  if isCCE
+    result += " E"
+  end
+  if isYL
+    result += " YL"
+  end
+  if isMOBILE
+    result += " M"
+  end
+  result
+end
+
+def abbrevType(opclass, power, isCCE=nil, isYL=nil, isMOBILE=nil)
+  result = ""
+  case opclass
+  when 'SINGLE'
+    result = "SO" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
+  when 'SINGLE_ASSISTED'
+    result = "SOA" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
+  when 'MULTI_SINGLE'
+    result = 'M/S' + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
+  when 'MULTI_MULTI'
+    result = 'M/M' + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
+  when 'CHECKLOG'
+    result = 'C'
+  end
+  return AString.new(result, :align => :center)
+end
+
+def lookupOperatorList(db, callsign, id)
+  callsign = AString.new(callsign)
+  oplist = [ ]
+  db.query("select callsign from Operator where logID = ? order by id;", [id]) { |row|
+    oplist << row[0]
+  }
+  if not oplist.empty?
+    callsign.addAttributes(:ops => oplist)
+  end
+  return callsign
+end
+
+def checkFill
+  AString.new("-", :align => :right)
+end
+
+def lookupRecord(recdb, mult, opclass, power)
+  if recdb and "CHECKLOG" != opclass
+    recdb.query("select score from Regional where mult_abbrev = ? and opclass = ? and powclass = ? order by score desc limit 1;",[mult, opclass, power]) { |row|
+      return row[0].to_i
+    }
+  end
+  return (mult == "DX") ? nil : 0
+end
+
+def addRecord(recdb, mult, callsign, year, score, numQSOs, numMults, opclass, powclass)
+  if recdb
+    recdb.query("insert into Regional (mult_abbrev, station, year, score, qsos, multipliers, opclass, powclass) values (?, ?, ?, ?, ?, ?, ?, ?);",
+                [ mult, callsign, year, score, numQSOs, numMults, opclass, powclass ])
+  end
+end
+
+def markAsRecord(regionName, row, opclass, powclass)
+  if not row.empty?
+#    print "New record by #{row[0].to_s} for #{regionName} #{opclass} #{powclass}\n"
+    row.each { |e| e.attributes[:color] = "ff0000" }
+    row[0].attributes[:footnote] = "New record for #{abbrevType(opclass, powclass)} #{regionName}"
+  end
+end
+
+def makeGroups(db, contestID, extraCon, recdb)
+  groups = [ ]
+  curName = nil
+  curGroup = nil
+  db.query("select m.fullname, l.callsign, l.opclass, l.powclass, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.isCCE, l.isYL, l.isMOBILE, l.id, m.abbrev from Multiplier as m left outer join (Log as l join Scores as s on l.id = s.logID and  l.contestID = ?) on s.multID = m.id where #{extraCon} order by m.fullname asc, CASE l.opclass WHEN 'SINGLE' THEN 0 WHEN 'SINGLE_ASSISTED' THEN 0 WHEN 'MULTI_SINGLE' THEN 1 WHEN 'MULTI_MULTI' THEN 2  WHEN 'CHECKLOG' THEN 10 END asc, s.verified_score desc, l.callsign asc;", [contestID]) { |row|
+    if row[0] != curName or row[0].nil?
+      curName = row[0].to_s
+      curGroup = Group.new([hdrl(curName),hdr("CW"),hdr("PH"), hdr("Total"), hdr("Mult"), hdr("Score"), hdr("Type")],
+                           [0, 250, 290, 330, 370, 410, 470],
+                           [250, 40, 40, 40, 40, 60, 70])
+      groups << curGroup
+    end
+    if row[1]
+      callsign = lookupOperatorList(db, row[1], row[11])
+      if row[2] != "CHECKLOG"
+        curGroup.rows << [ callsign, n(row[4]), n(row[5]), n(row[4].to_i+row[5].to_i),
+          n(row[6]), n(row[7]), abbrevType(row[2], row[3], db.toBool(row[8]),db.toBool(row[9]),
+                                           db.toBool(row[10]) )]
+        rec = lookupRecord(recdb, row[12], row[2], row[3])
+        if rec and (row[7] > rec)
+          markAsRecord(curName, curGroup.rows[-1], row[2], row[3])
+          addRecord(recdb, row[12], row[1], $year.to_i, row[7].to_i,
+                    row[4].to_i+row[5].to_i, row[6].to_i, row[2], row[3])
+        end
+      else
+        curGroup.rows << [ callsign,checkFill,checkFill,checkFill,checkFill,checkFill,
+          abbrevType(row[2], row[3], db.toBool(row[8]),db.toBool(row[9]), db.toBool(row[10]) )]
+      end
+    else
+      curGroup.rows << "No logs submitted for scoring"
+    end
+  }
+  return groups
+end
+
+
+CLUB_FOOTNOTES = { "Large" => "Large clubs score all logs",
+  "Medium" => "Total score of the Club's Top 35 logs",
+  "Small" => "Total score of the Club's Top 10 logs"
+}
+CLUB_FOOTNOTES.freeze
+
+def makeClubGroups(db, contestID, recdb)
+  
+  groups = [ ]
+  starts = [0, 396, 468]
+  widths = [396, 72, 72]
+  count = 0
+  CLUB_REGIONS. each { |region|
+    %w{ Large Medium Small }.each { |size|
+      count += 1
+      header = [ hdrl(size + " " + region + " Clubs"),
+        hdr("Num Logs"), hdr("Score<sup><color rgb=\"ff0000\">#{count}</color></sup>")]
+      g = Group.new(header, starts,widths)
+      groups << g
+      clubs = clubList(db, contestID, size, region)
+      if (not clubs.empty?)
+        clubs.each { |c|
+          g.rows << [AString.new(c[0]), n(c[1]), n(c[2]) ]
+        }
+      else
+        g.rows << AString.new("No entries submitted in this category", :style => :italic)
+      end
+      g.rows << AString.new("<color rgb=\"ff0000\"><sup>#{count}</sup>#{CLUB_FOOTNOTES[size]}</color>")
+    }
+  }
+  return groups
+end
+
+def opmetric(str)
+  if str.start_with?("SO")
+    return 0
+  elsif str.start_with?("M/S")
+    return 1
+  elsif str.start_with?("M/M")
+    return 2
+  elsif str.start_with?("C")
+    return 10
+  else
+    return -1
+  end
+end
+
+ABBREV_TO_CONTINENT = {
+  "NA" => "North America",
+  "SA" => "South America",
+  "AS" => "Asia",
+  "EU" => "Europe",
+  "AF" => "Africa",
+  "OC" => "Oceana"
+}
+ABBREV_TO_CONTINENT.freeze
+
+def continentName(abbrev)
+  ABBREV_TO_CONTINENT.has_key?(abbrev) ? ABBREV_TO_CONTINENT[abbrev] : abbrev
+end
+
+def repackageGroups(g)
+  locate = CallsignLocator.new
+  newGroups = nil
+  entries = Hash.new
+  header = nil
+  columnStarts = nil
+  columnWidths = nil
+  count = 0
+  g.each { |group|
+    if not header
+      header = group.header 
+      columnStarts = group.columnStarts
+      columnWidths = group.columnWidths
+    end
+    count += group.rows.length
+    group.rows.each { |row|
+      entity = locate.lookup(row[0])
+      if entity
+        continent = entity.continent
+      else
+        continent = "Unknown"
+      end
+      if not entries.has_key?(entity.continent)
+        entries[entity.continent] = Array.new
+      end
+      entries[entity.continent] << row
+    }
+  }
+  if header and columnStarts and columnWidths and count > 0
+    newGroups = Array.new
+    entries.keys.sort.each { |continent|
+      h = header.clone
+      h[0] = hdrl(continentName(continent))
+      g = Group.new(h, columnStarts, columnWidths)
+      g.rows = entries[continent].sort { |x,y|
+        m = (opmetric(x[6]) <=> opmetric(y[6]))
+        if 0 == m
+          m = (y[5].gsub(",","").to_i <=> x[5].gsub(",","").to_i)
+          if 0 == m
+            m = (x[0] <=> y[0])
+          end
+        end
+        m
+      }
+      newGroups << g
+    }
+  end
+  newGroups
+end
+
+def makePDFReports(db, contestID, recdb)
+  print "Making PDF reports\n"
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nCalifornia Stations")
+  g = makeGroups(db, contestID, "m.isCA",recdb)
+  pr.printGroups(g)
+  pr.render("test_CA.pdf")
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nUS Stations outside California")
+  g = makeGroups(db, contestID, "(not m.isCA) and (m.entityID in (291,6,110)) and m.fullname != 'California'", recdb)
+  pr.printGroups(g)
+  pr.render("test_US.pdf")
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nCanadian Stations")
+  g = makeGroups(db, contestID, "(not m.isCA) and (m.entityID = 1)", recdb)
+  pr.printGroups(g)
+  pr.render("test_VE.pdf")
+  g = makeGroups(db, contestID, "m.abbrev = 'DX'", recdb)
+  if g and not g.empty?
+    pr = ReportPDF.new($year.to_s + " California QSO Party\nDX Results")
+    g = repackageGroups(g)        # Sub divide DX by region
+    pr.printGroups(g)
+    pr.render("test_DX.pdf")
+  end
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nClub Results", [ ])
+  g = makeClubGroups(db, contestID, recdb)
+  pr.printGroups(g)
+  pr.render("test_Club.pdf")
+end
+
+CONVERT_OPCLASS = {
+  "SINGLE_ASSISTED" => "SINGLE-OP-ASSISTED",
+  "SINGLE" => "SINGLE-OP",
+  "MULTI_MULTI" => "MULTI-MULTI",
+  "MULTI_SINGLE" => "MULTI-SINGLE"
+}
+CONVERT_OPCLASS.freeze
+
+def quoteStrings(line)
+  line.map { |item|
+    (item.kind_of?(String) and not item.empty?) ? ('"' + item + '"') : item
+  }
+end
+
+def certificateCSV(db, contestID, contestDB)
+  CSV.open("certificate_#{$year}.csv", "wb", :headers => true, :quote_char => "'" ) { |csv|
+    csv << quoteStrings([ "Callsign", "Name", "Operator Calls", "Station Callsign", "CW QSOs", "PH QSOs", "Total QSOs", "Multipliers", "Score", "Operator Class", "Power", "QTH", "Type", "Country" ])
+    db.query("select l.id, l.callsign, l.name, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.opclass, l.powclass, m.fullname, m.entityID, m.isCA, e.name from Log as l, Scores as s on s.logID = l.id, Multiplier as m on m.id = s.multID, Entity as e on e.id = l.entityID where contestID = ? and l.opclass != 'CHECKLOG' order by l.callsign asc;",
+             [ contestID ]) { |row|
+      line = Array.new(14)
+      line[0] = row[1]
+      line[1] = row[2]
+      line[4] = row[3].to_i
+      line[5] = row[4].to_i
+      line[6] = (line[4]+line[5])
+      line[7] = row[5].to_i
+      line[8] = row[6].to_i
+      line[9] = CONVERT_OPCLASS[row[7]]
+      line[10] = row[8].upcase
+      if row[10] and row[9] and (not row[9].empty?) and row[10] != 0
+        line[11] = row[9]
+        if db.toBool(row[11])
+          line[12] = "COUNTY"
+        else
+          line[12] = ((row[10] != 1) ? "STATE" : "PROVINCE")
+        end
+      else
+        line[11] = "DX Country"
+        line[12] = "COUNTRY"
+      end
+      line[13] = row[12]
+      ops = [ ]
+      db.query("select callsign from Operator where logID = ? order by id asc;", [row[0].to_i]) { |oprow|
+        ops << oprow[0]
+      }
+      if not ops.empty?
+        line[3] = ops.join(" ")
+      end
+      csv << quoteStrings(line)
+    }
+  }
+end
+
 def reportContest(db, contestID, contestDB)
+  certificateCSV(db, contestID,  contestDB)
   r = Report.new(db, contestID)
   dir = "cqp" + $year.to_s + "_reverse"
   begin
@@ -268,12 +628,27 @@ def reportContest(db, contestID, contestDB)
   rescue
     # ignore exception
   end
-  print "Making reverse logs\n"
-  r.makeReverseLogs(dir, contestID)
   print "Making general reports\n"
   open("scores_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".csv", "w:ascii") { |out|
     r.makeReport(out, contestID)
   }
+  recdb = nil
+  if $recordsdb
+    recdb = makeDB({'type' => 'sqlite3', 'filename' => $recordsdb})
+  end
+  makePDFReports(db, contestID, recdb)
+  print "Making spreadsheets\n"
+  s = Spreadsheet.new(db, contestID)
+  s.plaqueAwards(recdb)
+  s.wineFinalReport
+  s.saveTo("summary_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".xlsx")
+  s = Spreadsheet.new(db, contestID)
+  s.addCategories
+  s.addWineWinners
+  s.addSpecialAwards
+  s.saveTo("categories_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".xlsx")
+  print "Making reverse logs\n"
+  r.makeReverseLogs(dir, contestID)
   open("green_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".txt", "w:ascii") { |out|
     r.makeGreenReport(out, contestID)
   }
@@ -297,6 +672,7 @@ def scoreContest(db, contestID, contestDB)
   if $restart
     restartContest(cm)
   end
+  cm.wipeScores
   checkCallsigns(db, contestID, $qrzuser, $qrzpwd)
   num1, dupeCount = cm.perfectMatch
   print "Perfect matches: #{num1} (dupes #{dupeCount})\n"
@@ -353,6 +729,7 @@ def scoreContest(db, contestID, contestDB)
   ct = nil
   print "QSOs outside contest time period: #{timeviolation}\n"
   $stdout.flush
+  badClocks = cm.determineUnreliableClocks
   num1, num2 = cm.resolveShifted
   print "Time shift resolved #{num1} full and #{num2} partial\n"
   $stdout.flush
@@ -380,7 +757,7 @@ def scoreContest(db, contestID, contestDB)
   bmm = BandModeMismatch.new(db, contestID, contestDB)
   bmm.resolve
   print "Assigning initial scores to QSO(s)\n"
-  cm.initialScore
+  cm.initialScore(badClocks)
   print "Final dupe check\n"
   num = singles.finalDupeCheck
   print "#{num} Dupe QSOs identified during final check\n."
@@ -408,8 +785,8 @@ begin
     end
   end  
   case $action
-  when :load, :check
-    loadFiles(ARGV, cdb, contestID, ctl)
+  when :load, :check, :catcheck
+    loadFiles(ARGV, cdb, contestID, ctl, db)
   when :score
     scoreContest(db, contestID, cdb)
     reportContest(db, contestID, cdb)

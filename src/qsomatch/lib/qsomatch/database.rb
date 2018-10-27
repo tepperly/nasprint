@@ -4,7 +4,6 @@
 # Build a SQL database to do log crossing checking & scoring
 #
 
-
 def makeDB(opts = {})
   case opts["type"]
   when "sqlite3"

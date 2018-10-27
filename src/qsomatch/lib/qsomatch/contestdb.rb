@@ -33,6 +33,9 @@ class ContestDatabase
     if not tables.include?("Contest")
       createContestTable
     end
+    if not tables.include?("Clubs")
+      createClubsTable
+    end
     if not tables.include?("Entity")
       createEntityTable
     end
@@ -42,6 +45,9 @@ class ContestDatabase
     createMultiplierAlias
     if not (tables.include?("Callsign") and tables.include?("Log"))
       createLogTable
+    end
+    if not (tables.include?("Scores"))
+      createScoresTable
     end
     if not (tables.include?("QSOExtra") and tables.include?("QSO") and tables.include?("QSOGreen"))
       createQSOTable
@@ -57,6 +63,9 @@ class ContestDatabase
     end
     if not tables.include?("TeamMember")
       createTeamMemberTable
+    end
+    if not tables.include?("Operator")
+      createOperatorTable
     end
   end
 
@@ -77,6 +86,11 @@ class ContestDatabase
 
   def extractPrefix(prefix)
     
+  end
+
+  def createClubsTable
+    @db.query("create table if not exists Clubs (id integer primary key, contestID integer not null, fullname varchar(128), type char(6), isCA bool not null default #{@db.false});") { }
+    @db.query("create index if not exists nameind on Clubs (fullname);") { }
   end
 
   def createEntityTable
@@ -118,15 +132,15 @@ class ContestDatabase
   end
 
   def createMultiplierTable
-    @db.query("create table if not exists Multiplier (id integer primary key #{@db.autoincrement}, abbrev char(4) not null unique, wasstate char(2), entityID integer, ismultiplier bool not null default #{@db.false}, isCA bool not null default #{@db.false});") { }
+    @db.query("create table if not exists Multiplier (id integer primary key #{@db.autoincrement}, abbrev char(4) not null unique, fullname char(32), entityID integer, ismultiplier bool not null default #{@db.false}, isCA bool not null default #{@db.false});") { }
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii") { |row|
       begin
         if row[0] == row[1]
           entity = row[2].to_i
           abbrev = row[1].strip.upcase
           if entity > 0
-            @db.query("insert into Multiplier (abbrev, entityID, wasstate, ismultiplier, isCA) values (?, ?, ?, #{@db.true}, #{(abbrev.length == 4 and abbrev != "XXXX") ? @db.true : @db.false});",
-                      [abbrev, entity, row[3]]) { }
+            @db.query("insert into Multiplier (abbrev, entityID, ismultiplier, isCA, fullname) values (?, ?, #{(abbrev!='CA') ? @db.true : @db.false}, #{(abbrev.length == 4 and abbrev != 'XXXX') ? @db.true : @db.false}, ?);",
+                      [abbrev, entity, row[3] ] ) { }
           else
             # DX gets a null for entityID and ismultiplier
             @db.query("insert into Multiplier (abbrev) values (?);",
@@ -169,6 +183,10 @@ class ContestDatabase
       end
     }
   end
+
+  def createScoresTable
+    @db.query("create table if not exists Scores (logID integer not null, multID integer not null, verified_mult integer not null default 0, verified_score integer not null default 0, verified_ph integer not null default 0, verified_cw integer not null default 0, primary key (logID, multID));") { }
+  end
   
   def createLogTable
     # table of callsigns converted to base format
@@ -206,6 +224,13 @@ class ContestDatabase
     }.join(", ")
   end
 
+  def getFullname(abbrev)
+    @db.query("select fullname from Multiplier where abbrev = ? limit 1;", [abbrev]) { |row|
+      return row[0]
+    }
+    abbrev
+  end
+
 
   def createQSOTable
     if @db.has_enum?
@@ -237,6 +262,11 @@ class ContestDatabase
               ");") { }
     @db.query("create index if not exists logind on QSOExtra (logID);")  { }
     @db.query("create index if not exists logind on QSOGreen (logID);")  { }
+  end
+
+  def createOperatorTable
+    @db.query("create table if not exists Operator (id integer primary key #{@db.autoincrement}, logID integer not null, callsign varchar(16) not null, clubID integer, clubAlloc double);") { }
+    @db.query("create index if not exists logind on Operator (logID);") { }
   end
 
   def addOrLookupCall(callsign, contestIDVar=nil)
@@ -311,12 +341,20 @@ class ContestDatabase
     @db.query("update Callsign set logrecvd = 1 where id = ? limit 1;", [callID.to_i]) { }
   end
 
-  def addLog(contID, callsign, callID, email, powclass, opclass, multID, entID, name, club, numops)
-    @db.query("insert into Log (contestID, callsign, callID, email, powclass, opclass, multiplierID, entityID, name, club, numops) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+  def addLog(contID, callsign, callID, email, powclass, opclass, multID, entID, name, club, numops, isCCE, isMobile, isNew, isSchool, isYL, isYouth)
+    @db.query("insert into Log (contestID, callsign, callID, email, powclass, opclass, multiplierID, entityID, name, club, numops, isCCE, isMOBILE, isNEW, isSCHOOL, isYL, isYOUTH) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
               [contID.to_i, capOrNull(callsign), callID.to_i, email, powclass, 
-               opclass, multID.to_i, numOrNull(entID), name, club, numops]) { }
+                opclass, multID.to_i, numOrNull(entID), name, club, numops,
+                @db.boolToDB(isCCE), @db.boolToDB(isMobile), @db.boolToDB(isNew),
+                @db.boolToDB(isSchool), @db.boolToDB(isYL), @db.boolToDB(isYouth)
+              ]) { }
 
     return @db.last_id
+  end
+
+  def addOperator(logID, operator, allocation)
+    @db.query("insert into Operator (logID, callsign, clubAlloc) values (?, ?, ?);",
+              [ logID, operator, allocation ]) { }
   end
 
   def lookupMultiplier(str)
@@ -442,6 +480,7 @@ class ContestDatabase
     logs = logsForContest(contestID)
     if not logs.empty?
       @db.query("delete from QSO where logID in (?);", [logs]) { }
+      @db.query("delete from Scores where logID in (?);", [logs]) { }
       @db.query("delete from QSOExtra where logID in (?));", [logs]) { }
       @db.query("delete from QSOGreen where logID in (?));", [logs]) { }
     end
@@ -571,13 +610,6 @@ class ContestDatabase
     nil
   end
 
-  def numStates(logID)
-    @db.query("select count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = ? and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID where l.id = ? group by l.id order by numstates desc, l.callsign asc limit 1;", [logID, logID]) { |row|
-      return row[0]
-    }
-    0
-  end
-
   def baseCall(callID)
     @db.query("select basecall from Callsign where id = ? limit 1;", [callID]) { |row|
       return row[0]
@@ -596,7 +628,7 @@ class ContestDatabase
     @db.query("select l.callsign, l.name, m.abbrev, e.prefix, l.verifiedPHQSOs, l.verifiedCWQSOs, l.verifiedMultipliers, l.verifiedscore, l.powclass l.opclass, l.contestID from Log as l left join Multiplier as m on m.id = l.multiplierID left join Entity as e on e.id = l.entityID where l.id = ? limit 1;",
               [ logID ]) { |row|
       name = firstName(row[1])
-      return row[0], name, row[2], row[3], lookupTeam(row[10], logID), row[4], row[5], row[6], row[7], row[8], row[9], numStates(logID)
+      return row[0], name, row[2], row[3], lookupTeam(row[10], logID), row[4], row[5], row[6], row[7], row[8], row[9]
     }
     return nil
   end
@@ -606,18 +638,6 @@ class ContestDatabase
               [logID ] ) { |row|
       return row[0] + 2*row[1]
     }
-  end
-
-  def topNumStates(contestID, num)
-    logs = Array.new
-    limit = nil
-    @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = ? and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID group by l.id order by numstates desc, l.callsign asc limit ?, 1;", [ contestID, num-1 ]) { |row|
-      limit = row[2]
-    }
-    @db.query("select l.id, l.callsign, count(distinct m.wasstate) as numstates from Log as l join QSO as q on q.logID = l.id and l.contestID = ? and matchType in ('Full', 'Bye') join Multiplier as m on m.id = q.recvd_multiplierID group by l.id  having numstates >= ? order by numstates desc, l.callsign asc;", [contestID, limit]) { |row|
-      logs << [ row[1], row[2] ]
-    }
-    logs
   end
 
   # In the case of ties, this can return more than num

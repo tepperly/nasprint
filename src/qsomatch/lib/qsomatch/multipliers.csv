@@ -58,13 +58,13 @@
 "A6","DX",391
 "A7","DX",376
 "A9","DX",304
-"AB","AB",1
-"AK","AK",6
-"AL","AL",291
+"AB","AB",1,"Alberta"
+"AK","AK",6,"Alaska"
+"AL","AL",291,"Alabama"
 "ALA","ALAM",291
 "ALAB","AL",291
 "ALABAM","AL",291
-"ALAM","ALAM",291
+"ALAM","ALAM",291,"Alameda"
 "ALAMED","ALAM",291
 "ALAMEDA","ALAM",291
 "ALAS","AK",6
@@ -77,17 +77,17 @@
 "ALM","ALAM",291
 "ALP","ALPI",291
 "ALPE","ALPI",291
-"ALPI","ALPI",291
+"ALPI","ALPI",291,"Alpine"
 "ALPINE","ALPI",291
 "ALT","AB",1
 "AMA","AMAD",291
-"AMAD","AMAD",291
+"AMAD","AMAD",291,"Amador"
 "AMADOR","AMAD",291
 "AMD","AMAD",291
 "ANGELES","LANG",291
 "ANGOLA","DX",401
 "AP","DX",372
-"AR","AR",291
+"AR","AR",291,"Arkansas"
 "ARGENTINA","DX",100
 "ARI","AZ",291
 "ARIZ","AZ",291
@@ -100,11 +100,11 @@
 "AUST","DX",206
 "AUSTRALIA","DX",150
 "AUSTRIA","DX",206
-"AZ","AZ",291
+"AZ","AZ",291,"Arizona"
 "BALEARIC","DX",21
 "BARB","SBAR",291
 "BARBAR","SBAR",291
-"BC","BC",1
+"BC","BC",1,"British Columbia"
 "BELARUS","DX",27
 "BELGIUM","DX",209
 "BELIZE","DX",66
@@ -118,7 +118,7 @@
 "BU","BUTT",291
 "BULGARIA","DX",212
 "BUT","BUTT",291
-"BUTT","BUTT",291
+"BUTT","BUTT",291,"Butte"
 "BUTTE","BUTT",291
 "BV","DX",505
 "BV9","DX",505
@@ -128,9 +128,9 @@
 "C5","DX",422
 "C6","DX",60
 "C9","DX",164
-"CA","CA",291
+"CA","CA",291,"California"
 "CAL","CALA",291
-"CALA","CALA",291
+"CALA","CALA",291,"Calaveras"
 "CALAV","CALA",291
 "CALAVE","CALA",291
 "CALAVERAS","CALA",291
@@ -139,7 +139,7 @@
 "CC","CCOS",291
 "CCO","CCOS",291
 "CCON","CCOS",291
-"CCOS","CCOS",291
+"CCOS","CCOS",291,"Contra Costa"
 "CCOSTA","CCOS",291
 "CCS","CCOS",291
 "CE","DX",112
@@ -148,13 +148,13 @@
 "CLAR","SCLA",291
 "CLARA","SCLA",291
 "CN","DX",446
-"CO","CO",291
+"CO","CO",291,"Colorado"
 "COL","COLU",291
 "COLO","CO",291
 "COLOMBIA","DX",116
 "COLORA","CO",291
 "COLORADO","CO",291
-"COLU","COLU",291
+"COLU","COLU",291,"Colusa"
 "COLUMB","BC",1
 "COLUSA","COLU",291
 "CON","CT",291
@@ -168,7 +168,7 @@
 "CP","DX",104
 "CROATIA","DX",497
 "CRUZ","SCRU",291
-"CT","CT",291
+"CT","CT",291,"Connecticut"
 "CT3","DX",256
 "CU","DX",149
 "CUBA","DX",70
@@ -184,13 +184,13 @@
 "DAK","ND",291
 "DAKOTA","ND",291
 "DC","MD",291
-"DE","DE",291
+"DE","DE",291,"Delaware"
 "DEL NO","DELN",291
 "DEL NORTE","DELN",291
 "DEL","DELN",291
 "DELA","DE",291
 "DELAWA","DE",291
-"DELN","DELN",291
+"DELN","DELN",291,"Del Norte"
 "DEN","DELN",291
 "DIEG","SDIE",291
 "DIEGO","SDIE",291
@@ -214,7 +214,7 @@
 "EL DORADO","ELDO",291
 "EL","ELDO",291
 "ELD","ELDO",291
-"ELDO","ELDO",291
+"ELDO","ELDO",291,"El Dorado"
 "ELDORA","ELDO",291
 "EMA","MA",291
 "ENGLAND","DX",223
@@ -239,7 +239,7 @@
 "FINLAND","DX",224
 "FINNLAND","DX",224
 "FK","DX",512
-"FL","FL",291
+"FL","FL",291,"Florida"
 "FLA","FL",291
 "FLO","FL",291
 "FLOR","FL",291
@@ -253,7 +253,7 @@
 "FRANCE","DX",227
 "FRANCI","SFRA",291
 "FRE","FRES",291
-"FRES","FRES",291
+"FRES","FRES",291,"Fresno"
 "FRESNO","FRES",291
 "FRS","FRES",291
 "FRSN","FRES",291
@@ -265,7 +265,7 @@
 "FW","DX",298
 "FY","DX",63
 "G","DX",223
-"GA","GA",291
+"GA","GA",291,"Georgia"
 "GD","DX",114
 "GEOR","GA",291
 "GEORGI","GA",291
@@ -275,7 +275,7 @@
 "GJ","DX",122
 "GL","GLEN",291
 "GLE","GLEN",291
-"GLEN","GLEN",291
+"GLEN","GLEN",291,"Glenn"
 "GLENN","GLEN",291
 "GLN","GLEN",291
 "GM","DX",279
@@ -299,7 +299,7 @@
 "HC","DX",120
 "HC8","DX",71
 "HH","DX",78
-"HI","HI",110
+"HI","HI",110,"Hawaii"
 "HK","DX",116
 "HK0","DX",228
 "HL","DX",137
@@ -310,33 +310,33 @@
 "HS","DX",387
 "HU","HUMB",291
 "HUM","HUMB",291
-"HUMB","HUMB",291
+"HUMB","HUMB",291,"Humboldt"
 "HUMBOL","HUMB",291
 "HUMBOLDT","HUMB",291
 "HUNGARY","DX",239
 "HV","DX",295
 "HZ","DX",378
 "I","DX",248
-"IA","IA",291
-"ID","ID",291
+"IA","IA",291,"Iowa"
+"ID","ID",291,"Idaho"
 "IDAH","ID",291
 "IDAHO","ID",291
-"IL","IL",291
+"IL","IL",291,"Illinois"
 "ILL","IL",291
 "ILLI","IL",291
 "ILLINO","IL",291
 "IMP","IMPE",291
-"IMPE","IMPE",291
+"IMPE","IMPE",291,"Imperial"
 "IMPER","IMPE",291
 "IMPERI","IMPE",291
 "IMPERIAL","IMPE",291
-"IN","IN",291
+"IN","IN",291,"Indiana"
 "IND","IN",291
 "INDI","IN",291
 "INDIAN","IN",291
 "INDIANA","IN",291
 "INY","INYO",291
-"INYO","INYO",291
+"INYO","INYO",291,"Inyo"
 "IO","IA",291
 "IOWA","IA",291
 "IRELAND","DX"
@@ -370,7 +370,7 @@
 "KENTUC","KY",291
 "KENTUCKY","KY",291
 "KER","KERN",291
-"KERN","KERN",291
+"KERN","KERN",291,"Kern"
 "KG4","DX",105
 "KH0","DX",166
 "KH1","DX",20
@@ -384,7 +384,7 @@
 "KH8","DX",515
 "KH9","DX",297
 "KIN","KING",291
-"KING","KING",291
+"KING","KING",291,"Kings"
 "KINGS","KING",291
 "KL","DX",6
 "KNG","KING",291
@@ -393,14 +393,14 @@
 "KP4","DX",202
 "KP5","DX",43
 "KRN","KERN",291
-"KS","KS",291
-"KY","KY",291
-"LA","LA",291
+"KS","KS",291,"Kansas"
+"KY","KY",291,"Kentucky"
+"LA","LA",291,"Louisiana"
 "LAK","LAKE",291
-"LAKE","LAKE",291
-"LANG","LANG",291
+"LAKE","LAKE",291,"Lake"
+"LANG","LANG",291,"Los Angeles"
 "LAS","LASS",291
-"LASS","LASS",291
+"LASS","LASS",291,"Lassen"
 "LASSEN","LASS",291
 "LATVIA","DX",145
 "LAX","LANG",291
@@ -423,9 +423,9 @@
 "LY","DX",146
 "LZ","DX",212
 "M0","MO",291
-"MA","MA",291
+"MA","MA",291,"Massachusetts"
 "MAD","MADE",291
-"MADE","MADE",291
+"MADE","MADE",291,"Madera"
 "MADERA","MADE",291
 "MAIN","ME",291
 "MAINE","ME",291
@@ -439,8 +439,8 @@
 "MARIPO","MARP",291
 "MARIPOSA","MARP",291
 "MARITIME","MR",1
-"MARN","MARN",291
-"MARP","MARP",291
+"MARN","MARN",291,"Marin"
+"MARP","MARP",291,"Mariposa"
 "MARPOSA","MARP",291
 "MARY","MD",291
 "MARYL","MD",291
@@ -448,21 +448,21 @@
 "MASS","MA",291
 "MASSAC","MA",291
 "MATEO","SMAT",291
-"MB","MB",1
-"MD","MD",291
+"MB","MB",1,"Manitoba"
+"MD","MD",291,"Maryland"
 "MDC","MD",291
 "MDCN","MEND",291
-"ME","ME",291
+"ME","ME",291,"Maine"
 "MEN","MEND",291
-"MEND","MEND",291
+"MEND","MEND",291,"Mendocino"
 "MENDO","MEND",291
 "MENDOC","MEND",291
 "MENDOCINO","MEND",291
 "MER","MERC",291
-"MERC","MERC",291
+"MERC","MERC",291,"Merced"
 "MERCED","MERC",291
 "MEXICO","DX",50
-"MI","MI",291
+"MI","MI",291,"Michigan"
 "MIC","MI",291
 "MICH","MI",291
 "MICHIG","MI",291
@@ -473,57 +473,57 @@
 "MISS","MS",291
 "MISSIS","MS",291
 "MISSOU","MO",291
-"MN","MN",291
-"MO","MO",291
+"MN","MN",291,"Minnesota"
+"MO","MO",291,"Missouri"
 "MOD","MODO",291
-"MODO","MODO",291
+"MODO","MODO",291,"Modoc"
 "MODOC","MODO",291
 "MON","MONO",291
-"MONO","MONO",291
-"MONT","MONT",291
+"MONO","MONO",291,"Mono"
+"MONT","MONT",291,"Monterey"
 "MONTAN","MT",291
 "MONTER","MONT",291
 "MONTEREY","MONT",291
 "MONTERREY","MONT",291
 "MOT","MONT",291
-"MR","MR",1
+"MR","MR",1,"Nova Scotia (Maritimes)"
 "MRN","MARN",291
 "MRP","MARP",291
-"MS","MS",291
-"MT","MT",291
+"MS","MS",291,"Mississippi"
+"MT","MT",291,"Montana"
 "MTRY","MONT",291
 "MX","DX",50
 "NAMBIA","DX",464
 "NAMIBIA","DX",464
 "NAP","NAPA",291
-"NAPA","NAPA",291
+"NAPA","NAPA",291,"Napa"
 "NB","MR",1
-"NC","NC",291
+"NC","NC",291,"North Carolina"
 "NCAR","NC",291
 "NCAROL","NC",291
-"ND","ND",291
+"ND","ND",291,"North Dakota"
 "NDAK","ND",291
-"NE","NE",291
+"NE","NE",291,"Nebraska"
 "NEB","NE",291
 "NEBR","NE",291
 "NEBRAS","NE",291
 "NEBRASKA","NE",291
 "NETHERLANDS","DX",263
 "NEV","NEVA",291
-"NEVA","NEVA",291
+"NEVA","NEVA",291,"Nevada"
 "NEVADA","NEVA",291
 "NEW ZEALAND","DX",170
 "NEW","DX",170
 "NFL","FL",291
-"NH","NH",291
+"NH","NH",291,"New Hampshire"
 "NHAM","NH",291
 "NIGERIA","DX",450
-"NJ","NJ",291
+"NJ","NJ",291,"New Jersey"
 "NJER","NJ",291
 "NJERS","NJ",291
 "NL","MR",1
 "NLI","NY",291
-"NM","NM",291
+"NM","NM",291,"New Mexico"
 "NMEX","NM",291
 "NNJ","NJ",291
 "NNY","NY",291
@@ -533,26 +533,26 @@
 "NORWAY","DX",266
 "NP2","DX",285
 "NS","MR",1
-"NT","NT",1
+"NT","NT",1,"Northern Territories"
 "NTX","TX",291
 "NU","NT",1
-"NV","NV",291
+"NV","NV",291,"Nevada"
 "NWT","NT",1
-"NY","NY",291
+"NY","NY",291,"New York"
 "OA","DX",136
 "OBISPO","SLUI",291
 "OD","DX",354
 "OE","DX",206
 "OH OH","OH",291
-"OH","OH",291
+"OH","OH",291,"Ohio"
 "OH0","DX",5
 "OHIO","OH",291
 "OJ0","DX",167
-"OK","OK",291
+"OK","OK",291,"Oklahoma"
 "OKLA","OK",291
 "OKLAHO","OK",291
 "OM","DX",504
-"ON","ON",1
+"ON","ON",1,"Ontario"
 "ONE","ON",1
 "ONN","ON",1
 "ONS","ON",1
@@ -562,9 +562,9 @@
 "ONTERI","ON",1
 "ONTERIO","ON",1
 "ONYO","INYO",291
-"OR","OR",291
+"OR","OR",291,"Oregon"
 "ORA","ORAN",291
-"ORAN","ORAN",291
+"ORAN","ORAN",291,"Orange"
 "ORANGE","ORAN",291
 "OREG","OR",291
 "OREGON","OR",291
@@ -575,7 +575,7 @@
 "P2","DX",267
 "P4","DX",91
 "P5","DX",344
-"PA","PA",291
+"PA","PA",291,"Pennsylvania"
 "PANAMA","DX",88
 "PE","MR",1
 "PEI","MR",1
@@ -586,11 +586,11 @@
 "PJ5","DX",519
 "PL","PLUM",291
 "PLA","PLAC",291
-"PLAC","PLAC",291
+"PLAC","PLAC",291,"Placer"
 "PLACER","PLAC",291
 "PLCR","PLAC",291
 "PLU","PLUM",291
-"PLUM","PLUM",291
+"PLUM","PLUM",291,"Plumas"
 "PLUMAS","PLUM",291
 "POLAND","DX",269
 "PORTUGAL","DX",272
@@ -603,16 +603,16 @@
 "PY0P","DX",253
 "PY0T","DX",273
 "PZ","DX",140
-"QC","QC",1
+"QC","QC",1,"Quebec"
 "QU","QC",1
 "QUE","QC",1
 "QUEB","QC",1
 "QUEBEC","QC",1
 "R1FJ","DX",61
 "RHODE","RI",291
-"RI","RI",291
+"RI","RI",291,"Rhode Island"
 "RIV","RIVE",291
-"RIVE","RIVE",291
+"RIVE","RIVE",291,"Riverside"
 "RIVERS","RIVE",291
 "RIVERSIDE","RIVE",291
 "RIVR","RIVE",291
@@ -626,7 +626,7 @@
 "SAC","SACR",291
 "SACA","SACR",291
 "SACL","SCLA",291
-"SACR","SACR",291
+"SACR","SACR",291,"Sacramento"
 "SACRAM","SACR",291
 "SACRAMENTO","SACR",291
 "SAN BENITO","SBEN",291
@@ -653,79 +653,79 @@
 "SASK","SK",1
 "SB","SBAR",291
 "SBA","SBAR",291
-"SBAR","SBAR",291
-"SBEN","SBEN",291
-"SBER","SBER",291
+"SBAR","SBAR",291,"Santa Barbara"
+"SBEN","SBEN",291,"San Benito"
+"SBER","SBER",291,"San Bernadino"
 "SBERN","SBER",291
 "SBERNA","SBER",291
 "SBN","SBEN",291
 "SBR","SBER",291
 "SBRN","SBER",291
-"SC","SC",291
+"SC","SC",291,"South Carolina"
 "SCAR","SC",291
 "SCAROL","SC",291
 "SCL","SCLA",291
-"SCLA","SCLA",291
+"SCLA","SCLA",291,"Santa Clara"
 "SCLARA","SCLA",291
 "SCLR","SCLA",291
 "SCLU","SCLA",291
 "SCOTLAND","DX",279
 "SCR","SCRU",291
-"SCRU","SCRU",291
+"SCRU","SCRU",291,"Santa Cruz"
 "SCRUZ","SCRU",291
 "SCRZ","SCRU",291
 "SCV","SCLA",291
-"SD","SD",291
+"SD","SD",291,"South Dakota"
 "SDAK","SD",291
 "SDAKOT","SD",291
 "SDEI","SDIE",291
 "SDG","SDIE",291
 "SDGO","SDIE",291
-"SDIE","SDIE",291
+"SDIE","SDIE",291,"San Diego"
 "SDIEGO","SDIE",291
 "SERBIA","DX",296
 "SF","SFRA",291
 "SFL","FL",291
 "SFO","SFRA",291
-"SFRA","SFRA",291
+"SFRA","SFRA",291,"San Francisco"
 "SFRAN","SFRA",291
 "SFRN","SFRA",291
 "SH","SHAS",291
 "SHA","SHAS",291
-"SHAS","SHAS",291
+"SHAS","SHAS",291,"Shasta"
 "SHASTA","SHAS",291
 "SIDE","SDIE",291
 "SIE","SIER",291
-"SIER","SIER",291
+"SIER","SIER",291,"Sierra"
 "SIERRA","SIER",291
 "SIK","SISK",291
 "SIS","SISK",291
-"SISK","SISK",291
+"SISK","SISK",291,"Siskiyou"
 "SISKIY","SISK",291
 "SISKIYOU","SISK",291
 "SJ","SJOA",291
 "SJAQ","SJOA",291
 "SJO","SJOA",291
-"SJOA","SJOA",291
+"SJOA","SJOA",291,"San Joaquin"
 "SJOAQU","SJOA",291
 "SJOQ","SJOA",291
 "SJQ","SJOA",291
 "SJV","SJOA",291
-"SK","SK",1
+"SK","SK",1,"Saskatchewan"
 "SLO","SLUI",291
 "SLOB","SLUI",291
 "SLOVAK REPUBLIC","DX",504
 "SLOVENIA","DX",499
-"SLUI","SLUI",291
+"SLUI","SLUI",291,"San Luis Obispo"
 "SM","SMAT",291
-"SMAT","SMAT",291
+"SMAT","SMAT",291,"San Mateo"
 "SMATEO","SMAT",291
 "SNJ","NJ",291
 "SOL","SOLA",291
-"SOLA","SOLA",291
+"SOLA","SOLA",291,"Solana"
 "SOLANO","SOLA",291
 "SON","SONO",291
-"SONO","SONO",291
+"SONO","SONO",291,"Sonoma"
 "SONOMA","SONO",291
 "SOUTH AFRICA","DX",462
 "SOUTH CAR","SC",291
@@ -735,14 +735,14 @@
 "SRFA","SFRA",291
 "ST","DX",466
 "STA","STAN",291
-"STAN","STAN",291
+"STAN","STAN",291,"Stanislaus"
 "STANIS","STAN",291
 "STANISLAUS","STAN",291
 "STX","TX",291
 "SU","DX",478
 "SUT","SUTT",291
 "SUTR","SUTT",291
-"SUTT","SUTT",291
+"SUTT","SUTT",291,"Sutter"
 "SUTTER","SUTT",291
 "SV","SACR",291
 "SV5","DX",45
@@ -760,7 +760,7 @@
 "T8","DX",22
 "TA","DX",390
 "TEH","TEHA",291
-"TEHA","TEHA",291
+"TEHA","TEHA",291,"Tehama"
 "TEHAMA","TEHA",291
 "TEHE","TEHA",291
 "TEMA","TEHA",291
@@ -777,27 +777,27 @@
 "TJ","DX",406
 "TK","DX",214
 "TL","DX",408
-"TN","TN",291
+"TN","TN",291,"Tennessee"
 "TONGA","DX",160
 "TOU","TUOL",291
 "TOUL","TUOL",291
 "TR","DX",420
 "TR","DX",420
 "TRI","TRIN",291
-"TRIN","TRIN",291
+"TRIN","TRIN",291,"Trinity"
 "TRINIT","TRIN",291
 "TRINITY","TRIN",291
 "TRN","TRIN",291
 "TT","DX",410
 "TU","TULA",291
 "TUL","TULA",291
-"TULA","TULA",291
+"TULA","TULA",291,"Tulare"
 "TULARE","TULA",291
 "TUO","TUOL",291
-"TUOL","TUOL",291
+"TUOL","TUOL",291,"Tuolumne"
 "TUOLUM","TUOL",291
 "TUOLUMNE","TUOL",291
-"TX","TX",291
+"TX","TX",291,"Texas"
 "TY","DX",416
 "TZ","DX",442
 "UA","DX",15
@@ -809,7 +809,7 @@
 "US VIRGIN IS","DX",285
 "US VIRGIN ISLAND","DX",285
 "US VIRGIN ISLANDS","DX",285
-"UT","UT",291
+"UT","UT",291,"Utah"
 "UTAH","UT",291
 "V2","DX",94
 "V3","DX",66
@@ -818,7 +818,7 @@
 "V6","DX",173
 "V7","DX",168
 "V8","DX",345
-"VA","VA",291
+"VA","VA",291,"Virginia"
 "VA1","MR",1
 "VA2","QC",1
 "VA3","ON",1
@@ -837,7 +837,7 @@
 "VE8","NT",1
 "VE9","MR",1
 "VEN","VENT",291
-"VENT","VENT",291
+"VENT","VENT",291,"Ventura"
 "VENTUR","VENT",291
 "VENTURA","VENT",291
 "VER","VT",291
@@ -866,19 +866,19 @@
 "VP8","DX",241
 "VP9","DX",64
 "VQ9","DX",55
-"VT","VT",291
+"VT","VT",291,"Vermont"
 "VU","DX",324
 "VU4","DX",11
 "VU7","DX",142
 "VY1","NT",1
-"WA","WA",291
+"WA","WA",291,"Washington"
 "WALES","DX",294
 "WAS","WA",291
 "WASH","WA",291
 "WASHIN","WA",291
 "WCF","FL",291
 "WEST","WV",291
-"WI","WI",291
+"WI","WI",291,"Wisconsin"
 "WIS","WI",291
 "WISC","WI",291
 "WISCON","WI",291
@@ -887,12 +887,12 @@
 "WPA","PA",291
 "WS","WI",291
 "WTX","TX",291
-"WV","WV",291
+"WV","WV",291,"West Virginia"
 "WVA","WV",291
 "WVIR","WV",291
 "WVIRG","WV",291
 "WWA","WA",291
-"WY","WY",291
+"WY","WY",291,"Wyoming"
 "WYO","WY",291
 "WYOM","WY",291
 "WYOMIN","WY",291
@@ -911,13 +911,13 @@
 "YNWT","NT",1
 "YO","DX",275
 "YOL","YOLO",291
-"YOLO","YOLO",291
+"YOLO","YOLO",291,"Yolo"
 "YOR","NY",291
 "YORK","NY",291
 "YS","DX",74
 "YT","NT",1
 "YUB","YUBA",291
-"YUBA","YUBA",291
+"YUBA","YUBA",291,"Yuba"
 "YUK","NT",1
 "YUKON","NT",1
 "YV","DX",148
