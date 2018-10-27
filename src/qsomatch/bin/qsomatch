@@ -118,29 +118,39 @@ def loadFiles(args, cdb, contestID, ctl)
         if cab
           if not cab.cleanparse
             $stderr.flush
+            $stdout.flush
             print "Station: #{cab.logcall}:#{filename} failed to parse.\n"
             $stdout.flush
           end
           if not cab.badmults.empty?
             $stderr.flush
+            $stdout.flush
             print "Station: #{cab.logcall}:#{filename} has bad #{cab.badmults.size} multipliers in #{cab.qsos.size} QSO(s).\n"
             print "Multipliers: " + cab.badmults.to_a.join(" ") + "\n"
             $stdout.flush
           end
           if not cab.defaultSentQTH  or cab.defaultSentQTH == "CA"
+            $stderr.flush
+            $stdout.flush
             print "Station: #{cab.logcall}:#{filename} has bad sent QTH #{cab.defaultSentQTH} in the header\n"
+            $stdout.flush
           end
           if not cab.badSentMults.empty?
+            $stderr.flush
+            $stdout.flush
             print "Station: #{cab.logcall}:#{filename} has bad sent QTHs in QSO lines: #{cab.badSentMults.to_a.join(" ")}\n"
+            $stdout.flush
           end
         else
           $stderr.flush
+          $stdout.flush
           print "#{filename} failed to parse at all.\n"
           $stdout.flush
         end
       end
     rescue ArgumentError => e
       $stderr.flush
+      $stdout.flush
       print "#{filename} caused an exception #{e}\n"
       $stdout.flush
     end
