@@ -9,6 +9,7 @@ require_relative 'logset'
 require 'qsomatch'
 require 'jaro_winkler'
 require 'set'
+require 'yaml'
 
 def hillFunc(value, full, none)
   value = value.abs
@@ -263,6 +264,51 @@ class CrossMatch
       return qsoInexactMatch(q1, q2)
     end
     return @db.true.to_s
+  end
+
+  def lookupLog(callsign)
+    result = -1
+    @db.query("select l.id from Log as l join Callsign as c on c.id = l.callID where (l.callsign = ? or c.basecall = ?) and #{@logs.membertest("l.id")} limit 1;", [callsign, callsign]) { |row|
+      return row[0].to_i
+    }
+    return result
+  end 
+
+  def overrideMatches
+    matchCount = 0
+    dupeCount = 0
+    if File.exists?("overrides.yml")
+      yml = YAML.load_file("overrides.yml")
+      if yml.has_key?("matches")
+        yml["matches"].each { |match|
+          if match["match"]
+            q1 = match["qso_one"]
+            q2 = match["qso_two"]
+            logID1 = lookupLog(q1["station"])
+            logID2 = lookupLog(q2["station"])
+            queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 " +
+                       " where q1.logID = "  +logID1.to_s + " and " +
+                       "q2.logID = " + logID2.to_s + " and " +
+                       "q1.frequency = " + q1["frequency"].to_i.to_s + " and "+
+                       "q2.frequency = " + q2["frequency"].to_i.to_s + " and "+
+                       "q1.sent_serial = " + q1["serial"].to_i.to_s + " and " +
+                       "q2.sent_serial = " + q2["serial"].to_i.to_s + " and " +
+                       "q1.sent_multiplierID = " +
+                       @cdb.lookupMultiplier(q1["qth"])[0].to_s + " and " +
+                       "q2.sent_multiplierID = " +
+                       @cdb.lookupMultiplier(q2["qth"])[0].to_s + " and " +
+                       "q1.time = \"" + @db.formattime(q1["time"]) + "\" and " +
+                       "q2.time = \"" + @db.formattime(q2["time"]) + "\" and " +
+                       "q1.logID != q2.logID limit 1;"
+            print queryStr + "\n"
+            num1, num2, dupes = linkQSOs(queryStr, q1["match_type"], q2["match_type"])
+            matchCount += (num1+num2)
+            dupeCount += dupes
+          end
+        }
+      end
+    end
+    return matchCount, dupeCount
   end
 
   def perfectMatch(timediff = PERFECT_TIME_MATCH, 
@@ -777,13 +823,19 @@ class CrossMatch
       unreliableMode << row[0].to_i
     }
     unreliableMode.freeze
-    return unreliableBand, unreliableMode
+    # logs with more than 30% unmatched serial numbers are considered unreliable
+    unreliableSerial = Set.new
+    @db.query("select q.logID, count(*) as numQ, sum(q.sent_serial != q2.recvd_serial and q2.recvd_serial != 9999) as serialMis from QSO as q join QSO as q2 on (q.matchID=q2.id and q2.matchID = q.id) join Log as l1 on q.logID = l1.id where #{@logs.membertest("q.logID")} group by q.logID having serialMis > 1 and serialMis > 0.40*numQ order by q.logID asc;") { |row|
+      unreliableSerial << row[0].to_i
+    }
+    unreliableSerial.freeze
+    return unreliableBand, unreliableMode, unreliableSerial
   end
 
   def initialScore(unreliableClock)
     begin
       @db.begin_transaction
-      unreliableBand, unreliableMode = findUnreliable
+      unreliableBand, unreliableMode, unreliableSerial = findUnreliable
       @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q1.judged_multiplierID, q1.recvd_serial, q1.matchType, q1.band, q1.fixedMode, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial, q1.judged_band, q1.judged_mode from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc;") { |row|
         row[2] = row[2].to_i
         log1Adj = logAdj(row[2])
@@ -818,8 +870,13 @@ class CrossMatch
           end
         end
         if row[6].nil? or ((not (row[14].nil?)) and ((row[6] < (row[14]-1)) or (row[6] > (row[14]+1)))) # serial mismatch
-          notMatch += 1
-          comment << " serial"
+          # don't ding people who don't have a serial number
+          # match with an station known to have an unreliable log
+          # w.r.t. to sent serial numbers
+          if not unreliableSerial.include?(row[12])
+            notMatch += 1
+            comment << " serial"
+          end
         end
         if (notMatch == 0 and row[7] != "Full")
           @db.query("update QSO set matchType='Full' where id = ? limit 1;",

@@ -6,7 +6,10 @@
 
 def dumpLogs(db, contestID)
   db.query("select id, callsign from Log where contestID = ? order by callsign asc;",
-                 [contestID]) { |row|
+           [contestID]) { |row|
+    if (not Dir.exist?("output"))
+      Dir.mkdir("output")
+    end
     open("output/" + row[1].gsub(/[^a-z0-9]/i,'_').to_s.upcase + "_cab.txt", "w:ascii") { |out|
       dumpLog(out, db, row[0])
     }

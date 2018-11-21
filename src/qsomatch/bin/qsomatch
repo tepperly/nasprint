@@ -319,6 +319,7 @@ def powAbbrev(power, long)
   when "HIGH"
     return long ? " HP" : ""
   end
+  ""
 end
 
 def extras(isCCE, isYL, isMOBILE)
@@ -674,6 +675,13 @@ def scoreContest(db, contestID, contestDB)
   end
   cm.wipeScores
   checkCallsigns(db, contestID, $qrzuser, $qrzpwd)
+  num1, dupeCount = cm.overrideMatches
+  print "Override matches: #{num1} (dupes #{dupeCount})\n"
+  $stdout.flush
+  singles = ResolveSingletons.new(db, contestID, contestDB)
+  singleOver = singles.applyOverrides
+  print "Singleton overrides: #{singleOver}\n"
+  $stdout.flush
   num1, dupeCount = cm.perfectMatch
   print "Perfect matches: #{num1} (dupes #{dupeCount})\n"
   $stdout.flush
@@ -737,7 +745,6 @@ def scoreContest(db, contestID, contestDB)
   print "Duplicates of matches: #{d1}\n"
   nil1 = cm.markNIL
   print "Not In Log penalties: #{nil1}\n"
-  singles = ResolveSingletons.new(db, contestID, contestDB)
   print "Resolving singletons\n"
   $stdout.flush
   singles.resolve

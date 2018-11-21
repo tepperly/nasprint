@@ -246,7 +246,8 @@ class Spreadsheet
         specialAward(num, sheet, constraint, region + " New Contester", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isNEW")
         specialAward(num, sheet, constraint, "Single-Op County Expedition", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isCCE")
         specialAward(num, sheet, constraint, "Multi-Single County Expedition", "opclass = 'MULTI_SINGLE' and isCCE")
-        specialAward(num, sheet, constraint, "Multi-Multi County Expedition", "opclass = 'MULTI_MULTI' and isCCE")
+        specialAward(num, sheet, constraint, "Multi-Multi County Expedition", "opclass = 'MULTI_MULTI' and isCCE and powclass = 'HIGH'")
+        specialAward(num, sheet, constraint, "Low Power Multi-Multi County Expedition", "opclass = 'MULTI_MULTI' and isCCE and powclass in ('QRP', 'LOW')")
       end
       firstToAllMults(3, sheet, region + " First to 58", " and " + constraint)
       qsoAward(2, sheet, constraint, "Most Phone QSOs", "verified_ph", "PH")
@@ -256,7 +257,7 @@ class Spreadsheet
 
   def addSpecialAwards
     REGIONS.each { |region, constraint|
-      regionSpecialAwards(2, region, constraint)
+      regionSpecialAwards(3, region, constraint)
     }
   end
 
@@ -723,7 +724,10 @@ class Spreadsheet
                         opsstyle, "Top Multi-Multi", 1, ALLPOWERS,
                         %w{ MULTI_MULTI }, "")
         leftColumnAward(sheet, awardname, header, callsign, qth, num, score,
-                        opsstyle, "Top Multi-Multi Expedition", 1, ALLPOWERS,
+                        opsstyle, "Multi-Multi HP Expedition", 2, %w{ HIGH },
+                        %w{ MULTI_MULTI }, "and l.isCCE")
+        leftColumnAward(sheet, awardname, header, callsign, qth, num, score,
+                        opsstyle, "Multi-Multi LP Expedition", 2, %w{ LOW QRP },
                         %w{ MULTI_MULTI }, "and l.isCCE")
         rightColumnRow = rightColumnAward(sheet, rightColumnRow, titlestyle,
                                           awardname, header, callsign, qth, num,

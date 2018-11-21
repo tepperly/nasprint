@@ -16,10 +16,11 @@ class Call
     @haveLog = haveLog
     @numQSOs = numQSOs
     @otherContest = false
+    @isDX = false
   end
   
-  attr_reader :id, :callsign, :valid, :haveLog, :numQSOs, :otherContest, :illegal
-  attr_writer :otherContest
+  attr_reader :id, :callsign, :valid, :haveLog, :numQSOs, :otherContest, :illegal, :isDX
+  attr_writer :otherContest, :isDX
 
   def to_s
     callsign.to_s
@@ -49,8 +50,11 @@ class ResolveSingletons
       c = Call.new(row[0].to_i, row[1], @db.toBool(row[2]), @db.toBool(row[5]), @db.toBool(row[3]), row[4].to_i)
       callList << c
       ent = loc.lookup(row[1])
-      if ent and ("OC" == ent.continent or OTHERCONTEST_ENTITIES.include?(ent.entityID))  and not c.illegal
-        c.otherContest = true   # might be participant in Oceana DX
+      if ent then
+        if ("OC" == ent.continent or OTHERCONTEST_ENTITIES.include?(ent.entityID))  and not c.illegal
+          c.otherContest = true   # might be participant in Oceana DX
+        end
+        c.isDX = ent.dx?
       end
     }
     return callList
@@ -105,12 +109,12 @@ class ResolveSingletons
                     @logIDs.membertest("q.logID") +
               " and q.matchType = 'None' order by q.id asc;"){ |row|
       call = @callFromID[row[1]]
-      if call
-        if row[2] >= 10 and call.numQSOs <= 2 and not call.otherContest
+      if call then
+        if row[2] >= 10 and call.numQSOs <= 2 and not (call.otherContest or call.isDX) then
           @db.query("update QSO set matchType = 'Unique' where id = ? limit 1;", [row[0]]) { }
           @db.query("update QSOExtra set comment='High serial number a station only worked #{call.numQSOs.to_i} time(s).' where id = ? limit 1;", [row[0]]) { }
         else
-          if call.illegal or (not call.valid and call.numQSOs <= 5)
+          if call.illegal or (not call.valid and call.numQSOs <= 5) then
             # illegal callsign
             list = possibleMatches(call.id, call.callsign, "CW" == row[3], 0.875)
             if list
@@ -214,6 +218,36 @@ class ResolveSingletons
       count += retainMostValuable(row[1], row[2], row[3], row[4])
     }
     print "Done final dupe check (#{count} maked as dupes): #{Time.now.to_s}\n"
+    count
+  end
+
+  def lookupLog(callsign)
+    result = -1
+    @db.query("select l.id from Log as l join Callsign as c on c.id = l.callID where (l.callsign = ? or c.basecall = ?) and #{@logIDs.membertest("l.id")} limit 1;", [callsign, callsign]) { |row|
+      return row[0].to_i
+    }
+    return result
+  end 
+
+  def applyOverrides
+    count = 0
+    if File.exists?("overrides.yml")
+      yml = YAML.load_file("overrides.yml")
+      if yml.has_key?("singletons")
+        yml["singletons"].each { |single|
+          id = lookupLog(single["station"])
+          queryStr = "update QSO set matchType = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\" limit 1;"
+          print queryStr  + "\n"
+          @db.query(queryStr,
+                    [ single["match_type"], id,
+                      @db.formattime(single["time"]), single["frequency"],
+                      single["serial"],
+                      @cdb.lookupMultiplier(single["qth"])[0] ]) { |row|
+          }
+          count += @db.affected_rows
+        }
+      end
+    end
     count
   end
 end

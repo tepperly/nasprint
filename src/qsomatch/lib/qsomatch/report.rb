@@ -503,7 +503,7 @@ class Report
 
   def firstTo58List(contestID, extracon="")
     results = Array.new
-    @db.query("select distinct s.logID, s.multID, m.isCA, m.abbrev, c.basecall from Log as l join Scores as s  on s.logID = l.id join Multiplier as m on m.id = s.multID join Callsign as c on c.id = l.callID where l.contestID = #{contestID} and s.verified_mult = 58 #{extracon} order by l.id asc;") { |row|
+    @db.query("select distinct s.logID, s.multID, m.isCA, m.abbrev, c.basecall from Log as l join Scores as s  on s.logID = l.id join Multiplier as m on m.id = s.multID join Callsign as c on c.id = l.callID where l.contestID = #{contestID} and l.opclass in ('SINGLE','SINGLE_ASSISTED') and s.verified_mult = 58 #{extracon} order by l.id asc;") { |row|
       results << [row[4], row[3], timeTo58(row[0], row[1], @db.toBool(row[2]))]
     }
     results.sort! { |x,y| x[2] <=> y[2] }
