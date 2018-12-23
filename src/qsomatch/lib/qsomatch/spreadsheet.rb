@@ -18,6 +18,9 @@ class Spreadsheet
   LIMIT = 750
   REGIONS = [ [ "California", 'isCA' ],  [ "Non-California", 'not isCA' ] ]
   REGIONS.freeze
+  CLUBSIZES = { "SMALL" => 10,  "MEDIUM" => 35, "LARGE" => nil }
+  CLUBSIZES.freeze
+  
   POWERS = %w{ HIGH LOW QRP }
   POWERS.freeze
   OPCLASSES = %w{ SINGLE SINGLE_ASSISTED MULTI_SINGLE MULTI_MULTI }
@@ -247,7 +250,7 @@ class Spreadsheet
         specialAward(num, sheet, constraint, "Single-Op County Expedition", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isCCE")
         specialAward(num, sheet, constraint, "Multi-Single County Expedition", "opclass = 'MULTI_SINGLE' and isCCE")
         specialAward(num, sheet, constraint, "Multi-Multi County Expedition", "opclass = 'MULTI_MULTI' and isCCE and powclass = 'HIGH'")
-        specialAward(num, sheet, constraint, "Low Power Multi-Multi County Expedition", "opclass = 'MULTI_MULTI' and isCCE and powclass in ('QRP', 'LOW')")
+        specialAward(num, sheet, constraint, "Low Power Multi-Multi County Expedition", "opclass = 'MULTI_MULTI' and isCCE and powclass = 'LOW'")
       end
       firstToAllMults(3, sheet, region + " First to 58", " and " + constraint)
       qsoAward(2, sheet, constraint, "Most Phone QSOs", "verified_ph", "PH")
@@ -261,17 +264,72 @@ class Spreadsheet
     }
   end
 
+  def clubStandings(region, size, logsThatCount)
+    clubs = [ ]
+    @workbook.styles { |s|
+      header = s.add_style(:b => true, :border => {:style => :thin, :color => "000000", :edges => [:bottom]})
+      clubhead = s.add_style(:b => true, :bg_color => "fff0ff", :fg_color => "000000")
+      normalstation = [ nil, s.add_style(:num_fmt => Axlsx::NUM_FMT_PERCENT), nil]
+      overstation = [s.add_style(:bg_color => "b0ffff", :fg_color => "0000"),
+                     s.add_style(:bg_color => "b0ffff", :fg_color => "0000", :num_fmt => Axlsx::NUM_FMT_PERCENT),
+                     s.add_style(:bg_color => "b0ffff", :fg_color => "0000")]
+      @workbook.add_worksheet(:name => (region + " " + size + " Clubs")) { |sheet|
+        @db.query("select distinct c.id, c.fullname from Clubs as c join Operator as o on (o.clubID = c.id) join Log as l on (o.logID = l.id) where l.contestID = ? and l.opclass != 'CHECKLOG' and c.type = ? and #{"California" == region ? "c.isCA" : "not c.isCA"};", [@contestID , size ]) { |clubrow|
+          stations = [ ]
+          score = 0
+          count = 0
+          @db.query("select l.callsign, sum(o.clubAlloc), round(s.verified_score*sum(o.clubAlloc)) as contrib from Log as l join Operator as o on o.logID = l.id join Scores as s on s.logID = l.id join Clubs as c on o.clubID = c.id where l.contestID = ? and c.id = ? and l.opclass != 'CHECKLOG' group by l.id, s.multID, c.id order by contrib desc;", [@contestID, clubrow[0] ]) { |statrow|
+            stations << [ statrow[0].to_s, statrow[1].to_f, statrow[2].to_i ]
+            if not logsThatCount or (count < logsThatCount)
+              score = score + statrow[2].to_i
+            end
+            count = count + 1
+          }
+          clubs << [ clubrow[0], clubrow[1], score, stations ]
+        }
+        clubs.sort! { |x,y| y[2] <=> x[2] }
+        if clubs.length > 0
+          sheet.add_row(["Club/Station", "Percent", "Score"], :style => [header, header, header ])
+        end
+        clubs.each { |club|
+          r = sheet.add_row([club[1], nil, club[2]], :style => [clubhead, nil, clubhead])
+          ind = r.index+1
+          sheet.merge_cells("A#{ind}:B#{ind}")
+          count = 0
+          club[3].each { |station|
+            if not logsThatCount or (count < logsThatCount)
+              styleAR = normalstation
+            else
+              styleAR = overstation
+            end
+            sheet.add_row(station,
+                          :style => styleAR)
+            count = count + 1
+          }
+        }
+      }
+    }
+  end
+
+  def addClubStandings
+    REGIONS.each { |region, constraint|
+      CLUBSIZES.keys.sort.each { |size|
+        clubStandings(region, size, CLUBSIZES[size])
+      }
+    }
+  end
+
   def callWithOp(basecall, logID)
     result = basecall
     count = 0
-    @db.query("select callsign from Operator where logID = ? and substr(callsign,1,1) != '@' and callsign != ?;",
-              [ logID, basecall ]) { |row|
-      result = basecall + " ("+row[0]+" op)"
-      count += 1
-      if count > 1
-        return basecall
-      end
+    list = [ ]
+    @db.query("select callsign from Operator where logID = ? and callsign != 'XX9XXX' and substr(callsign,1,1) != '@';",
+              [ logID  ]) { |row|
+      list << row[0].to_s
     }
+    if list.length == 1 and (basecall != list[0])
+        result = basecall + " ("+list[0]+" op)"
+    end
     result
   end
 
@@ -360,9 +418,9 @@ class Spreadsheet
     count = 0
     ops = [ ]
     if basecall and logID
-      @db.query("select callsign from Operator where logID = ?;", [logID]) { |row|
+      @db.query("select callsign from Operator where logID = ? and callsign != 'XX9XXX';", [logID]) { |row|
         ops << row[0]
-        if not row[0].start_with?("@") and basecall != row[0]
+        if not row[0].start_with?("@")
           count += 1
         end
       }
@@ -727,7 +785,7 @@ class Spreadsheet
                         opsstyle, "Multi-Multi HP Expedition", 2, %w{ HIGH },
                         %w{ MULTI_MULTI }, "and l.isCCE")
         leftColumnAward(sheet, awardname, header, callsign, qth, num, score,
-                        opsstyle, "Multi-Multi LP Expedition", 2, %w{ LOW QRP },
+                        opsstyle, "Multi-Multi LP Expedition", 2, %w{ LOW },
                         %w{ MULTI_MULTI }, "and l.isCCE")
         rightColumnRow = rightColumnAward(sheet, rightColumnRow, titlestyle,
                                           awardname, header, callsign, qth, num,

@@ -20,10 +20,36 @@ def lookupMult(db, id)
   nil
 end
 
+def isCAMult?(db, multID)
+  if multID
+    db.query("select isCA from Multiplier where id = ? limit 1;", [multID]) { |row|
+      return db.toBool(row[0])
+    }
+  end
+  false
+end
+
+def multName(db, multID)
+  if multID
+    db.query("select abbrev from Multiplier where id = ? limit 1;",
+             [ multID ]) { |row|
+      return row[0]
+    }
+  end
+  ""
+end
+
 def fillInComment(db, contestID)
-  db.query("select q1.id, q1.band, q1.fixedMode, q1.time, l1.clockadj, c1.basecall, q1.recvd_serial, qe1.recvd_location, q1.recvd_multiplierID, q2.band, q2.fixedMode, q2.time, l2.clockadj, c2.basecall, q2.sent_serial, qe2.sent_location, q1.judged_multiplierID, q1.matchID, l1.trustedclock, l2.trustedclock from QSO as q1 join QSOExtra as qe1 on q1.id = qe1.id, QSO as q2 join QSOExtra as qe2 on q2.id = qe2.id, Callsign as c1, Callsign as c2, Log as l1, Log as l2 where q1.logID = l1.id  and q2.logID = l2.id and l1.contestID = ? and l2.contestID = ? and (q1.matchType in ('Partial','PartialBye') or (q1.matchType = 'Full' and q1.score < 2)) and q1.matchID is not null and q2.id = q1.matchID and q1.id = q2.matchID and qe1.comment is null and c1.id = q1.recvd_callID and c2.id = q2.sent_callID;",
+  db.query("select q1.id, q1.band, q1.fixedMode, q1.time, l1.clockadj, c1.basecall, q1.recvd_serial, qe1.recvd_location, q1.recvd_multiplierID, q2.band, q2.fixedMode, q2.time, l2.clockadj, c2.basecall, q2.sent_serial, qe2.sent_location, q1.judged_multiplierID, q1.matchID, l1.trustedclock, l2.trustedclock, q1.sent_multiplierID from QSO as q1 join QSOExtra as qe1 on q1.id = qe1.id, QSO as q2 join QSOExtra as qe2 on q2.id = qe2.id, Callsign as c1, Callsign as c2, Log as l1, Log as l2 where q1.logID = l1.id  and q2.logID = l2.id and l1.contestID = ? and l2.contestID = ? and (q1.matchType in ('Partial','PartialBye') or (q1.matchType = 'Full' and q1.score < 2)) and q1.matchID is not null and q2.id = q1.matchID and q1.id = q2.matchID and qe1.comment is null and c1.id = q1.recvd_callID and c2.id = q2.sent_callID;",
            [contestID, contestID]) { |row|
     comments = Array.new
+    if not (isCAMult?(db, row[16]) or isCAMult?(db, row[20]))
+      if (row[8] != row[16])
+        comments <<  "neither station is CA (judged QTH #{multName(db, row[8])})"
+      else
+        comments << "neither station is CA"
+      end
+    end
     if row[5] != row[13]
       comments << "busted call #{row[13]}"
     end
@@ -50,6 +76,13 @@ def fillInComment(db, contestID)
     else
       db.query("update QSOExtra set comment=? where id = ? limit 1;",
                [comments.join(", "), row[0]]) { }
+    end
+  }
+  db.query("select id, judged_multiplierID, recvd_multiplierID from QSO where matchType in ('PartialBye', 'Bye') and score = 0;") { |row|
+    if (row[1] != row[2])
+      db.query("update QSOExtra set comment = 'neither station is CA (judged QTH #{multName(db, row[1])})' where id = ? and comment is null limit 1;", [ row[0] ]) { }
+    else
+      db.query("update QSOExtra set comment = 'neither station is CA' where id = ? and comment is null limit 1;", [ row[0] ]) { }
     end
   }
   db.query("select q.id, e.name, e.continent from QSO as q join Multiplier as m on (q.recvd_multiplierID = m.id and m.abbrev = 'DX') join Entity as e on e.id = q.recvd_entityID where q.matchType in ('Full', 'Bye');") { |row|

@@ -5,6 +5,7 @@ require 'set'
 require 'csv'
 require 'date'
 require_relative 'logset'
+require_relative 'operatingtime'
 
 class Log
   CA_QTH = Set.new(%w{ ALAM ALPI AMAD BUTT CALA CCOS COLU DELN ELDO
@@ -74,14 +75,17 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     @isMOBILE = isMOBILE
     @multipliers = Set.new
     @claimedMults = 0
+    @optime = 0
   end
 
   attr_reader :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
     :numOutsideContest, :numClaimed, :numD1, :numD2, :claimedMults,
-    :greenPH, :greenCW, :greenChecked,:call,:qth, :clockadj, :id, :multID
+    :greenPH, :greenCW, :greenChecked,:call,:qth, :clockadj, :id, :multID,
+    :optime
   attr_writer :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
         :numOutsideContest, :numClaimed, :numD1, :numD2, :claimedMults,
-    :greenPH, :greenCW, :greenChecked
+        :greenPH, :greenCW, :greenChecked,
+        :optime
 
   def addMultiplier(name)
     @multipliers.add(name)
@@ -102,7 +106,7 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
   end
 
   def to_s
-    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isSCHOOL}\",\"#{@isMOBILE}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{@multipliers.size},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isSCHOOL}\",\"#{@isMOBILE}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{@multipliers.size},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -247,6 +251,7 @@ class Report
     @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev, l.isCCE, l.isYOUTH, l.isYL, l.isNEW, l.isSCHOOL, l.isMOBILE, l.entityID, l.powclass, l.clockadj from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID  where contestID = ? order by callsign asc;", [contestID]) { |row|
       log = Log.new(row[0], row[1], row[2], row[5], row[13], @db.toBool(row[6]), @db.toBool(row[7]), @db.toBool(row[8]), @db.toBool(row[9]), @db.toBool(row[10]), @db.toBool(row[11]), row[12], row[3].to_i, row[14].to_i, row[4].to_i)
       scoreLog(row[3], row[4], log)
+      log.optime = operatingTime(@db, row[3])
       logs << log
     }
     return logs
@@ -393,18 +398,20 @@ class Report
       when 'None'
         out << "   This QSO was removed (may indicate bug in scoring program): " << row[10] << "\r\n"
       when 'Full'
-        if row[10].index("time mismatch")
-          out << "   After inter-local clock reconciliation, the time in this log differs from the received stations log by more than 15 minutes.\r\n"
-          if row[11] == 1
-            out << "   Half-credit awarded for this QSO: " << row[10] << "\r\n"
-          elsif row[11] == 0
-            out << "   No credit awarded for this QSO: " << row[10] << "\r\n"
-          end
-        else
-          if row[11] == 1
-            out << "   Half-credit awarded for this QSO: " << row[10] << "\r\n"
-          elsif row[11] == 0
-            out << "   No credit awarded for this QSO: " << row[10] << "\r\n"
+        if row[10]
+          if row[10].index("time mismatch")
+            out << "   After inter-local clock reconciliation, the time in this log differs from the received stations log by more than 15 minutes.\r\n"
+            if row[11] == 1
+              out << "   Half-credit awarded for this QSO: " << row[10] << "\r\n"
+            elsif row[11] == 0
+              out << "   No credit awarded for this QSO: " << row[10] << "\r\n"
+            end
+          else
+            if row[11] == 1
+              out << "   Half-credit awarded for this QSO: " << row[10] << "\r\n"
+            elsif row[11] == 0
+              out << "   No credit awarded for this QSO: " << row[10] << "\r\n"
+            end
           end
         end
       when 'Partial'
@@ -478,7 +485,7 @@ class Report
     ensure
       @db.end_transaction
     end
-    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"QTH Class\",\"Power\",\"CCE?\",\"YOUTH?\",\"YL?\",\"NEW?\",\"SCHOOL?\",\"MOBILE?\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
+    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"QTH Class\",\"Power\",\"On Time(min)\",\"CCE?\",\"YOUTH?\",\"YL?\",\"NEW?\",\"SCHOOL?\",\"MOBILE?\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
     logs.each { |log|
       out.write(log.to_s + "\r\n")
     }

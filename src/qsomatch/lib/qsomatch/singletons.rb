@@ -161,13 +161,14 @@ class ResolveSingletons
     'None' => 11
   }.freeze
 
-  def retainMostValuable(callID, band, mode, logID)
+  def retainMostValuable(callID, band, mode, logID, judgedMultID, sentMultID)
     print "Log #{@cdb.logCallsign(logID)} has a DUPE\n"
     qsos = Array.new
     @db.query("select id, score, time from QSO where " +
               "logID = ? and band = ? and fixedMode = ? and " +
-              "recvd_callID = ? " +
-              "order by time asc, id asc;", [logID, band, mode, callID] ) { |row|
+              "recvd_callID = ? and judged_multiplierID = ? and sent_multiplierID = ?" +
+              "order by time asc, id asc;", [logID, band, mode, callID,
+                                             judgedMultID, sentMultID] ) { |row|
       qsos << [ row[0].to_i, row[1], @db.toDateTime(row[2]) ]
     }
     qsos.each { |q|
@@ -203,7 +204,7 @@ class ResolveSingletons
   def finalDupeCheck
     print "Starting final dupe check: #{Time.now.to_s}\n"
     count = 0
-    @db.query("select min(q1.id), q1.recvd_callID, q1.judged_band, q1.judged_mode, q1.logID, " + 
+    @db.query("select min(q1.id), q1.recvd_callID, q1.judged_band, q1.judged_mode, q1.logID, q1.judged_multiplierID, q1.sent_multiplierID, " + 
               "count(*) as numDupe from QSO as q1, QSO as q2 where " +
               @logIDs.membertest("q1.logID") + " and " + @logIDs.membertest("q2.logID") + 
               " and q1.logID = q2.logID and q1.matchType in ('Full','Bye', 'Partial', 'PartialBye') and " +
@@ -215,7 +216,7 @@ class ResolveSingletons
               "group by q1.logID, q1.sent_multiplierID, q1.recvd_callID, " +
               " q1.judged_multiplierID, q1.judged_band, q1.judged_mode " +
               "order by q1.logID asc;") { |row|
-      count += retainMostValuable(row[1], row[2], row[3], row[4])
+      count += retainMostValuable(row[1], row[2], row[3], row[4], row[5], row[6])
     }
     print "Done final dupe check (#{count} maked as dupes): #{Time.now.to_s}\n"
     count
@@ -236,13 +237,23 @@ class ResolveSingletons
       if yml.has_key?("singletons")
         yml["singletons"].each { |single|
           id = lookupLog(single["station"])
-          queryStr = "update QSO set matchType = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\" limit 1;"
-          print queryStr  + "\n"
-          @db.query(queryStr,
-                    [ single["match_type"], id,
+          if (single.has_key?("judged_multiplier"))
+            queryStr = "update QSO set matchType = ?, judged_multiplierID = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\" limit 1;"
+            list =  [ single["match_type"],
+                      @cdb.lookupMultiplier(single["judged_multiplier"])[0],
+                      id,
                       @db.formattime(single["time"]), single["frequency"],
                       single["serial"],
-                      @cdb.lookupMultiplier(single["qth"])[0] ]) { |row|
+                      @cdb.lookupMultiplier(single["qth"])[0] ]
+          else
+            queryStr = "update QSO set matchType = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\" limit 1;"
+            list =  [ single["match_type"], id,
+                      @db.formattime(single["time"]), single["frequency"],
+                      single["serial"],
+                      @cdb.lookupMultiplier(single["qth"])[0] ]
+          end
+          print queryStr  + "\n"
+          @db.query(queryStr, list ) { |row|
           }
           count += @db.affected_rows
         }

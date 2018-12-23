@@ -356,7 +356,7 @@ end
 def lookupOperatorList(db, callsign, id)
   callsign = AString.new(callsign)
   oplist = [ ]
-  db.query("select callsign from Operator where logID = ? order by id;", [id]) { |row|
+  db.query("select callsign from Operator where logID = ? and callsign != 'XX9XXX' order by id;", [id]) { |row|
     oplist << row[0]
   }
   if not oplist.empty?
@@ -609,7 +609,7 @@ def certificateCSV(db, contestID, contestDB)
       end
       line[13] = row[12]
       ops = [ ]
-      db.query("select callsign from Operator where logID = ? order by id asc;", [row[0].to_i]) { |oprow|
+      db.query("select callsign from Operator where logID = ? and callsign != 'XX9XXX' order by id asc;", [row[0].to_i]) { |oprow|
         ops << oprow[0]
       }
       if not ops.empty?
@@ -647,6 +647,7 @@ def reportContest(db, contestID, contestDB)
   s.addCategories
   s.addWineWinners
   s.addSpecialAwards
+  s.addClubStandings
   s.saveTo("categories_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".xlsx")
   print "Making reverse logs\n"
   r.makeReverseLogs(dir, contestID)

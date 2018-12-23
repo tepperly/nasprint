@@ -29,4 +29,3 @@ def clubList(db, contestID, size, region)
   clubs.sort! { |x,y| y[2] <=> x[2] }
   clubs
 end
-

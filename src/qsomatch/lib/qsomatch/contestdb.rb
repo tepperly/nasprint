@@ -296,6 +296,11 @@ class ContestDatabase
     nil
   end
 
+  def findContestLog(callsign, contestID)
+    @db.query("select l.id from Log as l join Callsign as c on c.id = l.callID where l.contestID = ? and (l.callsign = ? or c.basecall = ? ) limit 1;", [contestID, callsign, callsign]) { |row| return row[0] }
+    nil
+  end
+
   def contestTime(year)
     start = Time.gm(year,10,1,16,0)
     while not start.saturday?
@@ -527,6 +532,15 @@ class ContestDatabase
       }
     end
     result
+  end
+
+  def isMultCA?(multID)
+    if multID
+      @db.query("select isCA from Multiplier where id = ? limit 1;", [multID]) { |row|
+        return @db.toBool(row[0])
+      }
+    end
+    false
   end
 
   def numBandChanges(logID)

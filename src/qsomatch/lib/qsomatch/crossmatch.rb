@@ -272,7 +272,36 @@ class CrossMatch
       return row[0].to_i
     }
     return result
-  end 
+  end
+
+  def setJudged(id, qsoData, matchType)
+    qID = nil
+    @db.query("select id from QSO where logID = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and time = \"" +
+              @db.formattime(qsoData["time"]) + "\" and matchType = ? limit 1;",
+              [ id, qsoData["frequency"].to_i,
+                qsoData["serial"].to_i,
+                @cdb.lookupMultiplier(qsoData["qth"])[0].to_i,
+                matchType ]) { |row|
+      qID = row[0].to_i
+    }
+    if (qID) 
+      if qsoData.has_key?("judged_multiplier")
+        multID = @cdb.lookupMultiplier(qsoData["judged_multiplier"])[0]
+        if multID
+          @db.query("update QSO set judged_multiplierID = ? where id = ? limit 1;",
+                    [ multID.to_i, qID ]) { }
+          @db.query("update QSOExtra set comment = ? where id = ? limit 1;",
+                    ["QSO actually with #{qsoData["judged_multiplier"]}", qID]) { }
+        else
+          print "Unknown multiplier #{qsoData["judged_multiplier"]}\n"
+        end
+      end
+      if qsoData.has_key?("score")
+        @db.query("update QSO set score = ? where id = ? limit 1;",
+                  [ qsoData["score"].to_i, qID ]) { }
+      end
+    end
+  end
 
   def overrideMatches
     matchCount = 0
@@ -302,6 +331,8 @@ class CrossMatch
                        "q1.logID != q2.logID limit 1;"
             print queryStr + "\n"
             num1, num2, dupes = linkQSOs(queryStr, q1["match_type"], q2["match_type"])
+            setJudged(logID1, q1, q1["match_type"])
+            setJudged(logID2, q2, q2["match_type"])
             matchCount += (num1+num2)
             dupeCount += dupes
           end
@@ -419,7 +450,7 @@ class CrossMatch
       @logs.membertest("q1.logID") +
       " and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and " +
       @logs.membertest("q2.logID") +
-      " and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q3.matchID is null and q3.matchType = 'None' and q2.sent_callID = q3.recvd_callID;"
+      " and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q1.sent_multiplierID = q3.sent_multiplierID and q3.matchID is null and q3.matchType = 'None' and q2.sent_callID = q3.recvd_callID;"
     list = Array.new
     @db.query(queryStr) { |row|
       list << row[0].to_i
@@ -810,21 +841,43 @@ class CrossMatch
     return result
   end
 
+  def addUnrel(urset, h, k)
+    if h.has_key?(k) and h[k].respond_to?(:each)
+      h[k].each { |call|
+        id = @cdb.findContestLog(call, @contestID)
+        if id
+          urset << id
+        else
+          print "Can't find station: #{call}\n"
+        end
+      }
+    end
+  end
+
   def findUnreliable
     unreliableBand = Set.new
+    unreliableMode = Set.new
+    unreliableSerial = Set.new
+    if File.exists?("overrides.yml")
+      yml = YAML.load_file("overrides.yml")
+      if yml.has_key?("unreliable")
+        addUnrel(unreliableSerial, yml["unreliable"], "serial_num")
+        addUnrel(unreliableBand, yml["unreliable"], "band")
+        addUnrel(unreliableMode, yml["unreliable"], "mode")
+      end
+      yml = nil
+    end
     # logs with more than 4% band mismatches are consider unreliable
     @db.query("select q.logID, count(*) as numQ, sum(q.band != q2.band) as bandMis from QSO as q join QSO as q2 on (q.matchID=q2.id and q2.matchID = q.id) join Log as l1 on q.logID = l1.id where #{@logs.membertest("q.logID")} group by q.logID having bandMis > 0.04*numQ order by q.logID asc;") { |row|
       unreliableBand << row[0].to_i
     }
     unreliableBand.freeze
-    unreliableMode = Set.new
     # logs with more than 0.5% band mismatches are consider unreliable
     @db.query("select q.logID, count(*) as numQ, sum(q.fixedMode != q2.fixedMode) as modeMis from QSO as q join QSO as q2 on (q.matchID=q2.id and q2.matchID = q.id) join Log as l1 on q.logID = l1.id where #{@logs.membertest("q.logID")} group by q.logID having modeMis > 1 and modeMis > 0.005*numQ order by q.logID asc;") { |row|
       unreliableMode << row[0].to_i
     }
     unreliableMode.freeze
     # logs with more than 30% unmatched serial numbers are considered unreliable
-    unreliableSerial = Set.new
     @db.query("select q.logID, count(*) as numQ, sum(q.sent_serial != q2.recvd_serial and q2.recvd_serial != 9999) as serialMis from QSO as q join QSO as q2 on (q.matchID=q2.id and q2.matchID = q.id) join Log as l1 on q.logID = l1.id where #{@logs.membertest("q.logID")} group by q.logID having serialMis > 1 and serialMis > 0.40*numQ order by q.logID asc;") { |row|
       unreliableSerial << row[0].to_i
     }
@@ -836,7 +889,9 @@ class CrossMatch
     begin
       @db.begin_transaction
       unreliableBand, unreliableMode, unreliableSerial = findUnreliable
-      @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q1.judged_multiplierID, q1.recvd_serial, q1.matchType, q1.band, q1.fixedMode, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial, q1.judged_band, q1.judged_mode from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc;") { |row|
+      # non-CA working non-CA QSOs get zero score
+      @db.query("update QSO set score = 0 where score is null and id in (select q.id from QSO as q join Multiplier as m1 on m1.id = q.sent_multiplierID join Multiplier as m2 on m2.id = q.judged_multiplierID where (not (m1.isCA or m2.isCA)) and #{@logs.membertest("logID")});")  { }
+      @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q1.judged_multiplierID, q1.recvd_serial, q1.matchType, q1.band, q1.fixedMode, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial, q1.judged_band, q1.judged_mode, q1.sent_multiplierID from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and q1.score is null and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc;") { |row|
         row[2] = row[2].to_i
         log1Adj = logAdj(row[2])
         row[12] = row[12].to_i
@@ -898,8 +953,8 @@ class CrossMatch
         @db.query("update QSO set score = ? where id = ? limit 1;",
                   [ score, row[0]])
       }
-      @db.query("update QSO set score = 2 where #{@logs.membertest("logID")} and matchType = 'Bye';")
-      @db.query("update QSO set score = 1 where #{@logs.membertest("logID")} and matchType='PartialBye';")
+      @db.query("update QSO set score = 2 where #{@logs.membertest("logID")} and matchType = 'Bye' and score is null;")
+      @db.query("update QSO set score = 1 where #{@logs.membertest("logID")} and matchType='PartialBye' and score is null;")
       @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType in ('None', 'Unique', 'Dupe', 'OutsideContest', 'Removed');")
       @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType = 'NIL';")
     ensure
