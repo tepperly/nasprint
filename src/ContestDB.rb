@@ -5,6 +5,7 @@
 #
 require 'csv'
 require 'set'
+require 'cabrillo'
 
 
 class ContestDatabase
@@ -247,7 +248,7 @@ class ContestDatabase
         return row[0].to_i
       }
       if create
-        @db.query("insert into Contest (name, year) values (\"#{@db.escape(name)}\", \"#{year.to_i}\");")
+        @db.query("insert into Contest (name, year, start, end) values (\"#{@db.escape(name)}\", \"#{year.to_i}\", \"#{CONTEST_START.strftime("%Y-%m-%d %H:%M:%S")}\", \"#{CONTEST_END.strftime("%Y-%m-%d %H:%M:%S")}\");")
         return @db.last_id
       end
     end
