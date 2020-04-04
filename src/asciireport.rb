@@ -166,6 +166,15 @@ def teamReport(cdb, contestID)
   }
 end
 
+def writeCertificateCSV(db, contestID)
+  CSV.open("certificate.csv", "w") { |csvout|
+    res = db.query("select email, callsign, trim(name), opclass, 'UNUSED', abbrev, DENSE_RANK() OVER (PARTITION BY opclass ORDER BY verifiedscore DESC) as classRank, DENSE_RANK() OVER (PARTITION BY multiplierId ORDER BY verifiedscore DESC) as MultiplierRank, verifiedQSOs, verifiedMultipliers, verifiedscore FROM (Log left outer join Multiplier on Log.multiplierID = Multiplier.id) where contestID = #{contestID} ORDER by opclass DESC, verifiedscore DESC;")
+    res.each(:as => :array) { |row|
+      csvout << row
+    }
+  }
+end
+
 if $name and $year
   begin
     db = makeDB
@@ -205,6 +214,7 @@ if $name and $year
     open("toxic_" + $name.gsub(/[^a-z0-9]/i,"_") + $year.to_s + ".csv", "w:ascii") { |out|
       toxicReport(out, cdb, contestID)
     }
+    writeCertificateCSV(db, contestID)
   ensure
     db.close
   end
