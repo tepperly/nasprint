@@ -15,6 +15,8 @@ class Spreadsheet
     @workbook = @package.workbook
   end
 
+  NUM_WINE_WINNERS=21
+
   LIMIT = 750
   REGIONS = [ [ "California", 'isCA' ],  [ "Non-California", 'not isCA' ] ]
   REGIONS.freeze
@@ -335,7 +337,7 @@ class Spreadsheet
 
   def wineWinners(region)
     result = Array.new
-    @db.query("select l.id, c.basecall, m.abbrev, s.verified_score from Scores as s,Log as l, Multiplier as m, Callsign as c where s.logID = l.id and l.contestID = ? and s.multID = m.id and l.callID = c.id and l.opclass in ('SINGLE', 'SINGLE_ASSISTED') and #{region} order by s.verified_score desc limit 20;",
+    @db.query("select l.id, c.basecall, m.abbrev, s.verified_score from Scores as s,Log as l, Multiplier as m, Callsign as c where s.logID = l.id and l.contestID = ? and s.multID = m.id and l.callID = c.id and l.opclass in ('SINGLE', 'SINGLE_ASSISTED') and #{region} order by s.verified_score desc limit #{NUM_WINE_WINNERS};",
               [@contestID ]) { |row|
       result << [ callWithOp(row[1], row[0].to_i), row[2], row[3] ]
     }
@@ -377,7 +379,7 @@ class Spreadsheet
         sheet["F3:I3"].each { |c| c.style = regstyle["Non-California"] }
         caWinners = wineWinners("isCA")
         nonCAWinners = wineWinners("not isCA")
-        20.times { |i|
+        NUM_WINE_WINNERS.times { |i|
           row = Array.new(9)
           row[0] = (i+1).to_s
           if caWinners[i]

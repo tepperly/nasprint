@@ -54,6 +54,15 @@ def lookupQSO(db, id, timeadj=0)
 end
 
 
+def linkJudgedCallID(db, q1id, q2id)
+  db.query("select sent_callID from QSO where id = ? limit 1;", [q2id]) { |row|
+    db.query("update QSO set judged_recvdID = ? where id = ? limit 1;", [row[0].to_i, q1id])
+  }
+  db.query("select sent_callID from QSO where id = ? limit 1;", [q1id]) { |row|
+    db.query("update QSO set judged_recvdID = ? where id = ? limit 1;", [row[0].to_i, q2id])
+  }
+end
+
 class Match
   include Comparable
   def initialize(q1, q2, metric=0, metric2=0)
@@ -86,6 +95,7 @@ class Match
       if 1 == db.affected_rows
         db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q1.id, type2, @q2.id]) { }
         if 1 == db.affected_rows
+          linkJudgedCallID(db, @q1.id, @q2.id)
           return type1, type2
         else
           db.rollback
@@ -114,7 +124,7 @@ class CrossMatch
   def restartMatch
     begin
       @db.begin_transaction
-      @db.query("update QSO set matchID = NULL, matchType = 'None', judged_multiplierID = NULL, judged_band = NULL, judged_mode = NULL, score = NULL where #{@logs.membertest("logID")};") { }
+      @db.query("update QSO set matchID = NULL, matchType = 'None', judged_multiplierID = NULL, judged_band = NULL, judged_mode = NULL, judged_recvdID = null, score = NULL where #{@logs.membertest("logID")};") { }
       @db.query("update QSOExtra set comment = NULL where #{@logs.membertest("logID")};") { }
       @db.query("update Log set verifiedscore = null, verifiedPHQSOs = null, verifiedCWQSOs = null, verifiedMultipliers = null where #{@logs.membertest("id")};") { }
     ensure
@@ -130,9 +140,9 @@ class CrossMatch
     return "#{qso}.matchID is null and #{qso}.matchType = \"None\""
   end
 
-  def timeMatch(t1, t2, timediff)
+  def timeMatch(t1, adj1, t2, adj2, timediff)
     return "(abs(" +
-      @db.timediff("MINUTE", t1, t2) + ") <= " + timediff.to_s + ")"
+      @db.adjtimediff("MINUTE", t1, adj1, t2, adj2) + ") <= " + timediff.to_s + ")"
   end
 
   def qsoExactMatch(q1,q2)
@@ -145,8 +155,9 @@ class CrossMatch
       q2 + ".fixedMode))"
   end
 
-  def qsoMatch(q1, q2, timediff=PERFECT_TIME_MATCH)
-    return timeMatch("q1.time", "q2.time", timediff) 
+  def qsoMatch(q1, q2, l1, l2, timediff=PERFECT_TIME_MATCH)
+    return timeMatch(q1 + ".time", l1 + ".clockadj",
+                     q2+".time", l2 + ".clockadj", timediff) 
   end
 
   def serialCmp(s1, s2, range)
@@ -228,6 +239,7 @@ class CrossMatch
           else
             count1 += 1
             count2 += 1
+            linkJudgedCallID(@db, row[0].to_i, row[1].to_i)
             found = true
           end
         end
@@ -350,17 +362,19 @@ class CrossMatch
       " on (" +  exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
       exchangeExactMatch("q2.recvd", "q1.sent") + " and " +
       modeBandMatch("q1", "q2", modeAndBand)  +
-      ") where " +
+      "), Log as l1, Log as l2 where " +
+      "l1.id = q1.logID and l2.id = q2.logID and " +
       @logs.membertest("q1.logID") + " and " +
       @logs.membertest("q2.logID") + " and " +
       "q1.logID != q2.logID and q1.id < q2.id and "  +
       exchangeMatch("q1.recvd", "q2.sent") + " and " +
       exchangeMatch("q2.recvd", "q1.sent") + " and " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
-      qsoMatch("q1", "q2", timediff) +
+      qsoMatch("q1", "q2", "l1", "l2", timediff) +
       " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(" +
-      @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
+      @db.adjtimediff("MINUTE", "q1.time", "l1.clockadj",
+                      "q2.time", "l2.clockadj") + ") asc;"
     print queryStr + "\n"
     if $explain
       @db.query("explain " + queryStr) { |row|
@@ -382,16 +396,18 @@ class CrossMatch
       exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
       modeBandMatch("q1", "q2", modeAndBand) +
       " and q2.recvd_callID = q1.sent_callID ) " +
-      "where " +
+      ", Log as l1, Log as l2 where " +
+      "l1.id = q1.logId and l2.id = q2.logID and " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
       @logs.membertest("q1.logID") + " and " +
       @logs.membertest("q2.logID") + " and " +
       " q1.logID != q2.logID " +
-      " and " + qsoMatch("q1", "q2", timediff) + " and " +
+      " and " + qsoMatch("q1", "q2", "l1", "l2", timediff) + " and " +
       exchangeMatch("q1.recvd", "q2.sent") +
       " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(" +
-      @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc;"
+      @db.adjtimediff("MINUTE", "q1.time", "l1.clockadj",
+                      "q2.time", "l2.clockadj") + ") asc;"
     print "Partial match test #{modeBandDesc(modeAndBand)}(#{timediff} min tolerance): #{Time.now.to_s}\n"
     print queryStr + "\n"
     if $explain
@@ -480,16 +496,18 @@ class CrossMatch
 
   def basicMatch(timediff = PERFECT_TIME_MATCH,
                  modeAndBand = :perfect)
-    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2 where " +
+    queryStr = "select q1.id, q2.id from QSO as q1, QSO as q2, Log as l1, Log as l2 where " +
+      "l1.id = q1.logID and l2.id = q2.logID and " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
       @logs.membertest("q1.logID") + " and " +
       @logs.membertest("q2.logID") + " and " +
       "q1.logID < q2.logID " +
-      " and " + qsoMatch("q1", "q2", timediff) + " and " +
+      " and " + qsoMatch("q1", "q2", "l1", "l2", timediff) + " and " +
       modeBandMatch("q1", "q2", modeAndBand) + " and " +
       " q1.sent_callID = q2.recvd_callID and q2.sent_callID = q1.recvd_callID " +
       " order by abs(" +
-      @db.timediff("MINUTE", "q1.time", "q2.time") + ") asc, " +
+      @db.adjtimediff("MINUTE", "q1.time", "l1.clockadj",
+                      "q2.time", "l2.clockadj") + ") asc, " +
       " (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc;"
     print "Basic match test phase #{modeBandDesc(modeAndBand)}(#{timediff} min tolerance): #{Time.now.to_s}\n"
     print queryStr + "\n"

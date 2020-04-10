@@ -6,6 +6,7 @@ require 'csv'
 require 'date'
 require_relative 'logset'
 require_relative 'operatingtime'
+require_relative 'overrides'
 
 class Log
   CA_QTH = Set.new(%w{ ALAM ALPI AMAD BUTT CALA CCOS COLU DELN ELDO
@@ -72,6 +73,8 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     @isYL = isYL
     @isNEW = isNEW
     @isSCHOOL = isSCHOOL
+    @scoreoverride = nil
+    @multoverride = nil
     @isMOBILE = isMOBILE
     @multipliers = Set.new
     @claimedMults = 0
@@ -91,12 +94,26 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     @multipliers.add(name)
   end
 
+  def nummultipliers=(val)
+    @multoverride = val
+  end
+  
   def nummultipliers
+    if @multoverride
+      return @multoverride
+    end
     @multipliers.size
   end
 
+  def score=(val)
+    @scoreoverride = val
+  end
+
   def score
-    ( numPH*2 + numCW*3) * nummultipliers
+    if @scoreoverride
+      return @scoreoverride
+    end
+    return ( numPH*2 + numCW*3) * nummultipliers
   end
 
   def ls_line
@@ -114,6 +131,7 @@ class Report
   def initialize(db, contestID)
     @db = db
     @contestID = contestID
+    @overrides = Overrides.new("overrides.yml")
   end
 
   def lookupMultiplier(id)
@@ -244,6 +262,13 @@ class Report
     claimed = Set.new
     calcMultipliers(id, log, multID, claimed)
     log.claimedMults = claimed.length
+    ovr = @overrides.lookupScoreOverrides
+    if ovr.has_key?(log.call) and ovr[log.call]["multiplier"] == log.qth
+      log.numPH = ovr[log.call]["verifiedph"]
+      log.numCW = ovr[log.call]["verifiedcw"]
+      log.score = ovr[log.call]["verifiedscore"]
+      log.nummultipliers = ovr[log.call]["verifiedmults"]
+    end
   end
 
   def scoredLogs(contestID)
@@ -478,9 +503,9 @@ class Report
       logs.each { |log|
         @db.query("update Log set verifiedscore = ?, verifiedCWQSOs = ?, verifiedPHQSOs = ?, verifiedMultipliers = ? where id = ? limit 1;",
                   [log.score, log.numCW, log.numPH, log.nummultipliers, log.id]) { }
-        @db.query("delete from Scores where logID = ? and multID = ?;", [log.id, log.multID])
+        @db.query("delete from Scores where logID = ? and multID = ?;", [log.id, log.multID]) { }
         @db.query("insert into Scores (logID, multID, verified_score, verified_mult, verified_ph, verified_cw) values (?, ?, ?, ?, ?, ?);",
-                  [log.id, log.multID, log.score, log.nummultipliers, log.numPH, log.numCW]) { }
+                  [log.id, log.multID, log.score, log.nummultipliers, log.numPH, log.numCW ] ) { }
       }
     ensure
       @db.end_transaction

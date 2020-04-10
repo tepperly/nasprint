@@ -232,33 +232,65 @@ class ResolveSingletons
 
   def applyOverrides
     count = 0
-    if File.exists?("overrides.yml")
-      yml = YAML.load_file("overrides.yml")
-      if yml.has_key?("singletons")
-        yml["singletons"].each { |single|
-          id = lookupLog(single["station"])
-          if (single.has_key?("judged_multiplier"))
-            queryStr = "update QSO set matchType = ?, judged_multiplierID = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\" limit 1;"
-            list =  [ single["match_type"],
-                      @cdb.lookupMultiplier(single["judged_multiplier"])[0],
-                      id,
-                      @db.formattime(single["time"]), single["frequency"],
-                      single["serial"],
-                      @cdb.lookupMultiplier(single["qth"])[0] ]
-          else
-            queryStr = "update QSO set matchType = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\" limit 1;"
-            list =  [ single["match_type"], id,
-                      @db.formattime(single["time"]), single["frequency"],
-                      single["serial"],
-                      @cdb.lookupMultiplier(single["qth"])[0] ]
-          end
-          print queryStr  + "\n"
-          @db.query(queryStr, list ) { |row|
+    overrides = Overrides.new("overrides.yml")
+    chklogs = overrides.lookupChecklogs
+    chklogs.each { |call|
+      mults = overrides.lookupMultiplier(call)
+#      print call.to_s + " " + mults.to_s + "\n"
+      if mults and not mults.empty?
+        found=false
+        @db.query("select id from Callsign where contestID = ? and basecall = ? limit 1;",
+                  [ @contestID, call ] ) { |row|
+          found=true
+          callID = row[0]
+          mults.each { |qth|
+            multID = @cdb.lookupMultiplier(qth)
+            if multID
+              begin
+#                print "Adding #{call} #{@contestID} #{multID[0]} #{callID}\n"
+                @db.query("insert into Checklog (contestID, multiplierID, callID) values (?, ?, ?);",
+                          [ @contestID, multID[0], callID ]) { }
+              rescue SQLite3::Exception => e
+                print "SQL error\n"
+              end
+            else
+              print "Can't find multiplier #{qth}\n"
+            end
           }
-          count += @db.affected_rows
         }
+        if not found
+          print "Can't find callsign #{call}\n"
+        end
+      else
+        print "No multipliers for checklog #{call}\n"
       end
-    end
+    }
+    overrides.getSingletons.each  { |single|
+      id = lookupLog(single["station"])
+      if (single.has_key?("judged_multiplier"))
+        queryStr = "update QSO set matchType = ?, judged_multiplierID = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\" limit 1;"
+        list =  [ single["match_type"],
+                  @cdb.lookupMultiplier(single["judged_multiplier"])[0],
+                  id,
+                  @db.formattime(single["time"]), single["frequency"],
+                  single["serial"],
+                  @cdb.lookupMultiplier(single["qth"])[0] ]
+      else
+        queryStr = "update QSO set matchType = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\" limit 1;"
+        list =  [ single["match_type"], id,
+                  @db.formattime(single["time"]), single["frequency"],
+                  single["serial"],
+                  @cdb.lookupMultiplier(single["qth"])[0] ]
+      end
+      print queryStr  + "\n"
+      @db.query(queryStr, list ) { |row|
+      }
+      numaff = @db.affected_rows
+      count += numaff
+      if numaff <= 0
+        print "This entry didn't match anything:\n" + single.to_yaml + "\n"
+      end
+    }
     count
   end
 end

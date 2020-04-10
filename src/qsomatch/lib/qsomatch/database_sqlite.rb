@@ -80,6 +80,12 @@ class DatabaseSQLite
     "HOUR" => "(60.0*60.0)"
   }
 
+  def adjtimediff(units, t1, adj1, t2, adj2)
+    "(((strftime('%s'," + t1 + ") + " + adj1.to_s +
+      ") - (strftime('%s'," + t2 + ") + " + adj2.to_s + "))/" +
+      DIFF_DIVISOR[units] + ")"
+  end
+
   def timediff(units, time1, time2)
     "((strftime('%s'," + time1 + ") - strftime('%s'," + time2 + "))/" +
       DIFF_DIVISOR[units] + ")"

@@ -43,7 +43,7 @@ class ContestDatabase
       createMultiplierTable
     end
     createMultiplierAlias
-    if not (tables.include?("Callsign") and tables.include?("Log"))
+    if not (tables.include?("Callsign") and tables.include?("Log") and tables.include?("Checklog"))
       createLogTable
     end
     if not (tables.include?("Scores"))
@@ -192,6 +192,8 @@ class ContestDatabase
     # table of callsigns converted to base format
     @db.query("create table if not exists Callsign (id integer primary key #{@db.autoincrement}, contestID integer not null, basecall varchar(#{CHARS_PER_CALL}) not null, logrecvd bool, validcall bool, illegalcall bool not null default #{@db.false});") { }
     @db.query("create index if not exists bcind on Callsign (contestID, basecall);") { }
+    @db.query("create table if not exists Checklog (id integer primary key #{@db.autoincrement}, contestID integer not null, callID integer not null, multiplierID integer not null);") { }
+    @db.query("create unique index if not exists ccind on Checklog (contestID, multiplierID, callID);") { }
     if @db.has_enum?
       @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass enum('QRP', 'LOW', 'HIGH'), opclass enum('CHECKLOG', 'SINGLE', 'SINGLE_ASSISTED', 'MULTI_SINGLE', 'MULTI_MULTI'), numops int, verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, trustedclock bool not null default #{@db.false}, name varchar(128), club varchar(128), isCCE bool not null default #{@db.false}, isYOUTH bool not null default #{@db.false}, isYL bool not null default #{@db.false}, isNEW bool not null default #{@db.false}, isSCHOOL bool not null default #{@db.false}, isMOBILE bool not null default #{@db.false});") { }
     else
@@ -237,13 +239,13 @@ class ContestDatabase
       @db.query("create table if not exists QSO (id integer primary key #{@db.autoincrement}, logID integer not null, frequency integer, band enum('241G','142G','119G','75G','47G','24G','10G','5.7G','3.4G','2.3G','1.2G','902','432','222','2m','6m','10m','15m','20m', '40m', '80m','160m', 'unknown') default 'unknown', fixedMode enum('PH', 'CW', 'FM', 'RY'), time datetime, " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "sent") + ", " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "recvd") +
-                ", judged_multiplierID integer, judged_band enum('241G','142G','119G','75G','47G','24G','10G','5.7G','3.4G','2.3G','1.2G','902','432','222','2m','6m','10m','15m','20m', '40m', '80m','160m', 'unknown'), judged_mode enum('PH', 'CW', 'FM', 'RY') , matchID integer, matchType enum('None','Full','Bye', 'PartialBye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None', score integer);") { }
+                ", judged_multiplierID integer, judged_band enum('241G','142G','119G','75G','47G','24G','10G','5.7G','3.4G','2.3G','1.2G','902','432','222','2m','6m','10m','15m','20m', '40m', '80m','160m', 'unknown'), judged_mode enum('PH', 'CW', 'FM', 'RY') , judged_recvdID integer, matchID integer, matchType enum('None','Full','Bye', 'PartialBye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial') not null default 'None', score integer);") { }
       @db.query("create table if not exists QSOGreen (id integer primary key, logID integer not null, status enum('Automatic', 'Unscored', 'Manual', 'Override', 'BadDupe') not null default 'Unscored', score enum('Bye', 'FullMatch', 'MatchZero', 'MatchOne', 'MatchTwo', 'Dupe', 'Unscored') not null default 'Unscored',  uniqueQSO bool not null default false, correctQTH char(4),  correctNum integer, correctMode enum('CW', 'PH'),  correctBand char(4), correctCall varchar(14), NILqso bool not null default false, isDUPE bool not null default false, comment varchar(100));") { }
     else
       @db.query("create table if not exists QSO (id integer primary key #{@db.autoincrement}, logID integer not null, frequency integer, band char(7) default 'unknown', fixedMode char(2), time datetime, " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "sent") + ", " +
                 exchangeFields(EXCHANGE_FIELD_TYPES, "recvd") +
-                ", judged_multiplierID integer, judged_band char(7), judged_mode char(2), matchID integer, matchType char(17) not null default 'None', score integer);") { }
+                ", judged_multiplierID integer, judged_band char(7), judged_mode char(2), judged_recvdID integer, matchID integer, matchType char(17) not null default 'None', score integer);") { }
       @db.query("create table if not exists QSOGreen (id integer primary key, logID integer not null, status char(9) not null default 'Unscored', score char(9) not null default 'Unscored', uniqueQSO bool not null default false, correctQTH char(4), correctNum integer, correctMode char(2), correctBand char(4), correctCall varchar(14), NILqso bool not null default false, isDUPE bool not null default false, comment varchar(100));") { }
     end
     @db.query("create index if not exists matchind on QSO (matchType);") { }
@@ -372,6 +374,17 @@ class ContestDatabase
     return nil, nil
   end
 
+  def lookupMultipliers(list)
+    results = [ ]
+    list.each { |str|
+      id, entID = lookupMultiplier(str)
+      if id and entID
+        results.push([id, entID])
+      end
+    }
+    return results.empty? ? nil : results
+  end
+
   def createOverrides
     @db.query("create table if not exists Overrides (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, multiplierID integer not null, entityID integer not null);") { }
     @db.query("create index if not exists callindex on Overrides (callsign);") { }
@@ -492,6 +505,7 @@ class ContestDatabase
     clearTeams(contestID)
     @db.query("delete from Callsign where contestID = ?;" [ contestID ]) { }
     @db.query("delete from Log where contestID = ?;", [ contestID ]) { }
+    @db.query("delete from Checklog where contestID = ?;", [ contestID ] ) { }
   end
 
   def removeWholeContest(contestID)

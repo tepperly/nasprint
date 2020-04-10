@@ -42,6 +42,7 @@ opts = GetoptLong.new(
                       [ '--new', '-N', GetoptLong::NO_ARGUMENT],
                       [ '--check', '-C', GetoptLong::NO_ARGUMENT],
                       [ '--check-dupe', '-c', GetoptLong::NO_ARGUMENT],
+                      [ '--canada', '-v', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--category-check', '-A', GetoptLong::NO_ARGUMENT],
                       [ '--calc-clock-adj', '-x', GetoptLong::NO_ARGUMENT],
                       [ '--no-init', '-I', GetoptLong::NO_ARGUMENT],
@@ -62,12 +63,16 @@ opts = GetoptLong.new(
                       )
 
 cmddbopts = Hash.new
+canadacsv=nil
 opts.each { |opt, arg|
   case opt
   when '--new'
     $create = true
   when '--calc-clock-adj'
     $skipclock = false
+  when '--canada'
+    $action = :canada
+    canadacsv=arg
   when '--no-init'
     $readinit = false
   when '--qrzuser'
@@ -393,12 +398,24 @@ def markAsRecord(regionName, row, opclass, powclass)
   end
 end
 
+def addExtraChecklogs(db, curGroup, curName, contestID)
+  db.query("select distinct c.basecall from Checklog as chk, Callsign as c on chk.callID = c.id, Multiplier as m on m.id = chk.multiplierID where chk.contestID = ? and c.contestID = ? and m.fullname = ? order by c.basecall asc;",
+           [ contestID, contestID, curName ]) { |row|
+    curGroup.rows << [ row[0], checkFill,checkFill,checkFill,checkFill,checkFill,
+                       abbrevType("CHECKLOG", "HIGH") ]
+  }
+end
+
+
 def makeGroups(db, contestID, extraCon, recdb)
   groups = [ ]
   curName = nil
   curGroup = nil
   db.query("select m.fullname, l.callsign, l.opclass, l.powclass, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.isCCE, l.isYL, l.isMOBILE, l.id, m.abbrev from Multiplier as m left outer join (Log as l join Scores as s on l.id = s.logID and  l.contestID = ?) on s.multID = m.id where #{extraCon} order by m.fullname asc, CASE l.opclass WHEN 'SINGLE' THEN 0 WHEN 'SINGLE_ASSISTED' THEN 0 WHEN 'MULTI_SINGLE' THEN 1 WHEN 'MULTI_MULTI' THEN 2  WHEN 'CHECKLOG' THEN 10 END asc, s.verified_score desc, l.callsign asc;", [contestID]) { |row|
     if row[0] != curName or row[0].nil?
+      if curGroup and curName
+        addExtraChecklogs(db, curGroup, curName, contestID)
+      end
       curName = row[0].to_s
       curGroup = Group.new([hdrl(curName),hdr("CW"),hdr("PH"), hdr("Total"), hdr("Mult"), hdr("Score"), hdr("Type")],
                            [0, 250, 290, 330, 370, 410, 470],
@@ -425,6 +442,9 @@ def makeGroups(db, contestID, extraCon, recdb)
       curGroup.rows << "No logs submitted for scoring"
     end
   }
+  if curGroup and curName
+    addExtraChecklogs(db, curGroup, curName, contestID)
+  end
   return groups
 end
 
@@ -638,6 +658,8 @@ def reportContest(db, contestID, contestDB)
     recdb = makeDB({'type' => 'sqlite3', 'filename' => $recordsdb})
   end
   makePDFReports(db, contestID, recdb)
+  print "Dumping logs\n"
+  dumpLogs(db, contestID)
   print "Making spreadsheets\n"
   s = Spreadsheet.new(db, contestID)
   s.plaqueAwards(recdb)
@@ -664,9 +686,19 @@ def reportContest(db, contestID, contestDB)
     # ignore exceptions
   end
   r.logCheckReport(dir, contestID)
-  print "Dumping logs\n"
-  dumpLogs(db, contestID)
   print "All Done Reporting\n"
+end
+
+def validateCanadianCallsigns(db, contestID, contestDB, canadacsv)
+  callsigns=Hash.new
+  CSV.foreach(canadacsv, :headers => true, :col_sep => ";", :encoding => "ISO8859-1", :quote_char => nil) { |row|
+    callsigns[row[0]] = true
+  }
+  db.query("select id, basecall from Callsign where contestID = ?;", [ contestID ] ) { |row|
+    if (callsigns.has_key?(row[1]))
+      db.query("update Callsign set validcall = #{db.true} where id = ? limit 1;", [ row[0] ]) { }
+    end
+  }
 end
 
 def scoreContest(db, contestID, contestDB)
@@ -775,7 +807,7 @@ def scoreContest(db, contestID, contestDB)
 end
 
 begin
-  if $name and $year and [:load, :score, :checkdupes, :rare, :report, :fifty_eight ].include?($action)
+  if $name and $year and [:load, :score, :checkdupes, :rare, :report, :fifty_eight, :canada ].include?($action)
     db = makeDB(dbopts)
     cdb = ContestDatabase.new(db, ctl)
     contestID = cdb.addOrLookupContest($name, $year, $create)
@@ -804,6 +836,8 @@ begin
     report58(db, contestID, cdb)
   when :rare
     rareReport(db, contestID, cdb)
+  when :canada
+    validateCanadianCallsigns(db, contestID, cdb, canadacsv)
   when :checkdupes
     if cdb and contestID
       cdb.checkDupeLogs(contestID)

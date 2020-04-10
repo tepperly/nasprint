@@ -39,4 +39,33 @@ class Overrides
     end
     nil
   end
+
+  def getSingletons
+    if @yml.has_key?("singletons")
+      return @yml["singletons"]
+    else
+      return Array.new
+    end
+  end
+
+  def lookupScoreOverrides
+    if @yml.has_key?("score_overrides")
+      return @yml["score_overrides"]
+    else
+      return Hash.new
+    end
+  end
+
+  def lookupChecklogs
+    results = [ ]
+    if @yml.has_key?("callsigns")
+      callOverrides=@yml["callsigns"]
+      callOverrides.each_pair { |callsign, properties|
+        if properties.has_key?("checklog") and properties["checklog"]
+          results << callsign
+        end
+      }
+    end
+    return results
+  end
 end

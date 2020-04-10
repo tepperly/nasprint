@@ -6,6 +6,7 @@ require_relative 'dxmap'
 require_relative 'qrzdb'
 require_relative 'logset'
 require_relative 'cabrillo'
+require_relative 'overrides'
 
 class Multiplier
   def initialize(db, contestID, cdb)
@@ -100,9 +101,11 @@ class Multiplier
   end
 
   def resolveDX
+    over = Overrides.new("overrides.yml")
     dxlookup = CallsignLocator.new
     @db.query("select distinct c.id, c.basecall from QSO as q, Callsign as c, Multiplier as m where q.matchType in ('Full', 'Bye', 'Partial', 'PartialBye') and m.abbrev='DX' and c.id = q.recvd_callID and q.recvd_entityID is null and m.id = q.recvd_multiplierID and #{@logs.membertest("q.logID")};") { |row|
-      entity = checkOverride(row[1])
+      entity = over.lookupEntity(row[1])
+#        checkOverride(row[1])
       override = entity
       if not entity and @callDB.has_key?(row[1])
         entity = lookupEntity(@callDB[row[1]])
@@ -133,11 +136,23 @@ class Multiplier
                     [entity, @hawaiiID, row[0]]) { }
         else
           if override
-            @db.query("update QSO set recvd_entityID = ? where recvd_callID = ?;",
-                      [entity, row[0]]) { }
-            @db.query("update QSO set sent_entityID = ? where sent_callID = ?;",
-                      [entity, row[0]]) { }
-            
+            mults = over.lookupMultiplier(row[1])
+            if mults and mults.length == 1 then
+              @db.query("update QSO set judged_multiplierID = ?, recvd_entityID = ? where recvd_callID = ?;",
+                        [@cdb.lookupMultiplier(mults[0])[0], entity, row[0]])
+              @db.query("update QSO set sent_entityID = ? where sent_callID = ?;",
+                        [entity, row[0]])
+            else
+              multIDs = mults.map { |abbrev|
+                @cdb.lookupMultiplier(abbrev)[0]
+              }
+              @db.query("update QSO set recvd_entityID = ? where recvd_callID = ?;",
+                        [entity, row[0]]) { }
+              @db.query("update QSO set judged_multiplierID = recvd_multiplierID where judged_multiplierID is null and recvd_callID = ? and recvd_multiplierID in (#{multIDs.join(", ")});", [ row[0] ]) { }
+              @db.query("update QSO set judged_multiplierID = ? where recvd_callID = ? and judged_multiplierID is null;", [ multIDs[0], row[0] ]) { }
+              @db.query("update QSO set sent_entityID = ? where sent_callID = ?;",
+                        [entity, row[0]]) { }
+            end
           else
             @db.query("update QSO set recvd_entityID = ? where recvd_callID = ? and recvd_entityID is null;",
                       [entity, row[0]]) { }
@@ -155,7 +170,8 @@ class Multiplier
         @db.query("update Log set entityID = ? where id = ? limit 1;",
                   [row[3].to_i, row[0].to_i]) { }
       else                      # multiplier entity is NULL
-        entity = checkOverride(row[1])
+        entity = over.lookupEntity(row[1])
+#          checkOverride(row[1])
         override = entity
         if not entity and @callDB.has_key?(row[1])
           entity = lookupEntity(@callDB[row[1]])
@@ -296,20 +312,37 @@ class Multiplier
   end
 
   def checkByeMultipliers
+    over = Overrides.new("overrides.yml")
     print "Checking Bye multipliers\n"
     count = 0
     @db.query("select c.id, c.basecall, count(*) as numQ from Callsign as c, QSO as q where #{@logs.membertest("q.logID")} and q.matchType = 'Bye' and q.judged_multiplierID is null and c.id = q.recvd_callID group by c.id having numQ >= 1;") { |row|
-      multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=? and q.recvd_multiplierID=m.id and q.matchType = 'Bye' and q.judged_multiplierID is null group by m.id;",
-                          [row[0]])
-      if multres.count > 1
-        count = count + resolveAmbiguous(row[0], multres, row[1])
+      mult = over.lookupMultiplier(row[1])
+      if mult and not mult.empty? then
+        if mult.length == 1 then
+          multID, entID = @cdb.lookupMultiplier(mult[0].to_s)
+          @db.query("update QSO set judged_multiplierID = ? where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType='Bye';",
+                    [ multID, row[0] ] ) { }
+        else
+          mults = @cdb.lookupMultipliers(mult)
+          @db.query("update QSO set judged_multiplierID = recvd_multiplierID where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType = 'Bye' and recvd_multiplierID in (#{mults.map { |w| w[0] }.join(", ")});",
+                    [row[0]]) { }
+          @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType = 'Bye';",
+                    [mults[0][0], row[0]]) { }
+          count += @db.affected_rows
+        end
       else
-        multres.each { |mrow|
-          @db.query("update QSO set judged_multiplierID = ? where recvd_callID = ? and judged_multiplierID is null and #{@logs.membertest("logID")} and matchType='Bye';",
-                    [ mrow[0], row[0] ]) { }
-        }
+        multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=? and q.recvd_multiplierID=m.id and q.matchType = 'Bye' and q.judged_multiplierID is null group by m.id;",
+                            [row[0]])
+        if multres.count > 1
+          count = count + resolveAmbiguous(row[0], multres, row[1])
+        else
+          multres.each { |mrow|
+            @db.query("update QSO set judged_multiplierID = ? where recvd_callID = ? and judged_multiplierID is null and #{@logs.membertest("logID")} and matchType='Bye';",
+                      [ mrow[0], row[0] ]) { }
+          }
+        end
+        multres = nil
       end
-      multres = nil
     }
     print "#{count} Bye QSOs are partial matches\n"
   end
@@ -369,33 +402,32 @@ class Multiplier
     end
   end
   
-  def rareMultGroupReport(ids)
+  def rareMultGroupReport(csv, ids)
     prev = nil
     @db.query("select m.abbrev, c.basecall, c.logrecvd, c.validcall, count(*) as num, c.id, m.id from Multiplier as m join QSO as q on q.judged_multiplierID = m.id join Callsign as c on c.id = q.recvd_callID where #{@logs.membertest("q.logID")} and q.matchType in ('Full','Bye','PartialBye','Partial') and m.id in (#{ids.join(", ")}) group by m.id, c.id order by m.id asc, num desc;") { |row|
-      if (row[0] != prev) 
-        print "Multiplier: " + row[0] + "\n"
-        print "    %-8s %-5s %-5s %-4s %-4s %-5s %s\n" % ["Station", "Log?",
-                                                          "QRZ?", "QLOC", 
-                                                          "#Qs", "#Logs",
-                                                          "Callsigns"]
+      if (row[0] != prev)
+        csv << [ "Multiplier:", row[0] ]
+        csv << [ "", "Station", "Log?", "QRZ?", "QRZQTH", "#Qs", "#Logs", "Callsigns" ]
         prev = row[0]
       end
-      print "    %-8s %-5s %-5s %-4s %4d %5d %s\n" % 
-        [row[1], @db.toBool(row[2]).to_s,
-         @db.toBool(row[3]).to_s,
-         qLoc(@db.toBool(row[3]), row[1]),
-         row[4].to_i, numLogs(row[5].to_i, row[6].to_i),
-         allCallsigns(row[5].to_i, 
-                      row[6].to_i) ]
+      csv << ["", row[1], @db.toBool(row[2]).to_s,
+              @db.toBool(row[3]).to_s,
+              qLoc(@db.toBool(row[3]), row[1]),
+              row[4].to_i, numLogs(row[5].to_i, row[6].to_i),
+              allCallsigns(row[5].to_i, 
+                           row[6].to_i) ]
     }
   end
 
   def rareMultReport
-    topFiveCA = rarestMults(5, true)
-    topFiveNonCA = rarestMults(5, false)
-    print "Top Five Rarest CA Multipliers\n"
-    rareMultGroupReport(topFiveCA)
-    print "\nTop Five Rarest non-CA Multipliers\n"
-    rareMultGroupReport(topFiveNonCA)
+    open("rare_mult_report.csv", "w") { |csvout|
+      csv = CSV.new(csvout)
+      topFiveCA = rarestMults(7, true)
+      topFiveNonCA = rarestMults(7, false)
+      csv << [ "Top Seven Rarest CA Multipliers" ]
+      rareMultGroupReport(csv, topFiveCA)
+      csv << [ "Top Seven Rarest non-CA Multipliers" ]
+      rareMultGroupReport(csv, topFiveNonCA)
+    }
   end
 end
