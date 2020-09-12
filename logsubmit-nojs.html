@@ -300,7 +300,9 @@
       <option value="Large">Large (unlimited)</option>
     </select><br >
     <label for="ALLotherclubnameId" class="inLabel">Other Club:</label>
-    <input type="text" name="otherclubname" id="ALLotherclubnameId" class="jFormb">
+    <input type="text" name="otherclubname" id="ALLotherclubnameId" class="jFormb"><br >
+    <label for="ALLMulticlublog" class="inLabel">Split score between Multiple Clubs&dagger;:</label>
+    <input type="checkbox" name="multiclub" value="Multiclub" id="ALLMulticlublog" class="jForma">
     <p><b>Categories</b> (check all that apply)</p>
     <table>
       <tr>
@@ -343,7 +345,9 @@
 	      rows="5" class="jFormb"></textarea><br>
     <input type="submit" id="ALLsubmit" class="jFormb">
     <input type="reset" id="ALLreset" value="Reset" class="jFormb">
-    <p>* Indicates <strong>required</strong> fields.
+    <p>* Indicates <strong>required</strong> fields.</p>
+    <p>&dagger; Multi-operator stations can split the log's score between multiple clubs. Indicate club memberships for each operator in the SOAPBOX: lines of the
+      Cabrillo file.</p>
   </form>
     <div id="ALLreminder" >
       <p>PLEASE NOTE: you should receive a brief confirmation of your log via email, and it is your responsibility to verify that your

@@ -83,11 +83,11 @@ def processEmailLog(rawContent, fixedContent, filename, subject, sender, headers
               "email")
 #    print "Id: #{logID}\nCallsign: #{callsign}\nEmail: #{sender}\nOp class: #{log.calcOpClass}\nPower string: #{log.powerStr}\nSent QTH: #{log.filterQTH[0]}\n"
     db.addExtra(logID, callsign, sender, log.calcOpClass, log.powerStr,
-                log.filterQTH[0].to_s, "", "",
+                log.filterQTH[0].to_s, "", "", 2,
                 log.county?, log.youth?, log.mobile?, log.female?, log.school?,
                 log.newcontester?, "email", nil, log.club, nil)
     attrib = makeAttributes(logID, callsign, sender, sender, log.filterQTH[0].to_s,
-                            "", "", log.county?, log.youth?, log.mobile?,
+                            "", "", 2, log.county?, log.youth?, log.mobile?,
                             log.female?, log.school?, log.newcontester?,
                             log.club, nil, nil, log.calcOpClass, log.power)
     patchedContent = patchLog(asciiContent, attrib) # add X-CQP lines
@@ -99,7 +99,7 @@ def processEmailLog(rawContent, fixedContent, filename, subject, sender, headers
     }
     outE = OutgoingEmail.new
     html = logHtml(log, db.getEntry(logID))
-    outE.sendEmailAlt(sender, "CQP 2019 Log Confirmation", htmlToPlain(html, "text/html"), html)
+    outE.sendEmailAlt(sender, "CQP 2020 Log Confirmation", htmlToPlain(html, "text/html"), html)
     return true
   end
   false
@@ -183,10 +183,10 @@ begin
       numlogs = checkMail(mail, mail.subject, getReturnEmail(mail), mail.header, db, logCheck)
 #    print "Mail message #{uid} had #{numlogs} log(s)\n"
       if numlogs > 0
-        #    imap.store(uid, "+X-GM-LABELS", ["CQP2019/Log"])
+        #    imap.store(uid, "+X-GM-LABELS", ["CQP2020/Log"])
         imap.copy(seqno, CQPConfig::INCOMING_IMAP_SUCCESS_FOLDER)
       else
-        #    imap.store(uid, "+X-GM-LABELS", ["CQP2019/Unknown"])
+        #    imap.store(uid, "+X-GM-LABELS", ["CQP2020/Unknown"])
         imap.copy(seqno, CQPConfig::INCOMING_IMAP_FAIL_FOLDER)
       end
       #  imap.store(uid, "-X-GM-LABELS", ["\\Inbox"])

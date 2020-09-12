@@ -48,7 +48,7 @@ BADCLUBNAME = %w{OTHER NONE }.to_set
 BADCLUBNAME.freeze
 
 def makeAttributes(id, callsign, email, email_confirm, sentqth, phone, 
-                   comments,
+                   comments, multiclub,
                    expedition, youth, mobile, female, school, newcontester,
                    clubname, clubother, clubcategory,
                    opclass, powclass)
@@ -61,6 +61,14 @@ def makeAttributes(id, callsign, email, email_confirm, sentqth, phone,
   result['X-CQP-COMMENTS'] = comments
   result['X-CQP-POWER'] = (powclass ? powclass.upcase : "")
   result['X-CQP-OPCLASS'] = (opclass ? opclass.upcase : "")
+  case multiclub
+  when 0
+    result['X-CQP-MULTICLUB'] = "false"
+  when 1
+    result['X-CQP-MULTICLUB'] = "true"
+  else
+    result['X-CQP-MULTICLUB'] = "unknown"
+  end
   categories = [ ]
   if expedition == 1
     categories.push("COUNTY")

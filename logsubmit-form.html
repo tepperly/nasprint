@@ -363,7 +363,9 @@ resubmit. Examples of the preferred QSO line syntax are available
 	  <option value="Large">Large (unlimited)</option>
 	</select><br >
 	<label for="otherclubnameId" class="inLabel">Other Club:</label>
-	<input type="text" name="otherclubname" id="otherclubnameId" class="jForm">
+	<input type="text" name="otherclubname" id="otherclubnameId" class="jForm"><br >
+        <label for="Multiclublog" class="inLabel">Split score between Multiple Clubs&dagger;:</label>
+        <input type="checkbox" name="multiclub" value="Multiclub" id="Multiclublog" class="jForm">
 	<p><b>Categories</b> (check all that apply)</p>
 	<table>
 	  <tr>
@@ -405,7 +407,9 @@ resubmit. Examples of the preferred QSO line syntax are available
 	<textarea name="comments" id="commentId" cols="80" 
 		  rows="5" class="jForm"></textarea><br>
         <input type="submit" id="submit" class="jForm cqpbutton" value="Submit Details">
-	<p>* Indicates <strong>required</strong> fields.
+	<p>* Indicates <strong>required</strong> fields.</p>
+	<p>&dagger; Multi-operator stations can split the log's score between multiple clubs. Indicate club memberships for each operator in the SOAPBOX: lines of the
+	  Cabrillo file.</p>
       </form>
     </div>
     <div id="doneMsg" style="visibility: hidden;"><p><strong class="UploadDone">Upload Completed!</strong></p></div>
@@ -745,7 +749,9 @@ resubmit. Examples of the preferred QSO line syntax are available
 	  <option value="Large">Large (unlimited)</option>
 	</select><br >
 	<label for="AltotherclubnameId" class="inLabel">Other Club:</label>
-	<input type="text" name="otherclubname" id="AltotherclubnameId" class="jForma">
+	<input type="text" name="otherclubname" id="AltotherclubnameId" class="jForma"><br >
+	<label for="AltMulticlublog" class="inLabel">Split score between Multiple Clubs&dagger;:</label>
+        <input type="checkbox" name="multiclub" value="Multiclub" id="AltMulticlublog" class="jForma">
 	<p><b>Categories</b> (check all that apply)</p>
 	<table>
 	  <tr>
@@ -787,7 +793,9 @@ resubmit. Examples of the preferred QSO line syntax are available
 	<textarea name="comments" id="AltcommentId" cols="80"
 		  rows="5" class="jForma"></textarea><br>
         <input type="submit" id="Altsubmit" class="jForma cqpbutton" value="Submit Details">
-	<p>* Indicates <strong>required</strong> fields.
+	<p>* Indicates <strong>required</strong> fields.</p>
+	<p>&dagger; Multi-operator stations can split the log's score between multiple clubs. Indicate club memberships for each operator in the SOAPBOX: lines of the
+	  Cabrillo file.</p>
       </form>
     </div>
     <div id="AltdoneMsg" style="visibility: hidden;"><p><strong class="UploadDone">Upload Completed!</strong></p></div>
@@ -1090,7 +1098,9 @@ resubmit. Examples of the preferred QSO line syntax are available
       <option value="Large">Large</option>
     </select><br >
     <label for="ALLotherclubnameId" class="inLabel">Other Club:</label>
-    <input type="text" name="otherclubname" id="ALLotherclubnameId" class="jFormb">
+    <input type="text" name="otherclubname" id="ALLotherclubnameId" class="jFormb"><br >
+    <label for="ALLMulticlublog" class="inLabel">Split score between Multiple Clubs&dagger;:</label>
+    <input type="checkbox" name="multiclub" value="Multiclub" id="ALLMulticlublog" class="jFormb">
     <p><b>Categories</b> (check all that apply)</p>
     <table>
       <tr>
@@ -1133,7 +1143,9 @@ resubmit. Examples of the preferred QSO line syntax are available
 	      rows="5" class="jFormb"></textarea><br>
     <input type="submit" id="ALLsubmit" class="jFormb">
     <input type="reset" id="ALLreset" value="Reset" class="jFormb">
-    <p>* Indicates <strong>required</strong> fields.
+    <p>* Indicates <strong>required</strong> fields.</p>
+    <p>&dagger; Multi-operator stations can split the log's score between multiple clubs. Indicate club memberships for each operator in the SOAPBOX: lines of the
+      Cabrillo file.</p>
   </form>
     <div id="ALLreminder" >
       <p>PLEASE NOTE: you should receive a brief confirmation of your log via email, and it is your responsibility to verify that your
@@ -1168,6 +1180,7 @@ function clearTabOne() {
   $("#clubsizeId").val("");
   $("#otherclubnameId").val("");
   $("#commentId").val("");
+  $("#Multiclublog").prop("checked", false);
   $("#expedition").prop("checked", false);
   $("#youth").prop("checked", false);
   $("#mobile").prop("checked", false);
@@ -1208,6 +1221,7 @@ function clearTabTwo() {
   $("#AltclubsizeId").val("");
   $("#AltotherclubnameId").val("");
   $("#AltcommentId").val("");
+  $("#AltMulticlublog").prop("checked", false);
   $("#Altexpedition").prop("checked", false);
   $("#Altyouth").prop("checked", false);
   $("#Altmobile").prop("checked", false);
@@ -1289,7 +1303,7 @@ function calcColor(validQ, maxQ, badMults) {
 }
  
   $(function () {
-    $('#clock').countdown('2019/10/21 23:59:59 +0000')
+    $('#clock').countdown('2020/10/26 23:59:59 +0000')
     .on('update.countdown', function(event) {
      var format = '%H hour%!H %M minute%!M %S second%!S';
      if(event.offset.totalDays > 0) {
