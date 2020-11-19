@@ -173,6 +173,7 @@ class Cabrillo
     @certificate = nil
     @name = nil
     @claimed = nil
+    @gridsquare = nil
     @section = nil
     @location = nil
     @club = nil
@@ -202,7 +203,7 @@ class Cabrillo
     parse
   end
 
-  attr_reader :cleanparse, :logcall, :qsos, :club, :name
+  attr_reader :cleanparse, :logcall, :qsos, :club, :name, :gridsquare
 
   def trans(oldstate, newstate)
     if @parsestate <= oldstate
@@ -298,6 +299,9 @@ class Cabrillo
     when /\Acategory-mode:\s*(ssb|cw|rtty|mixed)\s*/i
       @mode = $1
       trans(1, 1)
+    when /\Agrid-locator:\s*([a-z0-9]+)\s*/i
+      @gridsquare = $1
+      trans(1,1)
     when /\Acategory-mode:\s*ph\s*/i
       trans(1, 1)
       @mode = "SSB"
