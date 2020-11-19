@@ -5,7 +5,7 @@
 #
 require 'csv'
 require 'set'
-require 'cabrillo'
+require_relative 'cabrillo'
 
 
 class ContestDatabase
@@ -661,5 +661,23 @@ class ContestDatabase
       logs << { 'time' => row[0], 'number' => row[1] }
     }
     logs
+  end
+
+  def randomDoorPrize(contestID)
+    res = @db.query("select count(*) from Log where contestID = #{contestID} and verifiedscore >= 1500 limit 1;")
+    count = nil
+    res.each(:as => :array) { |row| count = row[0] }
+    if count
+      res = @db.query("select name, year from Contest where id = #{contestID} limit 1;")
+      res.each(:as => :array) { |row|
+        print row[0].to_s + " " + row[1].to_s + " (#{count} logs having >= 1500 points)\n"
+      }
+      i = 1
+      res = @db.query("select c.name, c.year, l.callsign from Contest as c, Log as l where c.id = #{contestID} and l.contestID = #{contestID} and l.verifiedscore >= 1500 order by rand() limit 31;")
+      res.each(:as => :array) { |row|
+        print "%2d. %s %4d %s\n" % [i, row[0], row[1], row[2] ]
+        i = i + 1
+      }
+    end
   end
 end
