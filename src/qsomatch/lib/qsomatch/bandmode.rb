@@ -458,8 +458,8 @@ class BandModeMismatch
     logsWithMismatches.each { |un|
       un.qsos.each { |q|
         print "QSO #{q.id1} #{q.id2}\n"
-        qsosByBand[q.oneBand].insert(-1, q.id1, q.id2)
-        qsosByMode[q.oneMode].insert(-1, q.id1, q.id2)
+        qsosByBand[q.oneBand].insert(-1, q.id1, q.id2) if qsosByBand.has_key?(q.oneBand)
+        qsosByMode[q.oneMode].insert(-1, q.id1, q.id2) if qsosByMode.has_key?(q.oneMode)
       }
     }
     numChanged = 0

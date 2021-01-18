@@ -67,6 +67,9 @@ class ContestDatabase
     if not tables.include?("Operator")
       createOperatorTable
     end
+    if not tables.include?("Participant")
+      createParticipantTable
+    end
   end
 
   def createContestTable
@@ -78,6 +81,28 @@ class ContestDatabase
     @db.query("create table if not exists Team (id integer primary key #{@db.autoincrement}, name varchar(64) not null, managercall varchar(#{CHARS_PER_CALL}) not null, manageremail varchar(128), registertime datetime, contestID integer not null);") { }
     @db.query("create unique index if not exists teamind on Team (name, contestID);") { }
   end
+
+  def createParticipantTable
+    # A participant is a logless station whose judged to have been on the air with a particular location
+    # The callID from the Callsign table
+    @db.query("create table if not exists Participant (id integer primary key #{@db.autoincrement}, callID integer, judged_multiplierID integer, contestID integer);") { }
+    @db.query("create index if not exists locind on Participant (judged_multiplierID);") { }
+    @db.query("create index if not exists callind on Participant (callID);") { }
+  end
+
+  def addParticipant(callID, multID)
+    @db.query("insert into Participant (callID, judged_multiplierID, contestID) values (?, ?, ?);",
+              [ callID.to_i, multID.to_i, @contestID ]) { }
+  end
+
+  def isParticipant?(callID, multID)
+    @db.query("select id from Participant where callID = ? and judged_multiplierID = ? and contestID = ? limit 1;",
+              [ callID.to_i, multID.to_i, @contestID]) {
+      return true
+    }
+    false
+  end
+    
 
   def createTeamMemberTable
     @db.query("create table if not exists TeamMember (teamID integer not null, logID integer not null, contestID integer not null, primary key (teamID, logID));") { }
@@ -190,7 +215,7 @@ class ContestDatabase
   
   def createLogTable
     # table of callsigns converted to base format
-    @db.query("create table if not exists Callsign (id integer primary key #{@db.autoincrement}, contestID integer not null, basecall varchar(#{CHARS_PER_CALL}) not null, logrecvd bool, validcall bool, illegalcall bool not null default #{@db.false});") { }
+    @db.query("create table if not exists Callsign (id integer primary key #{@db.autoincrement}, contestID integer not null, basecall varchar(#{CHARS_PER_CALL}) not null, logrecvd bool not null default #{@db.false}, validcall bool, illegalcall bool not null default #{@db.false});") { }
     @db.query("create index if not exists bcind on Callsign (contestID, basecall);") { }
     @db.query("create table if not exists Checklog (id integer primary key #{@db.autoincrement}, contestID integer not null, callID integer not null, multiplierID integer not null);") { }
     @db.query("create unique index if not exists ccind on Checklog (contestID, multiplierID, callID);") { }
@@ -290,6 +315,13 @@ class ContestDatabase
       @db.query("insert into Callsign (contestID, basecall) values (?, ?);", [contestIDVar.to_i, callsign]) { }
       return @db.last_id
     end
+    nil
+  end
+
+  def lookupCallsign(callsign)
+    @db.query("select id from Callsign where basecall = ? and contestID = ? limit 1;", [callsign, @contestID]) { |row|
+      return row[0].to_i
+    }
     nil
   end
 
@@ -635,6 +667,14 @@ class ContestDatabase
       return row[0]
     }
 
+    nil
+  end
+
+  def idFromCall(basecall)
+    @db.query("select id from Log where callsign = ? limit 1;", [ basecall] ) { |row| return row[0].to_i }
+    @db.query("select l.id from Log as l, Callsign as c on c.id = l.callID where c.basecall = ? limit 1;", [ basecall]) {
+      return row[0].to_i
+    }
     nil
   end
 

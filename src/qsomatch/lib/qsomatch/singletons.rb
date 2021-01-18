@@ -35,8 +35,10 @@ class ResolveSingletons
     @logIDs = LogSet.new(cdb.logsForContest(contestID))
     @callsigns = queryCallsigns
     @callFromID = Hash.new
+    @callFromBasename = Hash.new
     @callsigns.each { |call|
       @callFromID[call.id] = call
+      @callFromBasename[call.to_s] = call
     }
   end
 
@@ -100,29 +102,93 @@ class ResolveSingletons
     false
   end
 
+  def createParticipant(mc, over, callID, baseCallsign, numqsos)
+    count = 0
+    mc.checkIndividualBye(count, over, callID, baseCallsign)
+    @db.query("select distinct q.judged_multiplierID from QSO as q where q.recvd_callID = ? and q.matchType in ('Bye','PartialBye');", [callID]) { |row|
+      @cdb.addParticipant(callID, row[0].to_i)
+    }
+  end
+
+  def findParticipants(multChecker)
+    over = Overrides.new("overrides.yml")
+    # participants are logless stations that appear in enough QSOs that we're pretty sure they were actually on the air
+    @db.query("select c.id, c.basecall, count(*) as numqsos from Callsign as c, QSO as q on c.id = q.recvd_callID where c.contestID = ? and q.matchType = 'None' and c.validcall and not c.illegalcall and (not c.logrecvd or c.logrecvd is null) group by c.id having numqsos >= 5 order by numqsos desc;", [ @contestID ] ) { |row|
+      createParticipant(multChecker, over, row[0].to_i, row[1], row[2].to_i)
+    }
+    @db.query("select c.id, count(*) as numqsos from Callsign as c, QSO as q on c.id = q.recvd_callID where c.contestID = ? and q.matchType = 'None' and (not c.validcall or c.validcall is null) and not c.illegalcall and (not c.logrecvd or c.logrecvd is null) group by c.id having numqsos >= 10 order by numqsos desc;", [ @contestID ] ) { |row|
+      createParticipant(multChecker, over, row[0].to_i, row[1], row[2].to_i)
+    }
+    over.participants { |call, mult|
+      callID = @cdb.lookupCallsign(call)
+      mID, entID = @cdb.lookupMultiplier(mult)
+      if callID and mID
+        if not @cdb.isParticipant?(callID, mID)
+          @cdb.addParticipant(callID, mID)
+        end
+      end
+    }
+    @db.query("select count(*) from Participant where contestID = ?;", [ @contestID] ) { |row|
+      return row[0].to_i
+    }
+    0
+  end
+
+  def callMatchToParticipant(callsign, multiplierID, isCWQSO)
+    if callsign and not callsign.empty? and multiplierID
+      possibleMatches = Array.new
+      @db.query("select c.basecall from Callsign as c, Participant as p on c.id = p.callID where p.contestID = ? and p.judged_multiplierID = ?;",
+                [ @contestID, multiplierID ] ) { |row|
+        matchProb = (isCWQSO ? QSO.cwJaroWinkler(callsign, row[0].to_s) : QSO.phJaroWinkler(callsign, row[0].to_s))
+        print "Checking if #{callsign} is close to #{row[0]} (probability #{matchProb}) in #{@cdb.lookupMultiplierByID(multiplierID)}\n"
+        if matchProb >= 0.9
+          possibleMatches << [ row[0], matchProb ]
+        end
+      }
+      if not possibleMatches.empty?
+        return possibleMatches.max {|x, y| -1*(x[1] <=> y[1]) }[0]
+      end
+    end
+    nil
+  end
+
   def resolve
     @db.query("select distinct q.id from QSO as q where matchType = 'None' and (q.recvd_multiplierID is null or q.recvd_serial is null);") { |row|
       @db.query("update QSO set matchType = 'Removed'  where id = ? limit 1;", [row[0]]) { }
       @db.query("update QSOExtra set comment='No received serial number or multiplier for this QSO.' where id = ? limit 1;", [row[0]]) { }
     }
-    @db.query("select q.id, q.recvd_callID, q.recvd_serial, q.fixedMode from QSO as q where " +
+    @db.query("select q.id, q.recvd_callID, q.recvd_serial, q.fixedMode, q.recvd_multiplierID from QSO as q where " +
                     @logIDs.membertest("q.logID") +
               " and q.matchType = 'None' order by q.id asc;"){ |row|
       call = @callFromID[row[1]]
       if call then
-        if row[2] >= 10 and call.numQSOs <= 2 and not (call.otherContest or call.isDX) then
-          @db.query("update QSO set matchType = 'Unique' where id = ? limit 1;", [row[0]]) { }
-          @db.query("update QSOExtra set comment='High serial number a station only worked #{call.numQSOs.to_i} time(s).' where id = ? limit 1;", [row[0]]) { }
+        if (row[2] >= 10 and not (59 == row[2] or 599 == row[2])) and call.numQSOs <= 2 and not (call.otherContest or call.isDX or call.illegal) then
+          likelyCall = callMatchToParticipant(call.to_s, row[4], "CW" == row[3])
+          if likelyCall
+            likelyCallObj = @callFromBasename[likelyCall]
+            @db.query("update QSO set matchType = 'PartialBye' where id = ? limit 1;", [row[0]]) { }
+            @db.query("update QSOExtra set comment='Busted call likely match #{likelyCall} (seen in #{likelyCallObj ? likelyCallObj.numQSOs : 0} QSOs) or unique.' where id = ? limit 1;", [row[0]]) { }
+          else
+            @db.query("update QSO set matchType = 'Unique' where id = ? limit 1;", [row[0]]) { }
+            @db.query("update QSOExtra set comment='High serial number a station only worked #{call.numQSOs.to_i} time(s).' where id = ? limit 1;", [row[0]]) { }
+          end
         else
           if call.illegal or (not call.valid and call.numQSOs <= 5) then
-            # illegal callsign
-            list = possibleMatches(call.id, call.callsign, "CW" == row[3], 0.875)
-            if list
-              @db.query("update QSO set matchType = 'Removed' where id = ? limit 1;", [row[0]]) { }
-              @db.query("update QSOExtra set comment='Busted callsign - potential matches: #{list.join(" ")}.' where id = ? limit 1;", [row[0]]) { }
+            likelyCall = callMatchToParticipant(call.to_s, row[4], "CW" == row[3])
+            if likelyCall
+              likelyCallObj = @callFromBasename[likelyCall]
+              @db.query("update QSO set matchType = 'PartialBye' where id = ? limit 1;", [row[0]]) { }
+              @db.query("update QSOExtra set comment='Busted call likely match #{likelyCall} (seen in #{likelyCallObj ? likelyCallObj.numQSOs : 0} QSOs) or illegal.' where id = ? limit 1;", [row[0]]) { }
             else
-              @db.query("update QSO set matchType = 'Removed' where id = ? limit 1;", [row[0]]) { }
-              @db.query("update QSOExtra set comment='Illegal callsign not close to known participants.' where id = ? limit 1;", [row[0]]) { }
+              # illegal callsign
+              list = possibleMatches(call.id, call.callsign, "CW" == row[3], 0.875)
+              if list
+                @db.query("update QSO set matchType = 'Removed' where id = ? limit 1;", [row[0]]) { }
+                @db.query("update QSOExtra set comment='Busted callsign - potential matches: #{list.join(" ")}.' where id = ? limit 1;", [row[0]]) { }
+              else
+                @db.query("update QSO set matchType = 'Removed' where id = ? limit 1;", [row[0]]) { }
+                @db.query("update QSOExtra set comment='Illegal callsign not close to known participants.' where id = ? limit 1;", [row[0]]) { }
+              end
             end
           else
             if call.numQSOs >= 10 or (call.valid and call.numQSOs >= 5)

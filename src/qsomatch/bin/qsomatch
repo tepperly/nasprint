@@ -722,6 +722,9 @@ def scoreContest(db, contestID, contestDB)
                                     "Partial", 
                                     :one)
   print "Perfect matches (with a band or mode mismatch): #{num1} (dupes #{dupeCount})\n"
+  num1 = cm.oneNearCallsign
+  print "Perfect matches with one near callsign: #{num1} full #{num1} partial\n"
+  $stdout.flush
   num3, partial, dupeCount  = cm.partialMatch
   print "Full matches partial: #{num3}\n"
   print "Partial matches full: #{partial}\n"
@@ -778,10 +781,14 @@ def scoreContest(db, contestID, contestDB)
   print "Duplicates of matches: #{d1}\n"
   nil1 = cm.markNIL
   print "Not In Log penalties: #{nil1}\n"
+  $stdout.flush
+  m = Multiplier.new(db, contestID, contestDB)
+  print "Finding stations that are likely participants without logs\n"
+  numParticipants = singles.findParticipants(m)
+  print "Designated #{numParticipants} as participants from singleton QSOs\n"
   print "Resolving singletons\n"
   $stdout.flush
   singles.resolve
-  m = Multiplier.new(db, contestID, contestDB)
   print "Checking that every QSO has an appropriate sent multiplier\n"
   count = m.checkSentMultIDs
   print "#{count} QSOs updated\n"
@@ -815,6 +822,8 @@ begin
       print "Unknown contest #{$name} #{$year}\n"
       db.close
       exit 2
+    else
+      cdb.contestID = contestID
     end
   else
     db = nil

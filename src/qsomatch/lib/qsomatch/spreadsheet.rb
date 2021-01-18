@@ -244,11 +244,12 @@ class Spreadsheet
 
   def regionSpecialAwards(num, region, constraint)
     @workbook.add_worksheet(:name => (region + " Special Awards")) { |sheet|
-      specialAward(num, sheet, constraint, region + " Single-OP YL", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isYL")
+      specialAward(num, sheet, constraint, region + " Single-OP YL HP", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isYL and powclass='HIGH'")
+      specialAward(num, sheet, constraint, region + " Single-OP YL LP", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isYL and powclass ='LOW'")
       specialAward(num, sheet, constraint, region + " Single-OP Youth", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isYOUTH")
       specialAward(num, sheet, constraint, region + " Top School", "isSCHOOL")
+      specialAward(num, sheet, constraint, region + " New Contester", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isNEW")
       if (region == "California")
-        specialAward(num, sheet, constraint, region + " New Contester", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isNEW")
         specialAward(num, sheet, constraint, "Single-Op County Expedition", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isCCE")
         specialAward(num, sheet, constraint, "Multi-Single County Expedition", "opclass = 'MULTI_SINGLE' and isCCE")
         specialAward(num, sheet, constraint, "Multi-Multi County Expedition", "opclass = 'MULTI_MULTI' and isCCE and powclass = 'HIGH'")
@@ -571,7 +572,7 @@ class Spreadsheet
       row = row + ["None", nil, nil, nil, nil, nil]
     else
       top = results['California'][0]
-      row = row + [top[0],cdb.getFullname(top[1]),
+      row = row + [callWithOp(top[0], top[3]),cdb.getFullname(top[1]),
         timeDuration(cdb, top[2]), nil, nil, nil]
     end
     row += [ nil ]
@@ -579,7 +580,7 @@ class Spreadsheet
       row = row + ["None", nil, nil, nil, nil, nil]
     else
       top = results['Non-California'][0]
-      row = row + [top[0],cdb.getFullname(top[1]),
+      row = row + [callWithOp(top[0],top[3]),cdb.getFullname(top[1]),
         timeDuration(cdb, top[2]), nil, nil, nil]
     end
     sheet.add_row(row, :style => [callstyle, qthstyle, numstyle, numstyle, numstyle, numstyle,
@@ -751,15 +752,21 @@ class Spreadsheet
                       callsign, qth, num, score, opsstyle, true)
         addTwoRegions(sheet, "Single-Op QRP, Assisted", awardname, header,
                       %w{QRP}, %w{SINGLE_ASSISTED}, 1, callsign, qth, num, score, opsstyle)
-        addTwoRegions(sheet, "Single-Op YL", awardname, header,
-                      ALLPOWERS, %w{SINGLE SINGLE_ASSISTED}, 1, callsign, qth, num, score, opsstyle,
+        addTwoRegions(sheet, "Single-Op YL LP", awardname, header,
+                      %w{LOW}, %w{SINGLE SINGLE_ASSISTED}, 1, callsign, qth, num, score, opsstyle,
+                      false, " and l.isYL")
+        addTwoRegions(sheet, "Single-Op YL HP", awardname, header,
+                      %w{HIGH}, %w{SINGLE SINGLE_ASSISTED}, 1, callsign, qth, num, score, opsstyle,
                       false, " and l.isYL")
         addTwoRegions(sheet, "Single-Op Youth", awardname, header,
                       ALLPOWERS, [ "SINGLE", "SINGLE_ASSISTED"], 1, callsign, qth, num, score, opsstyle,
                       false, " and l.isYOUTH")
-        addTwoRegions(sheet, "Top School", awardname, header,
-                      ALLPOWERS, ALLOPS, 1, callsign, qth, num, score, opsstyle,
-                      false, " and l.isSCHOOL")
+        addTwoRegions(sheet, "Single-Op New Contester", awardname, header,
+                      ALLPOWERS, %w{ SINGLE SINGLE_ASSISTED }, 1, callsign, qth, num, score, opsstyle,
+                      false, " and l.isNew")
+#        addTwoRegions(sheet, "Top School", awardname, header,
+#                      ALLPOWERS, ALLOPS, 1, callsign, qth, num, score, opsstyle,
+#                      false, " and l.isSCHOOL")
         addTwoRegions(sheet, "Top Multi-Single", awardname, header,
                       ALLPOWERS, %w{MULTI_SINGLE}, 1, callsign, qth, num, score, opsstyle,
                       false)
@@ -771,9 +778,9 @@ class Spreadsheet
         addFirst58(sheet, awardname, header, callsign, qth, num)
         rightColumnRow = sheet.rows.length+1
         mobileQSOs(sheet, awardname, callsign, qth, header,opsstyle)
-        leftColumnAward(sheet, awardname, header, callsign, qth, num, score,
-                        opsstyle, "Single-Op New Contester", 1, ALLPOWERS,
-                        %w{ SINGLE SINGLE_ASSISTED }, "and l.isNEW")
+#        leftColumnAward(sheet, awardname, header, callsign, qth, num, score,
+#                        opsstyle, "Single-Op New Contester", 1, ALLPOWERS,
+#                        %w{ SINGLE SINGLE_ASSISTED }, "and l.isNEW")
         leftColumnAward(sheet, awardname, header, callsign, qth, num, score,
                         opsstyle, "Single-Op Expeditions", 2, ALLPOWERS,
                         %w{ SINGLE SINGLE_ASSISTED }, "and l.isCCE")

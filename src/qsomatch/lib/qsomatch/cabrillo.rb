@@ -8,8 +8,8 @@ require 'csv'
 require 'time'
 require 'set'
 
-CONTEST_START=Time.utc(2019,10,5,16, 00)
-CONTEST_END=Time.utc(2019,10,6,22,00)
+CONTEST_START=Time.utc(2020,10,3,16, 00)
+CONTEST_END=Time.utc(2020,10,4,22,00)
 
 def mySplit(str, pattern)
   result = [ ]
@@ -223,6 +223,7 @@ class Cabrillo
     @club = nil
     @iota = nil
     @creator = nil
+    @grid = nil
     @logcall = nil
     @dblogcall = nil
     @dbphone = nil
@@ -489,6 +490,9 @@ class Cabrillo
     when /\A(e-?mail|address-email):\s*(.*)\Z/i
       trans(1, 1)
       @logCat.email = $2.strip
+    when /\Agrid-locator:\s*(.*)\Z/i
+      trans(1, 1)
+      @grid = $1.strip
     when /\Alocation:\s*(.*)\Z/i
       trans(1, 1)
       @location = normalizeString($1)
@@ -685,7 +689,7 @@ class Cabrillo
 
   def parse
     @parsestate = 0
-    content = pretreat(File.read(@filename, {:encoding => "US-ASCII"}))
+    content = pretreat(File.read(@filename, :encoding => "US-ASCII"))
     lines = mySplit(content, END_OF_RECORD)
     lines.each { |line|
       msg = processLine(line) 
@@ -989,7 +993,7 @@ NAME: #{@name}
       when /\A(\s*|AND)\Z/
         # ignore empty string and conjunctions
       else
-        $stderr.write("Missing: '#{tok}'\n")
+        $stderr.write("Missing action for category: '#{tok}'\n")
       end
     }
   end

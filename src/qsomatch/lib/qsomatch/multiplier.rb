@@ -289,10 +289,10 @@ class Multiplier
 
   def updateByeQSOs(id, choice, name)
     count = 0
-    @db.query("update QSO set judged_multiplierID = ? where matchType='Bye' and recvd_callID = ? and recvd_multiplierID = ? and judged_multiplierID is null and #{@logs.membertest("logID")};",
+    @db.query("update QSO set judged_multiplierID = ?, matchType='Bye' where matchType in ('Bye','None') and recvd_callID = ? and recvd_multiplierID = ? and judged_multiplierID is null and #{@logs.membertest("logID")};",
               [ choice, id, choice ] )  { }
     count += @db.affected_rows
-    @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where matchType='Bye' and recvd_callID = ? and recvd_multiplierID != ? and judged_multiplierID is null and #{@logs.membertest("logID")};",
+    @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where matchType in ('Bye','None','PartialBye') and recvd_callID = ? and recvd_multiplierID != ? and judged_multiplierID is null and #{@logs.membertest("logID")};",
                 [choice, id, choice] ) { }
     count += @db.affected_rows
     return count
@@ -311,38 +311,46 @@ class Multiplier
     0
   end
 
+  def checkIndividualBye(count, over, callID, baseCallsign)
+      mult = over.lookupMultiplier(baseCallsign)
+      if mult and not mult.empty? then
+        if mult.length == 1 then
+          multID, entID = @cdb.lookupMultiplier(mult[0].to_s)
+          @db.query("update QSO set judged_multiplierID = ?, matchType='Bye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType in ('Bye','None');",
+                    [ multID, callID ] ) { }
+        else
+          mults = @cdb.lookupMultipliers(mult)
+#          print "Looking up this list: #{mult.join(",")}\n"
+#          print "Yielded list this: #{mults.join(",")}\n" if mults
+#          print "a nil result" if not mults
+          @db.query("update QSO set judged_multiplierID = recvd_multiplierID, matchType='Bye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType in ('Bye','None') and recvd_multiplierID in (#{mults.map { |w| w[0] }.join(", ")});",
+                    [callID]) { }
+          @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType in ('Bye','PartialBye','None');",
+                    [mults[0][0], callID]) { }
+          count += @db.affected_rows
+        end
+      else
+        multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=? and q.recvd_multiplierID=m.id and q.matchType in ('Bye','None') and q.judged_multiplierID is null group by m.id;",
+                            [callID])
+        if multres.count > 1
+          count = count + resolveAmbiguous(callID, multres, baseCallsign)
+        else
+          multres.each { |mrow|
+            @db.query("update QSO set judged_multiplierID = ?, matchType='Bye' where recvd_callID = ? and judged_multiplierID is null and #{@logs.membertest("logID")} and matchType in ('Bye','None');",
+                      [ mrow[0], callID ]) { }
+          }
+        end
+        multres = nil
+      end
+      0
+  end
+
   def checkByeMultipliers
     over = Overrides.new("overrides.yml")
     print "Checking Bye multipliers\n"
     count = 0
     @db.query("select c.id, c.basecall, count(*) as numQ from Callsign as c, QSO as q where #{@logs.membertest("q.logID")} and q.matchType = 'Bye' and q.judged_multiplierID is null and c.id = q.recvd_callID group by c.id having numQ >= 1;") { |row|
-      mult = over.lookupMultiplier(row[1])
-      if mult and not mult.empty? then
-        if mult.length == 1 then
-          multID, entID = @cdb.lookupMultiplier(mult[0].to_s)
-          @db.query("update QSO set judged_multiplierID = ? where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType='Bye';",
-                    [ multID, row[0] ] ) { }
-        else
-          mults = @cdb.lookupMultipliers(mult)
-          @db.query("update QSO set judged_multiplierID = recvd_multiplierID where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType = 'Bye' and recvd_multiplierID in (#{mults.map { |w| w[0] }.join(", ")});",
-                    [row[0]]) { }
-          @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType = 'Bye';",
-                    [mults[0][0], row[0]]) { }
-          count += @db.affected_rows
-        end
-      else
-        multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=? and q.recvd_multiplierID=m.id and q.matchType = 'Bye' and q.judged_multiplierID is null group by m.id;",
-                            [row[0]])
-        if multres.count > 1
-          count = count + resolveAmbiguous(row[0], multres, row[1])
-        else
-          multres.each { |mrow|
-            @db.query("update QSO set judged_multiplierID = ? where recvd_callID = ? and judged_multiplierID is null and #{@logs.membertest("logID")} and matchType='Bye';",
-                      [ mrow[0], row[0] ]) { }
-          }
-        end
-        multres = nil
-      end
+      count += checkIndividualBye(count, over, row[0].to_i, row[1])
     }
     print "#{count} Bye QSOs are partial matches\n"
   end

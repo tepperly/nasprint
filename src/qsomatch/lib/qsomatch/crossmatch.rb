@@ -54,13 +54,11 @@ def lookupQSO(db, id, timeadj=0)
 end
 
 
-def linkJudgedCallID(db, q1id, q2id)
-  db.query("select sent_callID from QSO where id = ? limit 1;", [q2id]) { |row|
-    db.query("update QSO set judged_recvdID = ? where id = ? limit 1;", [row[0].to_i, q1id])
-  }
-  db.query("select sent_callID from QSO where id = ? limit 1;", [q1id]) { |row|
-    db.query("update QSO set judged_recvdID = ? where id = ? limit 1;", [row[0].to_i, q2id])
-  }
+def linkJudgedCallBandMode(db, q1id, q2id)
+  db.query("update QSO as q1 set judged_recvdID = (select q2.sent_callID from QSO as q2 where q2.id = q1.matchID limit 1) where q1.id in (?, ?) limit 2;",
+           [ q1id, q2id ]) { }
+  db.query("update QSO set judged_mode = fixedMode where id in (select q1.id from QSO as q1, QSO as q2 where q1.id in (?, ?) and q2.id in (?,?) and q1.matchID = q2.id and q2.matchID = q1.id and q1.fixedMode = q2.fixedMode limit 2) limit 2;",  [q1id, q2id, q1id, q2id]) { }
+  db.query("update QSO set judged_band = band where id in (select q1.id from QSO as q1, QSO as q2 where q1.id in (?, ?) and q2.id in (?,?) and q1.matchID = q2.id and q2.matchID = q1.id and q1.band = q2.band limit 2) limit 2;",  [q1id, q2id, q1id, q2id]) { }
 end
 
 class Match
@@ -95,7 +93,7 @@ class Match
       if 1 == db.affected_rows
         db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q1.id, type2, @q2.id]) { }
         if 1 == db.affected_rows
-          linkJudgedCallID(db, @q1.id, @q2.id)
+          linkJudgedCallBandMode(db, @q1.id, @q2.id)
           return type1, type2
         else
           db.rollback
@@ -127,6 +125,7 @@ class CrossMatch
       @db.query("update QSO set matchID = NULL, matchType = 'None', judged_multiplierID = NULL, judged_band = NULL, judged_mode = NULL, judged_recvdID = null, score = NULL where #{@logs.membertest("logID")};") { }
       @db.query("update QSOExtra set comment = NULL where #{@logs.membertest("logID")};") { }
       @db.query("update Log set verifiedscore = null, verifiedPHQSOs = null, verifiedCWQSOs = null, verifiedMultipliers = null where #{@logs.membertest("id")};") { }
+      @db.query("delete from Participant where contestID = #{@contestID};") { }
     ensure
       @db.end_transaction
     end
@@ -167,6 +166,13 @@ class CrossMatch
 
   def exchangeExactMatch(recvd, sent)
     return " (" + recvd + "_callID = " + sent + "_callID and (" +
+      recvd + "_multiplierID = " + sent + "_multiplierID or " +
+      sent + "_multiplierID is null)) "
+  end
+
+  def exchangeNearCallMatch(recvd, sent)
+    return " ((" + recvd + "_callID = nm.c1ID and " + sent +
+           "_callID = nm.c2ID) and (" +
       recvd + "_multiplierID = " + sent + "_multiplierID or " +
       sent + "_multiplierID is null)) "
   end
@@ -239,13 +245,14 @@ class CrossMatch
           else
             count1 += 1
             count2 += 1
-            linkJudgedCallID(@db, row[0].to_i, row[1].to_i)
+            linkJudgedCallBandMode(@db, row[0].to_i, row[1].to_i)
             found = true
           end
         end
         if markDupe and not found
           @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i]) { }
           dupeCount += @db.affected_rows
+          @db.query("update QSO set judged_multiplierID = recvd_multiplierID where matchID is null and matchType = 'Dupe' and judged_multiplierID is null and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i]) { }
         end
       ensure
         @db.end_transaction
@@ -343,6 +350,9 @@ class CrossMatch
                        "q1.logID != q2.logID limit 1;"
             print queryStr + "\n"
             num1, num2, dupes = linkQSOs(queryStr, q1["match_type"], q2["match_type"])
+            if (num1 + num2) != 2
+              print "!!!OVERRIDE FAILED!!!\n"
+            end
             setJudged(logID1, q1, q1["match_type"])
             setJudged(logID2, q2, q2["match_type"])
             matchCount += (num1+num2)
@@ -422,6 +432,61 @@ class CrossMatch
     return full1, partial1, dupeCount
   end
 
+  def buildNearMatchTable
+    logCalls = Hash.new
+    @db.query("select c.id, c.basecall from Callsign as c, Log as l on l.callID = c.id where " +
+              @logs.membertest("l.id") + " order by c.basecall asc;") { |row|
+      logCalls[row[1]] = row[0].to_i
+    }
+    @db.query("create temporary table NearMatches (c1ID integer not null, c2ID integer not null, mode char(2) not null);")
+    @db.query("create index clind on NearMatches(c1ID, c2ID);")
+    logCalls.keys.each { |call1|
+      logCalls.keys.each { |call2|
+        if call1 != call2
+          if QSO.phJaroWinkler(call1,call2) >= 0.9
+            @db.query("insert into NearMatches (c1ID, c2ID, mode) values (?, ?, 'PH');", [ logCalls[call1], logCalls[call2] ])
+          end
+          if QSO.cwJaroWinkler(call1,call2) >= 0.9
+            @db.query("insert into NearMatches (c1ID, c2ID, mode) values (?, ?, 'CW');", [ logCalls[call1], logCalls[call2] ])
+          end
+        end
+      }
+    }
+  end
+    
+  def oneNearCallsign(timediff = PERFECT_TIME_MATCH)
+    modeAndBand=:perfect
+    buildNearMatchTable
+    print "Staring near callsign perfect match #{modeBandDesc(modeAndBand)}(#{timediff} minute tolerance): #{Time.now.to_s}\n"
+    queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 join NearMatches as nm" +
+      " on (" +  exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
+      exchangeNearCallMatch("q2.recvd", "q1.sent") + " and " +
+      "q1.fixedMode = nm.mode and q2.fixedMode = nm.mode and " +
+      modeBandMatch("q1", "q2", modeAndBand)  +
+      "), Log as l1, Log as l2 where " +
+      "l1.id = q1.logID and l2.id = q2.logID and " +
+      @logs.membertest("q1.logID") + " and " +
+      @logs.membertest("q2.logID") + " and " +
+      "q1.logID != q2.logID and "  +
+      exchangeMatch("q1.recvd", "q2.sent") + " and " +
+      exchangeMatch("q2.recvd", "q1.sent") + " and " +
+      notMatched("q1") + " and " + notMatched("q2") + " and " +
+      qsoMatch("q1", "q2", "l1", "l2", timediff) +
+      " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
+      ", abs(" +
+      @db.adjtimediff("MINUTE", "q1.time", "l1.clockadj",
+                      "q2.time", "l2.clockadj") + ") asc;"
+    print queryStr + "\n"
+    if $explain
+      @db.query("explain " + queryStr) { |row|
+        print row.join(", ") + "\n"
+      }
+    end
+    $stdout.flush
+    num1, num2, dupeCount = linkQSOs(queryStr, "Full", "Partial", true, true)
+    print "Ending near callsign perfect match test: #{Time.now.to_s}\n"
+    return num1
+  end
 
 
   def chooseType(str, num1, num2)
@@ -461,32 +526,44 @@ class CrossMatch
     return num1, num2
   end
 
+  def curOrJudged(table, name, altname=nil)
+    if not altname
+      altname = "judged_" + name
+    end
+    "(case when #{table}.#{altname} is null then #{table}.#{name} else #{table}.#{altname} end)"
+  end
+
   def ignoreDups
     queryStr = "select distinct q3.id from QSO as q1, QSO as q2, QSO as q3 where q1.matchID is not null and q1.matchType in ('Partial', 'Full') and " +
-      @logs.membertest("q1.logID") +
-      " and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and " +
-      @logs.membertest("q2.logID") +
-      " and q2.id = q1.matchID and q1.band = q2.band and q3.band = q1.band and q1.logID = q3.logID and q1.sent_multiplierID = q3.sent_multiplierID and q3.matchID is null and q3.matchType = 'None' and q2.sent_callID = q3.recvd_callID;"
+               @logs.membertest("q1.logID") +
+               " and q2.matchID is not null and q2.matchType in ('Partial', 'Full') and " +
+               @logs.membertest("q2.logID") +
+               " and q2.id = q1.matchID and " +
+               curOrJudged("q1", "band") + " = " + curOrJudged("q2", "band") + " and " +
+               curOrJudged("q1", "band") + " = " + curOrJudged("q3", "band") + " and " +
+               curOrJudged("q1", "fixedMode", "judged_mode") + " = " + curOrJudged("q3", "fixedMode", "judged_mode") + " and " +
+               curOrJudged("q2", "fixedMode", "judged_mode") + " = " + curOrJudged("q3", "fixedMode", "judged_mode") + " and " +
+               curOrJudged("q1", "recvd_multiplierID", "judged_multiplierID") + " = " +
+               curOrJudged("q3", "recvd_multiplierID", "judged_multiplierID") + " and " +
+               "q1.logID = q3.logID and q1.sent_multiplierID = q3.sent_multiplierID and q3.matchID is null and q3.matchType = 'None' and q2.sent_callID = q3.recvd_callID;"
     list = Array.new
     @db.query(queryStr) { |row|
       list << row[0].to_i
     }
     
-    @db.query("update QSO set matchType = 'Dupe' where id in (#{list.join(",")}) and matchType = 'None' and matchID is null limit #{list.length};") { }
+    @db.query("update QSO set matchType = 'Dupe', judged_multiplierID=recvd_multiplierID, judged_mode=fixedMode, judged_band=band, judged_recvdID=recvd_callID where id in (#{list.join(",")}) and matchType = 'None' and matchID is null limit #{list.length};") { }
     return @db.affected_rows
   end
   
   def markNIL
     count = 0
-    queryStr = "select q.id from QSO as q, Callsign as c where q.matchID is null and q.matchType = 'None' and " +
+    queryStr = "select distinct q.id from QSO as q, Callsign as c where q.matchID is null and q.matchType = 'None' and " +
       @logs.membertest("q.logID") +
-      " and q.recvd_callID = c.id and c.logrecvd;"
+      " and q.recvd_callID = c.id and c.logrecvd"
     begin
       @db.begin_transaction
-      @db.query(queryStr) { |row|
-        @db.query("update QSO set matchType = 'NIL' where id = ? and matchType = 'None' and matchID is null limit 1;", [ row[0].to_i] ) { }
-        count = count + @db.affected_rows
-      }
+      @db.query("update QSO set matchType = 'NIL' where id in (#{queryStr}) and matchType = 'None' and matchID is null;") { }
+      count += @db.affected_rows
     ensure
       @db.end_transaction
     end

@@ -20,6 +20,22 @@ class Overrides
     end
   end
 
+  def participants
+    if @yml.has_key?("callsigns")
+      @yml["callsigns"].each { |call, props|
+        if props.has_key?("multiplier") and (not props.has_key?("valid") or props["valid"])
+          if props["multiplier"].is_a?(String)
+            yield(call, props["multiplier"])
+          else
+            props["multiplier"].each { |mult|
+              yield(call, mult)
+            }
+          end
+        end
+      }
+    end
+  end
+
   def lookupEntity(callsign)
     if @yml.has_key?("callsigns")
       callOverrides=@yml["callsigns"]
