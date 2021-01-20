@@ -245,11 +245,13 @@ class ContestDatabase
     if name and year
       result = @db.query("select id from Contest where name=\"#{@db.escape(name)}\" and year = #{year.to_i} limit 1;")
       result.each(:as => :array) { |row|
-        return row[0].to_i
+        @contestID = row[0].to_i
+        return @contestID
       }
       if create
         @db.query("insert into Contest (name, year, start, end) values (\"#{@db.escape(name)}\", \"#{year.to_i}\", \"#{CONTEST_START.strftime("%Y-%m-%d %H:%M:%S")}\", \"#{CONTEST_END.strftime("%Y-%m-%d %H:%M:%S")}\");")
-        return @db.last_id
+        @contestID = @db.last_id
+        return @contestID
       end
     end
     nil

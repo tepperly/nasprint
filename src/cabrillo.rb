@@ -91,6 +91,11 @@ class QSO
       raise ArgumentError, "Unknown QSO mode #{str}"
     end
   end
+
+  def to_s
+    "QSO: " + @freq.to_s + " " + @mode + " " + @datetime.strftime("%Y-%m-%d %H%M") + " " +
+      @sentExch.to_s + " " + @recdExch.to_s + (@transceiver ? @transceiver.to_s : "")
+  end
 end
 
 class OperatorClass
