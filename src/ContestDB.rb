@@ -10,7 +10,6 @@ require_relative 'cabrillo'
 
 class ContestDatabase
   CHARS_PER_CALL = 16
-  CHARS_PER_NAME = 24
 
   def initialize(db)
     @db = db
@@ -22,9 +21,8 @@ class ContestDatabase
   attr_reader :contestID
 
   def readTables
-    result = Array.new
-    res = @db.query("show tables;")
-    res.each(:as => :array) { |row|
+    result = Set.new
+    @db.execute(".table") { |row|
       result << row[0]
     }
     result.sort
@@ -38,7 +36,6 @@ class ContestDatabase
     if not tables.include?("Entity")
       createEntityTable
     end
-    createHomophoneTable
     if not tables.include?("Multiplier")
       createMultiplierTable
     end
@@ -64,42 +61,15 @@ class ContestDatabase
   end
 
   def createContestTable
-    @db.query("create table if not exists Contest (id integer primary key auto_increment, name varchar(64) not null, year smallint not null, unique index contind (name, year), start datetime not null, end datetime not null);")
+    @db.execute("create table if not exists Contest (id integer primary key auto_increment, name varchar(64) not null, year smallint not null, unique index contind (name, year), start datetime not null, end datetime not null);") { }
   end
 
   def createTeamTable
-    @db.query("create table if not exists Team (id integer primary key auto_increment, name varchar(64) not null, managercall varchar(#{CHARS_PER_CALL}) not null, manageremail varchar(128), registertime datetime, contestID integer not null, unique index teamind (name, contestID));")
+    @db.execute("create table if not exists Team (id integer primary key auto_increment, name varchar(64) not null, managercall varchar(#{CHARS_PER_CALL}) not null, manageremail varchar(128), registertime datetime, contestID integer not null, unique index teamind (name, contestID));") { }
   end
 
   def createTeamMemberTable
-    @db.query("create table if not exists TeamMember (teamID integer not null, logID integer not null, contestID integer not null, primary key (teamID, logID), unique index logind (logID, contestID));")
-  end
-
-  def alreadyDefined?(name1, name2)
-    res = @db.query("select id from Homophone where name1 = \"#{name1}\" and name2 = \"#{name2}\" limit 1;")
-    res.each(:as => :array) { |row|
-      return true
-    }
-    false
-  end
-
-  def createHomophoneTable
-    @db.query("create table if not exists Homophone (id integer primary key auto_increment, name1 varchar(#{CHARS_PER_NAME}), name2 varchar(#{CHARS_PER_NAME}), index n1ind (name1), index n2ind (name2));")
-    CSV.foreach(File.dirname(__FILE__) + "/homophones.csv", "r:ascii") { |row|
-      row.each { |i|
-        row.each { |j|
-          begin
-            if not alreadyDefined?(@db.escape(i), @db.escape(j))
-              @db.query("insert into Homophone (name1, name2) values (\"#{@db.escape(i)}\", \"#{@db.escape(j)}\");")
-            end
-          rescue Mysql2::Error => e
-            if e.error_number != 1062 # ignore duplicate entry
-              raise e
-            end
-          end
-        }
-      }
-    }
+    @db.execute("create table if not exists TeamMember (teamID integer not null, logID integer not null, contestID integer not null, primary key (teamID, logID), unique index logind (logID, contestID));") { }
   end
 
   def extractPrefix(prefix)
@@ -108,8 +78,7 @@ class ContestDatabase
 
   def toxicStatistics(contestID)
     results = Array.new
-    res = @db.query("select l.callsign, l.callID, count(*) from Log as l, QSO as q where q.logID = l.id and contestID = #{contestID.to_i} group by l.id order by l.callsign asc;") 
-    res.each(:as => :array) { |row|
+    res = @db.execute("select l.callsign, l.callID, count(*) from Log as l, QSO as q where q.logID = l.id and contestID = #{contestID.to_i} group by l.id order by l.callsign asc;")  { |row|
       item = Array.new(8)
       item[0] = row[0]
       item[1] = row[1].to_i
@@ -117,8 +86,7 @@ class ContestDatabase
       results << item
     }
     results.each { |item|
-      res = @db.query("select count(*), sum(q.matchType in ('Full')), sum(q.matchType = 'Partial'), sum(q.matchType = 'NIL'), sum(q.matchType = 'Removed') from QSO as q join Exchange as e on q.recvdID = e.id where e.callID = #{item[1]} group by e.callID limit 1;")
-      res.each(:as => :array) { |row|
+      @db.execute("select count(*), sum(q.matchType in ('Full')), sum(q.matchType = 'Partial'), sum(q.matchType = 'NIL'), sum(q.matchType = 'Removed') from QSO as q join Exchange as e on q.recvdID = e.id where e.callID = #{item[1]} group by e.callID limit 1;") { |row|
         row.each_index { |i|
           item[3+i] = row[i].to_i
         }
@@ -128,16 +96,16 @@ class ContestDatabase
   end
 
   def createEntityTable
-    @db.query("create table if not exists Entity (id integer primary key, name varchar(64) not null, prefix varchar(8), continent enum ('AS', 'EU', 'AF', 'OC', 'NA', 'SA', 'AN') not null);")
+    @db.execute("create table if not exists Entity (id integer primary key, name varchar(64) not null, prefix varchar(8), continent enum ('AS', 'EU', 'AF', 'OC', 'NA', 'SA', 'AN') not null);") { }
     open(File.dirname(__FILE__) + "/entitylist.txt", "r:ascii") { |inf|
       inf.each { |line|
         if (line =~ /^\s+(\S+)\s+(.*)\s+([a-z][a-z](,[a-z][a-z])?)\s+\S+\s+\S+\s+(\d+)\s*$/i)
           begin
-            @db.query("insert into Entity (id, name, continent) values (#{$5.to_i}, \"#{@db.escape($2.strip)}\", \"#{@db.escape($3[0,2])}\");")
-          rescue Mysql2::Error => e
-            if e.error_number != 1062 # ignore duplicate entry
-              raise e
-            end
+            @db.execute("insert into Entity (id, name, continent) values (#{$5.to_i}, \"#{@db.escape($2.strip)}\", \"#{@db.escape($3[0,2])}\");") { }
+          # rescue Mysql2::Error => e
+          #   if e.error_number != 1062 # ignore duplicate entry
+          #     raise e
+          #   end
           end
         else
           "Entity line doesn't match: #{line}"
@@ -147,16 +115,16 @@ class ContestDatabase
     CSV.foreach(File.dirname(__FILE__) + "/prefixlist.txt", "r:ascii") { |row|
       begin
         @db.query("update Entity set prefix = \"#{@db.escape(row[1].to_s)}\" where id = #{row[0].to_i} limit 1;")
-      rescue Mysql2::Error => e
-        if e.error_number != 1062 # ignore duplicate entry
-          raise e
-        end
+      # rescue Mysql2::Error => e
+      #   if e.error_number != 1062 # ignore duplicate entry
+      #     raise e
+      #   end
       end
     }
   end
 
   def createMultiplierTable
-    @db.query("create table if not exists Multiplier (id integer primary key auto_increment, abbrev char(2) not null unique, wasstate char(2), entityID integer, ismultiplier bool);")
+    @db.execute("create table if not exists Multiplier (id integer primary key auto_increment, abbrev char(3) not null unique, entityID integer, ismultiplier bool);")
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii") { |row|
       begin
         if row[0] == row[1]

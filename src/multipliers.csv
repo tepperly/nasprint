@@ -1,146 +1,476 @@
-"4U1","DX",289
-"6C","DX",60
-"6Y","DX",82
-"8P","DX",62
-"9Y","DX",90
-"AB","AB",1
-"AK","AK",6,"AK"
-"AL","AL",291,"AL"
-"AR","AR",291,"AR"
-"ARK","AR",291
-"AZ","AZ",291,"AZ"
-"BC","BC",1
-"BRAZIL","DX",108
-"CA","CA",291,"CA"
-"CE","DX",112
-"CM","DX",70
-"CX","CX",144
-"CO","CO",291,"CO"
-"CO8","DX",70
-"CT","CT",291,"CT"
-"CUBA","DX",70
-"DC","DC",291,"MD"
-"DE","DE",291,"DE"
-"DEL","DE",291
-"DL","DX",230
-"DX","DX",0
-"EA","DX",281
-"F","DX",227
-"FL","FL",291,"FL"
-"FR","DX",227
-"FRANCE","DX",227
-"FS","DX",213
-"G","DX",223
-"GA","GA",291,"GA"
-"GW","DX",294
-"HA","DX",239
-"HH","DX",78
-"HI","HI",110,"HI"
-"HP","DX",88
-"HR","DX",80
-"HUNGARY","DX",239
-"I","DX",248
-"IA","IA",291,"IA"
-"ID","ID",291,"ID"
-"IL","IL",291,"IL"
-"IN","IN",291,"IN"
-"JA","DX",339
-"KH6","HI",110
-"KP2","DX",285
-"KP4","DX",202
-"KP5","DX",43
-"HK0","DX",216
-"KS","KS",291,"KS"
-"KY","KY",291,"KY"
-"LA","LA",291,"LA"
-"LAB","NL",1
-"LB","NL",1
-"OA","DX",136
-"OE","DX",206
-"OM","DX",504
-"MA","MA",291,"MA"
-"MB","MB",1
-"MD","MD",291,"MD"
-"ME","ME",291,"ME"
-"MI","MI",291,"MI"
-"MN","MN",291,"MN"
-"MO","MO",291,"MO"
-"MS","MS",291,"MS"
-"MT","MT",291,"MT"
-"MX","DX",50
-"NB","NB",1
-"NC","NC",291,"NC"
-"ND","ND",291,"ND"
-"NE","NE",291,"NE"
-"NF","NL",1
-"NH","NH",291,"NH"
-"NJ","NJ",291,"NJ"
-"NL","NL",1
-"NM","NM",291,"NM"
-"NS","NS",1
-"NT","NT",1
-"NU","NU",1
-"NV","NV",291,"NV"
-"NWT","NT",1
-"NY","NY",291,"NY"
-"OH","OH",291,"OH"
-"OK","OK",291,"OK"
-"ON","ON",1
-"ONT","ON",1
-"OR","OR",291,"OR"
-"PA","PA",291,"PA"
-"PE","PE",1
-"PEI","PE",1
-"PJ4","DX",85
-"PJ7","DX",518
-"POLAND","DX",269
-"PR","DX",202
-"PY","DX",108
-"QC","QC",1
-"RI","RI",291,"RI"
-"SC","SC",291,"SC"
-"SD","SD",291,"SD"
-"SK","SK",1
-"SM","DX",284
-"SP","DX",269
-"TM","DX",227
-"TM6","DX",227
-"TG","DX",76
-"TI","DX",308
-"TN","TN",291,"TN"
-"TX","TX",291,"TX"
-"UA9","DX",15
-"UT","UT",291,"UT"
-"V3","DX",66
-"V31","DX",66
-"VA","VA",291,"VA"
-"VE1","NS",1
-"VE2","QC",1
-"VE3","ON",1
-"VE4","MB",1
-"VE5","SK",1
-"VE6","AB",1
-"VE7","BC",1
-"VE8","NT",1
-"VE9","NB",1
-"VI","DX",285
-"VO","NL",1
-"VO1","NL",1
-"VO2","NL",1
-"VP2M","DX",96
-"VT","VT",291,"VT"
-"VY0","NU",1
-"VY1","YT",1
-"VY2","PE",1
-"WA","WA",291,"WA"
-"WI","WI",291,"WI"
-"WV","WV",291,"WV"
-"WVA","WV",291
-"WY","WY",291,"WY"
-"XE","DX",50
-"YT","YT",1
-"YV","DX",148
-"WALES","DX",294
-"YK","YT",1
-"ZL","DX",170
-"ZF","DX",69
+#ABBREVIATION,LONG NAME,COUNTS AS FOR FL STATIONS,DX Entity Number,Counts As Mult for FL,Counts As Mult for Other
+ALC,ALACHUA,FL,291,false,true
+BAK,BAKER,FL,291,false,true
+BAY,BAY,FL,291,false,true
+BRA,BRADFORD,FL,291,false,true
+BRE,BREVARD,FL,291,false,true
+BRO,BROWARD,FL,291,false,true
+CAH,CALHOUN,FL,291,false,true
+CHA,CHARLOTTE,FL,291,false,true
+CIT,CITRUS,FL,291,false,true
+CLA,CLAY,FL,291,false,true
+CLM,COLUMBIA,FL,291,false,true
+CLR,COLLIER,FL,291,false,true
+DAD,"MIAMI-DADE",FL,291,false,true
+DES,DESOTO,FL,291,false,true
+DIX,DIXIE,FL,291,false,true
+DUV,DUVAL,FL,291,false,true
+ESC,ESCAMBIA,FL,291,false,true
+FLG,FLAGLER,FL,291,false,true
+FRA,FRANKLIN,FL,291,false,true
+GAD,GADSDEN,FL,291,false,true
+GIL,GILCHRIST,FL,291,false,true
+GLA,GLADES,FL,291,false,true
+GUL,GULF,FL,291,false,true
+HAM,HAMILTON,FL,291,false,true
+HAR,HARDEE,FL,291,false,true
+HEN,HENDRY,FL,291,false,true
+HER,HERNANDO,FL,291,false,true
+HIG,HIGHLANDS,FL,291,false,true
+HIL,HILLSBOROUGH,FL,291,false,true
+HOL,HOLMES,FL,291,false,true
+IDR,"INDIAN RIVER",FL,291,false,true
+JAC,JACKSON,FL,291,false,true
+JEF,JEFFERSON,FL,291,false,true
+LAF,LAFAYETTE,FL,291,false,true
+LAK,LAKE,FL,291,false,true
+LEE,LEE,FL,291,false,true
+LEO,LEON,FL,291,false,true
+LEV,LEVY,FL,291,false,true
+LIB,LIBERTY,FL,291,false,true
+MAD,MADISON,FL,291,false,true
+MAO,MARION,FL,291,false,true
+MON,MONROE,FL,291,false,true
+MRT,MARTIN,FL,291,false,true
+MTE,MANATEE,FL,291,false,true
+NAS,NASSAU,FL,291,false,true
+OKA,OKALOOSA,FL,291,false,true
+OKE,OKEECHOBEE,FL,291,false,true
+ORA,ORANGE,FL,291,false,true
+OSC,OSCEOLA,FL,291,false,true
+PAL,"PALM BEACH",FL,291,false,true
+PAS,PASCO,FL,291,false,true
+PIN,PINELLAS,FL,291,false,true
+POL,POLK,FL,291,false,true
+PUT,PUTNAM,FL,291,false,true
+SAN,"SANTA ROSA",FL,291,false,true
+SAR,SARASOTA,FL,291,false,true
+SEM,SEMINOLE,FL,291,false,true
+STJ,"ST. JOHNS",FL,291,false,true
+STL,"ST. LUCIE",FL,291,false,true
+SUM,SUMTER,FL,291,false,true
+SUW,SUWANNEE,FL,291,false,true
+TAY,TAYLOR,FL,291,false,true
+UNI,UNION,FL,291,false,true
+VOL,VOLUSIA,FL,291,false,true
+WAG,WASHINGTON,FL,291,false,true
+WAK,WAKULLA,FL,291,false,true
+WAL,WALTON,FL,291,false,true
+AB,ALBERTA,AB,1,true,false
+BC,"BRITISH COLUMBIA",BC,1,true,false
+MB,MANITOBA,MB,1,true,false
+NB,"NEW BRUNSWICK",NB,1,true,false
+NL,"NEWFOUNDLAND",NL,1,true,false
+NS,"NOVA SCOTIA",NS,1,true,false
+NT,"NORTHERN TERRITORIES",NT,1,true,false
+ON,ONTARIO,ON,1,true,false
+PE,"PRINCE EDWARD ISLAND",PE,1,true,false
+QC,"QUEBEC",QC,1,true,false
+SK,SASKATCHEWAN,SK,1,true,false
+YT,YUKON,YT,1,true,false
+NU,NUNAVAT,NU,1,true,false
+AL,ALABAMA,AL,291,true,false
+AK,ALASKA,AK,6,true,false
+AZ,ARIZONA,AZ,291,true,false
+AR,ARKANSAS,AR,291,true,false
+CA,CALIFORNIA,CA,291,true,false
+CO,COLORADO,CO,291,true,false
+CT,CONNECTICUT,CT,291,true,false
+DE,DELAWARE,DE,291,true,false
+DC,"DISTRICT OF COLUMBIA",DC,291,true,false
+FL,FLORIDA,FL,291,true,false
+GA,GEORGIA,GA,291,true,false
+HI,HAWAII,HI,110,true,false
+ID,IDAHO,ID,291,true,false
+IL,ILLINOIS,IL,291,true,false
+IN,INDIANA,IN,291,true,false
+IA,IOWA,IA,291,true,false
+KS,KANSAS,KS,291,true,false
+KY,KENTUCKY,KY,291,true,false
+LA,LOUISIANA,LA,291,true,false
+ME,MAINE,ME,291,true,false
+MD,MARYLAND,MD,291,true,false
+MA,MASSACHUSETTS,MA,291,true,false
+MI,MICHIGAN,MI,291,true,false
+MN,MINNESOTA,MN,291,true,false
+MS,MISSISSIPPI,MS,291,true,false
+MO,MISSOURI,MO,291,true,false
+MT,MONTANA,MT,291,true,false
+NE,NEBRASKA,NE,291,true,false
+NV,NEVADA,NV,291,true,false
+NH,"NEW HAMPSHIRE",NH,291,true,false
+NJ,"NEW JERSEY",NJ,291,true,false
+NM,"NEW MEXICO",NM,291,true,false
+NY,"NEW YORK",NY,291,true,false
+NC,"NORTH CAROLINA",NC,291,true,false
+ND,"NORTH DAKOTA",ND,291,true,false
+OH,OHIO,OH,291,true,false
+OK,OKLAHOMA,OK,291,true,false
+OR,OREGON,OR,291,true,false
+PA,PENNSYLVANIA,PA,291,true,false
+RI,"RHODE ISLAND",RI,291,true,false
+SC,"SOUTH CAROLINA",SC,291,true,false
+SD,"SOUTH DAKOTA",SD,291,true,false
+TN,TENNESSEE,TN,291,true,false
+TX,TEXAS,TX,291,true,false
+UT,UTAH,UT,291,true,false
+VT,VERMONT,VT,291,true,false
+VA,VIRGINIA,VA,291,true,false
+WA,WASHINGTON,WA,291,true,false
+WV,"WEST VIRGINIA",WV,291,true,false
+WI,WISCONSIN,WI,291,true,false
+WY,WYOMING,WY,291,true,false
+"1A","SOV MIL ORDER OF MALTA","1A",246,true,false
+"1S","SPRATLY ISLANDS","1S",247,true,false
+"3A","MONACO","3A",260,true,false
+"3B6","AGALEGA & ST. BRANDON","3B6",4,true,false
+"3B8","MAURITIUS","3B8",165,true,false
+"3B9","RODRIGUEZ ISLAND","3B9",207,true,false
+"3C","EQUATORIAL GUINEA","3C",49,true,false
+"3C0","ANNOBON ISLAND","3C0",195,true,false
+"3D2","FIJI","3D2",176,true,false
+"3D2/C","CONWAY REEF","3D2/C",489,true,false
+"3D2/R","ROTUMA ISLAND","3D2/R",460,true,false
+"3DA","KINGDOM OF ESWATINI","3DA",468,true,false
+"3V","TUNISIA","3V",474,true,false
+"3W","VIETNAM","3W",293,true,false
+"3X","GUINEA","3X",107,true,false
+"3Y/B","BOUVET","3Y/B",24,true,false
+"3Y/P","PETER 1 ISLAND","3Y/P",199,true,false
+"4J","AZERBAIJAN","4J",18,true,false
+"4L","GEORGIA","4L",75,true,false
+"4O","MONTENEGRO","4O",514,true,false
+"4S","SRI LANKA","4S",315,true,false
+"4U1I","ITU HQ","4U1I",117,true,false
+"4U1U","UNITED NATIONS HQ","4U1U",289,true,false
+"*4U1V","VIENNA INTL CTR","*4U1V",206,true,false
+"4W","TIMOR - LESTE","4W",511,true,false
+"4X","ISRAEL","4X",336,true,false
+"5A","LIBYA","5A",436,true,false
+"5B","CYPRUS","5B",215,true,false
+"5H","TANZANIA","5H",470,true,false
+"5N","NIGERIA","5N",450,true,false
+"5R","MADAGASCAR","5R",438,true,false
+"5T","MAURITANIA","5T",444,true,false
+"5U","NIGER","5U",187,true,false
+"5V","TOGO","5V",483,true,false
+"5W","SAMOA","5W",190,true,false
+"5X","UGANDA","5X",286,true,false
+"5Z","KENYA","5Z",430,true,false
+"6W","SENEGAL","6W",456,true,false
+"6Y","JAMAICA","6Y",82,true,false
+"7O","YEMEN","7O",492,true,false
+"7P","LESOTHO","7P",432,true,false
+"7Q","MALAWI","7Q",440,true,false
+"7X","ALGERIA","7X",400,true,false
+"8P","BARBADOS","8P",62,true,false
+"8Q","MALDIVES","8Q",159,true,false
+"8R","GUYANA","8R",129,true,false
+"9A","CROATIA","9A",497,true,false
+"9G","GHANA","9G",424,true,false
+"9H","MALTA","9H",257,true,false
+"9J","ZAMBIA","9J",482,true,false
+"9K","KUWAIT","9K",348,true,false
+"9L","SIERRA LEONE","9L",458,true,false
+"9M2","WEST MALAYSIA","9M2",299,true,false
+"9M6","EAST MALAYSIA","9M6",46,true,false
+"9N","NEPAL","9N",369,true,false
+"9Q","DEM. REP. OF THE CONGO","9Q",414,true,false
+"9U","BURUNDI","9U",404,true,false
+"9V","SINGAPORE","9V",381,true,false
+"9X","RWANDA","9X",454,true,false
+"9Y","TRINIDAD & TOBAGO","9Y",90,true,false
+"A2","BOTSWANA","A2",402,true,false
+"A3","TONGA","A3",160,true,false
+"A4","OMAN","A4",370,true,false
+"A5","BHUTAN","A5",306,true,false
+"A6","UNITED ARAB EMIRATES","A6",391,true,false
+"A7","QATAR","A7",376,true,false
+"A9","BAHRAIN","A9",304,true,false
+"AP","PAKISTAN","AP",372,true,false
+"BS7","SCARBOROUGH REEF","BS7",506,true,false
+"BV","TAIWAN","BV",386,true,false
+"BV9P","PRATAS ISLAND","BV9P",505,true,false
+"BY","CHINA","BY",318,true,false
+"C2","NAURU","C2",157,true,false
+"C3","ANDORRA","C3",203,true,false
+"C5","THE GAMBIA","C5",422,true,false
+"C6","BAHAMAS","C6",60,true,false
+"C9","MOZAMBIQUE","C9",181,true,false
+"CE","CHILE","CE",112,true,false
+"CE0X","SAN FELIX & SAN AMBROSIO","CE0X",217,true,false
+"CE0Y","EASTER ISLAND","CE0Y",47,true,false
+"CE0Z","JUAN FERNANDEZ ISLANDS","CE0Z",125,true,false
+"CE9","ANTARCTICA","CE9",13,true,false
+"CM","CUBA","CM",70,true,false
+"CN","MOROCCO","CN",446,true,false
+"CP","BOLIVIA","CP",104,true,false
+"CT","PORTUGAL","CT",272,true,false
+"CT3","MADEIRA ISLANDS","CT3",256,true,false
+"CU","AZORES","CU",149,true,false
+"CX","URUGUAY","CX",144,true,false
+"CY0","SABLE ISLAND","CY0",211,true,false
+"CY9","ST. PAUL ISLAND","CY9",252,true,false
+"D2","ANGOLA","D2",401,true,false
+"D4","CAPE VERDE","D4",409,true,false
+"D6","COMOROS","D6",411,true,false
+"DL","FED. REP. OF GERMANY","DL",230,true,false
+"DU","PHILIPPINES","DU",375,true,false
+"E3","ERITREA","E3",51,true,false
+"E4","PALESTINE","E4",510,true,false
+"E5/N","NORTH COOK ISLANDS","E5/N",191,true,false
+"E5/S","SOUTH COOK ISLANDS","E5/S",234,true,false
+"E6","NIUE","E6",188,true,false
+"E7","BOSNIA-HERZEGOVINA","E7",501,true,false
+"EA","SPAIN","EA",281,true,false
+"EA6","BALEARIC ISLANDS","EA6",21,true,false
+"EA8","CANARY ISLANDS","EA8",29,true,false
+"EA9","CEUTA & MELILLA","EA9",32,true,false
+"EI","IRELAND","EI",245,true,false
+"EK","ARMENIA","EK",14,true,false
+"EL","LIBERIA","EL",434,true,false
+"EP","IRAN","EP",330,true,false
+"ER","MOLDOVA","ER",179,true,false
+"ES","ESTONIA","ES",52,true,false
+"ET","ETHIOPIA","ET",53,true,false
+"EU","BELARUS","EU",27,true,false
+"EX","KYRGYZSTAN","EX",135,true,false
+"EY","TAJIKISTAN","EY",262,true,false
+"EZ","TURKMENISTAN","EZ",280,true,false
+"F","FRANCE","F",227,true,false
+"FG","GUADELOUPE","FG",79,true,false
+"FH","MAYOTTE","FH",169,true,false
+"FJ","ST. BARTHELEMY","FJ",516,true,false
+"FK","NEW CALEDONIA","FK",162,true,false
+"FK/C","CHESTERFIELD ISLANDS","FK/C",512,true,false
+"FM","MARTINIQUE","FM",84,true,false
+"FO","FRENCH POLYNESIA","FO",175,true,false
+"FO/A","AUSTRAL ISLANDS","FO/A",508,true,false
+"FO/C","CLIPPERTON ISLAND","FO/C",36,true,false
+"FO/M","MARQUESAS ISLANDS","FO/M",509,true,false
+"FP","ST. PIERRE & MIQUELON","FP",277,true,false
+"FR","REUNION ISLAND","FR",453,true,false
+"FS","ST. MARTIN","FS",213,true,false
+"FT/G","GLORIOSO ISLANDS","FT/G",99,true,false
+"FT/J","JUAN DE NOVA & EUROPA","FT/J",124,true,false
+"FT/T","TROMELIN ISLAND","FT/T",276,true,false
+"FT/W","CROZET ISLAND","FT/W",41,true,false
+"FT/X","KERGUELEN ISLANDS","FT/X",131,true,false
+"FT/Z","AMSTERDAM & ST. PAUL IS.","FT/Z",10,true,false
+"FW","WALLIS & FUTUNA ISLANDS","FW",298,true,false
+"FY","FRENCH GUIANA","FY",63,true,false
+"G","ENGLAND","G",223,true,false
+"GD","ISLE OF MAN","GD",114,true,false
+"GI","NORTHERN IRELAND","GI",265,true,false
+"GJ","JERSEY","GJ",122,true,false
+"GM","SCOTLAND","GM",279,true,false
+"*GM/S","SHETLAND ISLANDS","*GM/S",279,true,false
+"GU","GUERNSEY","GU",106,true,false
+"GW","WALES","GW",294,true,false
+"H4","SOLOMON ISLANDS","H4",185,true,false
+"H40","TEMOTU PROVINCE","H40",507,true,false
+"HA","HUNGARY","HA",239,true,false
+"HB","SWITZERLAND","HB",287,true,false
+"HB0","LIECHTENSTEIN","HB0",251,true,false
+"HC","ECUADOR","HC",120,true,false
+"HC8","GALAPAGOS ISLANDS","HC8",71,true,false
+"HH","HAITI","HH",78,true,false
+"HI","DOMINICAN REPUBLIC","HI",72,true,false
+"HK","COLOMBIA","HK",116,true,false
+"HK0/A","SAN ANDRES & PROVIDENCIA","HK0/A",216,true,false
+"HK0/M","MALPELO ISLAND","HK0/M",161,true,false
+"HL","REPUBLIC OF KOREA","HL",137,true,false
+"HP","PANAMA","HP",88,true,false
+"HR","HONDURAS","HR",80,true,false
+"HS","THAILAND","HS",387,true,false
+"HV","VATICAN CITY","HV",295,true,false
+"HZ","SAUDI ARABIA","HZ",378,true,false
+"I","ITALY","I",248,true,false
+"*IG9","AFRICAN ITALY","*IG9",248,true,false
+"IS","SARDINIA","IS",225,true,false
+"*IT9","SICILY","*IT9",248,true,false
+"J2","DJIBOUTI","J2",382,true,false
+"J3","GRENADA","J3",77,true,false
+"J5","GUINEA-BISSAU","J5",109,true,false
+"J6","ST. LUCIA","J6",97,true,false
+"J7","DOMINICA","J7",95,true,false
+"J8","ST. VINCENT","J8",98,true,false
+"JA","JAPAN","JA",339,true,false
+"JD/M","MINAMI TORISHIMA","JD/M",177,true,false
+"JD/O","OGASAWARA","JD/O",192,true,false
+"JT","MONGOLIA","JT",363,true,false
+"JW","SVALBARD","JW",259,true,false
+"*JW/B","BEAR ISLAND","*JW/B",259,true,false
+"JX","JAN MAYEN","JX",118,true,false
+"JY","JORDAN","JY",342,true,false
+"KG4","GUANTANAMO BAY","KG4",105,true,false
+"KH0","MARIANA ISLANDS","KH0",166,true,false
+"KH1","BAKER & HOWLAND ISLANDS","KH1",20,true,false
+"KH2","GUAM","KH2",103,true,false
+"KH3","JOHNSTON ISLAND","KH3",123,true,false
+"KH4","MIDWAY ISLAND","KH4",174,true,false
+"KH5","PALMYRA & JARVIS ISLANDS","KH5",197,true,false
+"KH6","HAWAII","KH6",110,true,false
+"KH7K","KURE ISLAND","KH7K",138,true,false
+"KH8","AMERICAN SAMOA","KH8",9,true,false
+"KH8/S","SWAINS ISLAND","KH8/S",515,true,false
+"KH9","WAKE ISLAND","KH9",297,true,false
+"KP1","NAVASSA ISLAND","KP1",182,true,false
+"KP2","US VIRGIN ISLANDS","KP2",285,true,false
+"KP4","PUERTO RICO","KP4",202,true,false
+"KP5","DESECHEO ISLAND","KP5",43,true,false
+"LA","NORWAY","LA",266,true,false
+"LU","ARGENTINA","LU",100,true,false
+"LX","LUXEMBOURG","LX",254,true,false
+"LY","LITHUANIA","LY",146,true,false
+"LZ","BULGARIA","LZ",212,true,false
+"OA","PERU","OA",136,true,false
+"OD","LEBANON","OD",354,true,false
+"OE","AUSTRIA","OE",206,true,false
+"OH2","FINLAND","OH",224,true,false
+"OH0","ALAND ISLANDS","OH0",5,true,false
+"OJ0","MARKET REEF","OJ0",167,true,false
+"OK","CZECH REPUBLIC","OK",503,true,false
+"OM","SLOVAK REPUBLIC","OM",504,true,false
+"ON1","BELGIUM","ON",209,true,false
+"OX","GREENLAND","OX",237,true,false
+"OY","FAROE ISLANDS","OY",222,true,false
+"OZ","DENMARK","OZ",221,true,false
+"P2","PAPUA NEW GUINEA","P2",163,true,false
+"P4","ARUBA","P4",91,true,false
+"P5","DPR OF KOREA","P5",344,true,false
+"PA","NETHERLANDS","PA",263,true,false
+"PJ2","CURACAO","PJ2",517,true,false
+"PJ4","BONAIRE","PJ4",520,true,false
+"PJ5","SABA & ST. EUSTATIUS","PJ5",519,true,false
+"PJ7","SINT MAARTEN","PJ7",518,true,false
+"PY","BRAZIL","PY",108,true,false
+"PY0F","FERNANDO DE NORONHA","PY0F",56,true,false
+"PY0S","ST. PETER & ST. PAUL","PY0S",253,true,false
+"PY0T","TRINDADE & MARTIM VAZ","PY0T",273,true,false
+"PZ","SURINAME","PZ",140,true,false
+"R1FJ","FRANZ JOSEF LAND","R1FJ",61,true,false
+"S0","WESTERN SAHARA","S0",302,true,false
+"S2","BANGLADESH","S2",305,true,false
+"S5","SLOVENIA","S5",499,true,false
+"S7","SEYCHELLES","S7",379,true,false
+"S9","SAO TOME & PRINCIPE","S9",219,true,false
+"SM","SWEDEN","SM",284,true,false
+"SP","POLAND","SP",269,true,false
+"ST","SUDAN","ST",466,true,false
+"SU","EGYPT","SU",478,true,false
+"SV","GREECE","SV",236,true,false
+"SV/A","MOUNT ATHOS","SV/A",180,true,false
+"SV5","DODECANESE","SV5",45,true,false
+"SV9","CRETE","SV9",40,true,false
+"T2","TUVALU","T2",282,true,false
+"T30","WESTERN KIRIBATI","T30",301,true,false
+"T31","CENTRAL KIRIBATI","T31",31,true,false
+"T32","EASTERN KIRIBATI","T32",48,true,false
+"T33","BANABA ISLAND","T33",490,true,false
+"T5","SOMALIA","T5",232,true,false
+"T7","SAN MARINO","T7",278,true,false
+"T8","PALAU","T8",22,true,false
+"TA","ASIATIC TURKEY","TA",390,true,false
+"*TA1","EUROPEAN TURKEY","*TA1",390,true,false
+"TF","ICELAND","TF",242,true,false
+"TG","GUATEMALA","TG",76,true,false
+"TI","COSTA RICA","TI",308,true,false
+"TI9","COCOS ISLAND","TI9",37,true,false
+"TJ","CAMEROON","TJ",406,true,false
+"TK","CORSICA","TK",214,true,false
+"TL","CENTRAL AFRICAN REPUBLIC","TL",408,true,false
+"TN","REPUBLIC OF THE CONGO","TN",412,true,false
+"TR","GABON","TR",420,true,false
+"TT","CHAD","TT",410,true,false
+"TU","COTE D'IVOIRE","TU",428,true,false
+"TY","BENIN","TY",416,true,false
+"TZ","MALI","TZ",442,true,false
+"UA","EUROPEAN RUSSIA","UA",54,true,false
+"UA2","KALININGRAD","UA2",126,true,false
+"UA9","ASIATIC RUSSIA","UA9",15,true,false
+"UK","UZBEKISTAN","UK",292,true,false
+"UN","KAZAKHSTAN","UN",130,true,false
+"UR","UKRAINE","UR",288,true,false
+"V2","ANTIGUA & BARBUDA","V2",94,true,false
+"V3","BELIZE","V3",66,true,false
+"V4","ST. KITTS & NEVIS","V4",249,true,false
+"V5","NAMIBIA","V5",464,true,false
+"V6","MICRONESIA","V6",173,true,false
+"V7","MARSHALL ISLANDS","V7",168,true,false
+"V8","BRUNEI DARUSSALAM","V8",345,true,false
+"VE","CANADA","VE",1,true,false
+"VK","AUSTRALIA","VK",150,true,false
+"VK0H","HEARD ISLAND","VK0H",111,true,false
+"VK0M","MACQUARIE ISLAND","VK0M",153,true,false
+"VK9C","COCOS (KEELING) ISLANDS","VK9C",38,true,false
+"VK9L","LORD HOWE ISLAND","VK9L",147,true,false
+"VK9M","MELLISH REEF","VK9M",171,true,false
+"VK9N","NORFOLK ISLAND","VK9N",189,true,false
+"VK9W","WILLIS ISLAND","VK9W",303,true,false
+"VK9X","CHRISTMAS ISLAND","VK9X",35,true,false
+"VP2E","ANGUILLA","VP2E",12,true,false
+"VP2M","MONTSERRAT","VP2M",96,true,false
+"VP2V","BRITISH VIRGIN ISLANDS","VP2V",65,true,false
+"VP5","TURKS & CAICOS ISLANDS","VP5",89,true,false
+"VP6","PITCAIRN ISLAND","VP6",172,true,false
+"VP6/D","DUCIE ISLAND","VP6/D",513,true,false
+"VP8","FALKLAND ISLANDS","VP8",141,true,false
+"VP8/G","SOUTH GEORGIA ISLAND","VP8/G",235,true,false
+"VP8/H","SOUTH SHETLAND ISLANDS","VP8/H",241,true,false
+"VP8/O","SOUTH ORKNEY ISLANDS","VP8/O",238,true,false
+"VP8/S","SOUTH SANDWICH ISLANDS","VP8/S",240,true,false
+"VP9","BERMUDA","VP9",64,true,false
+"VQ9","CHAGOS ISLANDS","VQ9",33,true,false
+"VR","HONG KONG","VR",321,true,false
+"VU","INDIA","VU",324,true,false
+"VU4","ANDAMAN & NICOBAR IS.","VU4",11,true,false
+"VU7","LAKSHADWEEP ISLANDS","VU7",142,true,false
+"XE","MEXICO","XE",50,true,false
+"XF4","REVILLAGIGEDO","XF4",204,true,false
+"XT","BURKINA FASO","XT",480,true,false
+"XU","CAMBODIA","XU",312,true,false
+"XW","LAOS","XW",143,true,false
+"XX9","MACAO","XX9",152,true,false
+"XZ","MYANMAR","XZ",309,true,false
+"YA","AFGHANISTAN","YA",3,true,false
+"YB","INDONESIA","YB",327,true,false
+"YI","IRAQ","YI",333,true,false
+"YJ","VANUATU","YJ",158,true,false
+"YK","SYRIA","YK",384,true,false
+"YL","LATVIA","YL",145,true,false
+"YN","NICARAGUA","YN",86,true,false
+"YO","ROMANIA","YO",275,true,false
+"YS","EL SALVADOR","YS",74,true,false
+"YU","SERBIA","YU",296,true,false
+"YV","VENEZUELA","YV",148,true,false
+"YV0","AVES ISLAND","YV0",17,true,false
+"Z2","ZIMBABWE","Z2",452,true,false
+"Z3","NORTH MACEDONIA","Z3",502,true,false
+"Z6","REPUBLIC OF KOSOVO","Z6",522,true,false
+"Z8","REPUBLIC OF SOUTH SUDAN","Z8",521,true,false
+"ZA","ALBANIA","ZA",7,true,false
+"ZB","GIBRALTAR","ZB",233,true,false
+"ZC4","UK BASE AREAS ON CYPRUS","ZC4",283,true,false
+"ZD7","ST. HELENA","ZD7",250,true,false
+"ZD8","ASCENSION ISLAND","ZD8",205,true,false
+"ZD9","TRISTAN DA CUNHA & GOUGH ISLANDS","ZD9",274,true,false
+"ZF","CAYMAN ISLANDS","ZF",69,true,false
+"ZK3","TOKELAU ISLANDS","ZK3",270,true,false
+"ZL","NEW ZEALAND","ZL",170,true,false
+"ZL7","CHATHAM ISLANDS","ZL7",34,true,false
+"ZL8","KERMADEC ISLANDS","ZL8",133,true,false
+"ZL9","N.Z. SUBANTARCTIC IS.","ZL9",16,true,false
+"ZP","PARAGUAY","ZP",132,true,false
+"ZS","SOUTH AFRICA","ZS",462,true,false
+"ZS8","PR. EDWARD & MARION IS.","ZS8",201,true,false
