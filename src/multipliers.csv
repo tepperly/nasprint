@@ -339,7 +339,7 @@ WY,WYOMING,WY,291,true,false,US
 "OH2","FINLAND","OH2",224,true,false,DX
 "OH0","ALAND ISLANDS","OH0",5,true,false,DX
 "OJ0","MARKET REEF","OJ0",167,true,false,DX
-"OK","CZECH REPUBLIC","OK",503,true,false,DX
+"OK1","CZECH REPUBLIC","OK1",503,true,false,DX
 "OM","SLOVAK REPUBLIC","OM",504,true,false,DX
 "ON1","BELGIUM","ON1",209,true,false,DX
 "OX","GREENLAND","OX",237,true,false,DX
@@ -348,7 +348,7 @@ WY,WYOMING,WY,291,true,false,US
 "P2","PAPUA NEW GUINEA","P2",163,true,false,DX
 "P4","ARUBA","P4",91,true,false,DX
 "P5","DPR OF KOREA","P5",344,true,false,DX
-"PA","NETHERLANDS","PA",263,true,false,DX
+"PA1","NETHERLANDS","PA1",263,true,false,DX
 "PJ2","CURACAO","PJ2",517,true,false,DX
 "PJ4","BONAIRE","PJ4",520,true,false,DX
 "PJ5","SABA & ST. EUSTATIUS","PJ5",519,true,false,DX
@@ -389,7 +389,7 @@ WY,WYOMING,WY,291,true,false,US
 "TJ","CAMEROON","TJ",406,true,false,DX
 "TK","CORSICA","TK",214,true,false,DX
 "TL","CENTRAL AFRICAN REPUBLIC","TL",408,true,false,DX
-"TN","REPUBLIC OF THE CONGO","TN",412,true,false,DX
+"TN1","REPUBLIC OF THE CONGO","TN1",412,true,false,DX
 "TR","GABON","TR",420,true,false,DX
 "TT","CHAD","TT",410,true,false,DX
 "TU","COTE D'IVOIRE","TU",428,true,false,DX

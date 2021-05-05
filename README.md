@@ -1,8 +1,8 @@
-# North American Sprint Scoring
+# Florida QSO Party
 
-This is software to help score the [North American Sprint](http://ssbsprint.com/) ham radio competition. The process
+This is software to help score the [Florida QSO Party](https://floridaqsoparty.org/) ham radio competition. The process
 begins with a collection of [Cabrillo](http://www.kkn.net/~trey/cabrillo/) log files that contain records of ham
-radio contacts that took place during the running of the NA Sprint contest.
+radio contacts that took place during the running of the Florida QSO Party.
 
 The purpose of this software is to verify the information in the Cabrillo log files and apply the scoring rules to
 calculate a score for each entry.  Verification can take many forms such as is the date & time in the period of

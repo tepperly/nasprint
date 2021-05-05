@@ -10,6 +10,7 @@ require_relative 'cabrillo'
 
 class ContestDatabase
   CHARS_PER_CALL = 16
+  ALLOWED_BANDS = %w{ 10m 15m 20m 40m }.to_set.freeze
 
   def initialize(db)
     @db = db
@@ -23,9 +24,11 @@ class ContestDatabase
   def readTables
     result = Set.new
     @db.execute("select name from sqlite_master where type='table';") { |row|
-      result << row[0]
+      if not row[0].start_with?("sqlite_")
+        result << row[0]
+      end
     }
-    result.sort
+    result
   end
 
   def createDB
@@ -63,11 +66,13 @@ class ContestDatabase
   end
 
   def createTeamTable
-    @db.execute("create table if not exists Team (id integer primary key autoincrement, name varchar(64) not null, managercall varchar(#{CHARS_PER_CALL}) not null, manageremail varchar(128), registertime datetime, contestID integer not null, unique index teamind (name, contestID));") { }
+    @db.execute("create table if not exists Team (id integer primary key autoincrement, name varchar(64) not null, managercall varchar(#{CHARS_PER_CALL}) not null, manageremail varchar(128), registertime datetime, contestID integer not null);") { }
+    @db.execute("create unique index if not exists teamind on Team (name, contestID);") { }
   end
 
   def createTeamMemberTable
-    @db.execute("create table if not exists TeamMember (teamID integer not null, logID integer not null, contestID integer not null, primary key (teamID, logID), unique index logind (logID, contestID));") { }
+    @db.execute("create table if not exists TeamMember (teamID integer not null, logID integer not null, contestID integer not null, primary key (teamID, logID));") { }
+    @db.execute("create unique index if not exists logind on TeamMember (logID, contestID);") { }
   end
 
   def extractPrefix(prefix)
@@ -97,7 +102,6 @@ class ContestDatabase
     @db.execute("create table if not exists Multiplier (id integer primary key autoincrement, flid integer default null, abbrev char(5) not null unique, fullname char(32) not null, entityID integer, floridamultiplier bool not null, othermultiplier bool not null, multtype char(2) check (multtype in ('FL','CA','US','DX')) not null );")
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii", :skip_lines => /^#/) { |row|
       begin
-        print row.to_a.join(",") + "\n"
         @db.execute("insert into Multiplier (abbrev, fullname, entityID, floridamultiplier, othermultiplier, multtype) values (?,?,?,?,?,?);",
                     [ row[0].upcase, row[1].upcase, row[3].to_i, (row[4]=="true") ? 1 : 0, (row[5]=="true") ? 1 : 0, row[6].upcase ]) { }
         if (row[0].upcase == row[2].upcase)
@@ -110,7 +114,7 @@ class ContestDatabase
       #   end
       end
     }
-    CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii", headers: :first_row) { |row|
+    CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii", :skip_lines => /^#/) { |row|
       if (row[0].upcase != row[2].upcase) 
         multiID=nil
         equivID=nil
@@ -121,7 +125,7 @@ class ContestDatabase
           equivID = drow[0].to_i
         }
         if multiID and equivID
-          @db.execute("update Multiplier set flid = ? where id = ? and flid is null limit 1;", [ multiID, equivID] ) { }
+          @db.execute("update Multiplier set flid = ? where id = ? and flid is null limit 1;", [ equivID, multiID] ) { }
         end
       end
     }
@@ -130,21 +134,39 @@ class ContestDatabase
   def createMultiplierAlias
     @db.execute("create table if not exists MultiplierAlias (id integer primary key autoincrement, abbrev varchar(32) not null unique, multiplierID integer not null);") {}
     CSV.foreach(File.dirname(__FILE__) + "/multiplier_aliases.csv", "r:ascii", headers: :first_row) { |row|
-      @db.execute("select id from Multiplier where abbrev=? limit 1;", [ row[1].upcase ]) { |dbrow|
-        @db.execute("insert into MultiplierAlias (abbrev, multiplierID) values (?, ?);", [ row[0], dbrow[0].to_i] ) { }
+      alreadyDefined = false
+      @db.execute("select id from MultiplierAlias where abbrev=? limit 1;", [row[0]]) { |dbrow|
+        alreadyDefined = true
       }
+      if not alreadyDefined
+        @db.execute("select id from Multiplier where abbrev=? limit 1;", [ row[1].upcase ]) { |dbrow|
+          @db.execute("insert into MultiplierAlias (abbrev, multiplierID) values (?, ?);", [ row[0], dbrow[0].to_i] ) { }
+        }
+      end
     }
   end
   
   def createLogTable
     # table of callsigns converted to base format
-    @db.execute("create table if not exists Callsign (id integer primary key autoincrement, contestID integer not null, basecall varchar(#{CHARS_PER_CALL}) not null, logrecvd bool, validcall bool, index bcind (contestID, basecall));") {}
-    @db.execute("create table if not exists Log (id integer primary key autoincrement, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass char(4) check(powclass in ('QRP', 'LOW', 'HIGH')) not null default 'HIGH', opclass char(3) check(opclass in ('CHK', 'SO', 'SOA', 'MS', 'MM')), mobile bool not null default 0, expedition bool not null default 0, school bool not null default 0, modclass char(5) check(modclass in ('PH','CW','MIXED')), verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, name varchar(128), club varchar(128), index callind (callsign), index contestind (contestID));")
+    @db.execute("create table if not exists Callsign (id integer primary key autoincrement, contestID integer not null, basecall varchar(#{CHARS_PER_CALL}) not null, logrecvd bool, validcall bool);") {}
+    @db.execute("create index if not exists bcind on Callsign (contestID, basecall);") { }
+    @db.execute("create table if not exists Log (id integer primary key autoincrement, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass char(4) check(powclass in ('QRP', 'LOW', 'HIGH')) not null default 'HIGH', opclass char(3) check(opclass in ('CHK', 'SO', 'SOA', 'MS', 'MM')), mobile bool not null default 0, expedition bool not null default 0, school bool not null default 0, modclass char(5) check(modclass in ('PH','CW','MIXED')), verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, name varchar(128), club varchar(128));") { }
+    @db.execute("create index if not exists callind on Log (callsign);") { }
+    @db.execute("create index if not exists contestind on Log (contestID); ") { }
+    @db.execute("create index if not exists clubind on Log (club); ") { }
   end
 
   def createQSOTable
-    @db.execute("create table if not exists Exchange (id integer primary key autoincrement, callsign varchar(#{CHARS_PER_CALL}), callID integer, signalreport integer, location varchar(8), multiplierID integer, index calltxtind (callsign), index callidind (callID), index serialind (serial), index locind (location), index multind (multiplierID), index nameind (name));")
-    @db.execute("create table if not exists QSO (id integer primary key autoincrement, logID integer not null, frequency integer, band char(7) check(band in ('10m', '15m', '20m', '40m', 'unknown')) not null default 'unknown', mode char(6), fixedMode char(2) check(fixedMode in ('PH', 'CW')), time datetime, sentID integer not null, recvdID integer not null, transmitterNum integer, matchID integer, matchType char(16) check(matchType in ('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial')) not null default 'None', comment varchar(256), index matchind (matchType), index bandind (band), index logind (logID), index timeind (time));")
+    @db.execute("create table if not exists Exchange (id integer primary key autoincrement, callsign varchar(#{CHARS_PER_CALL}), callID integer, signalreport integer, location varchar(8), multiplierID integer);") { }
+    @db.execute("create index if not exists calltxtind on Exchange (callsign);" ) { }
+    @db.execute("create index if not exists callidind on Exchange (callID);" ) { }
+    @db.execute("create index if not exists locind on Exchange (location);" ) { }
+    @db.execute("create index if not exists multind on Exchange (multiplierID);") { }
+    @db.execute("create table if not exists QSO (id integer primary key autoincrement, logID integer not null, frequency integer, band char(7) check(band in ('10m', '15m', '20m', '40m', 'unknown')) not null default 'unknown', mode char(6), fixedMode char(2) check(fixedMode in ('PH', 'CW')), time datetime, sentID integer not null, recvdID integer not null, transmitterNum integer, matchID integer, matchType char(16) check(matchType in ('None','Full','Bye', 'Unique', 'Partial', 'Dupe', 'NIL', 'OutsideContest', 'Removed','TimeShiftFull', 'TimeShiftPartial')) not null default 'None', comment varchar(256));")
+    @db.execute("create index if not exists matchind on QSO (matchType);") {  }
+    @db.execute("create index if not exists bandind on QSO (band);") { }
+    @db.execute("create index if not exists logind on QSO (logID);") { }
+    @db.execute("create index if not exists timeind on QSO (time);") { }
   end
 
   def addOrLookupCall(callsign, contestIDVar=nil)
@@ -177,14 +199,14 @@ class ContestDatabase
 
   def addOrLookupContest(name, year, create=false)
     if name and year
-      result = @db.query("select id from Contest where name=\"#{@db.escape(name)}\" and year = #{year.to_i} limit 1;")
-      result.each(:as => :array) { |row|
+      @db.execute("select id from Contest where name = ? and year = ? limit 1;", [name, year]) { |row|
         @contestID = row[0].to_i
         return @contestID
       }
       if create
-        @db.query("insert into Contest (name, year, start, end) values (\"#{@db.escape(name)}\", \"#{year.to_i}\", \"#{CONTEST_START.strftime("%Y-%m-%d %H:%M:%S")}\", \"#{CONTEST_END.strftime("%Y-%m-%d %H:%M:%S")}\");")
-        @contestID = @db.last_id
+        @db.execute("insert into Contest (name, year, start, end) values (?,?,?,?);",
+                    [name, year.to_i, CONTEST_START.iso8601, CONTEST_END.iso8601]) { }
+        @contestID = @db.last_insert_row_id
         return @contestID
       end
     end
@@ -216,28 +238,30 @@ class ContestDatabase
   end
 
   def markReceived(callID)
-    @db.query("update Callsign set logrecvd = 1 where id = #{callID.to_i} limit 1;")
+    @db.execute("update Callsign set logrecvd = 1 where id = ? limit 1;", [callID.to_i]) { }
   end
 
-  def addLog(contID, callsign, callID, email, opclass, multID, entID, name, club)
-    @db.query("insert into Log (contestID, callsign, callID, email, opclass, multiplierID, entityID, name, club) values (#{contID.to_i}, #{capOrNull(callsign)}, #{callID.to_i}, #{strOrNull(email)}, #{strOrNull(opclass)}, #{multID.to_i}, #{numOrNull(entID)},#{strOrNull(name)},#{strOrNull(club)});")
-    return @db.last_id
+  #  def addLog(contID, callsign, callID, email, opclass, multID, entID, name, club)
+  def addLog(contID, callsign, callID, email, multiplierID, entityID, powclass, opclass, mobile, expedition, school, modclass, name, club)
+    @db.execute("insert into Log (contestID , callsign,  callID, email, multiplierID, entityID, powclass, opclass, mobile, expedition, school, modclass, name, club) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?);",
+                [contID, callsign, callID, email, multiplierID, entityID, powclass, opclass, mobile, expedition, school, modclass, name, club]) { }
+    return @db.last_insert_row_id
   end
 
   def lookupMultiplier(str)
-    res = @db.query("select id, entityID from Multiplier where abbrev = #{capOrNull(str)} limit 1;")
-    res.each(:as => :array) { |row|
+    @db.execute("select id, entityID from Multiplier where abbrev = ? limit 1;", [ str] ) { |row|
       return row[0].to_i, (row[1].nil? ? nil : row[1].to_i)
     }
     return nil, nil
   end
 
   def createOverrides
-    @db.query("create table if not exists Overrides (id integer primary key autoincrement, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, multiplierID integer not null, entityID integer not null, index callindex (callsign));")
+    @db.execute("create table if not exists Overrides (id integer primary key autoincrement, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, multiplierID integer not null, entityID integer not null);") { }
+    @db.execute("create index if not exists callindex on Overrides (callsign);") { }
   end
 
   def removeOverrides(contestID)
-    @db.query("delete from Overrides where contestID = #{contestID};")
+    @db.execute("delete from Overrides where contestID = ?;", [contestID]) { }
   end
 
   def addOverride(contestID,
@@ -245,70 +269,75 @@ class ContestDatabase
                   multiplierID,
                   entityID)
     if contestID and callsign and multiplierID and entityID then
-      @db.query("insert into Overrides (contestID, callsign, multiplierID, entityID) values (#{contestID.to_i}, #{capOrNull(callsign)}, #{multiplierID.to_i}, #{entityID.to_i});")
+      @db.execute("insert into Overrides (contestID, callsign, multiplierID, entityID) values (?,?,?,?);",
+                  [ contestID, callsign.upcase, multiplierID.to_i, entityID.to_i]) { }
     end 
   end
   
   def createPairs
-    @db.query("create table if not exists Pairs (id integer primary key autoincrement, contestID integer not null, line1 varchar(128) not null, line2 varchar(128) not null, ismatch bool, index contind (contestID), index lineind (line1, line2));")
+    @db.execute("create table if not exists Pairs (id integer primary key autoincrement, contestID integer not null, line1 varchar(128) not null, line2 varchar(128) not null, ismatch bool);")
+    @db.execute("create index if not exists contind on Pairs (contestID);" ) { }
+    @db.execute("create index if not exists lineind on Pairs (line1, line2);") { }
   end
 
   def removePairs(contestID)
-    @db.query("delete from Pairs where contestID = #{contestID};")
+    @db.execute("delete from Pairs where contestID = ?};", [contestID])
   end
 
   def removeExchange(id)
     if id.respond_to?('join')
-      @db.query("delete from Exchange where id in (#{id.join(", ")}) limit #{id.size};")
+      @db.execute("delete from Exchange where id in (#{id.join(", ")}) limit #{id.size};") { }
     else
-      @db.query("delete from Exchange where id = #{id.to_i} limit 1;")
+      @db.execute("delete from Exchange where id = ? limit 1;", [id.to_i]) { }
     end
   end
 
-  def addExchange(callsign, callID, serial, name, location, multID,
-                  entityID)
-    @db.query("insert into Exchange (callsign, callID, serial, name, location, multiplierID, entityID) values (#{capOrNull(callsign)}, #{callID.to_i}, #{numOrNull(serial)}, #{capOrNull(name)}, #{capOrNull(location)}, #{numOrNull(multID)}, #{numOrNull(entityID)});")
-    return @db.last_id
+  def addExchange(callsign, callID, signalreport, location, multiplierID)
+    @db.exchange("insert into Exchange (callsign, callID, signalreport, location, multiplierID) values (?, ?, ?, ?, ?);",
+                 [callsign, callID.to_i, signalreport.to_i, location, multiplierID]) { }
+    return @db.last_insert_row_id
   end
 
   def dateOrNull(date)
     if date
-      return "cast(" + date.strftime("\"%Y-%m-%d %H:%M:%S\"") + " as datetime)"
+      return date.iso8601
     else
-      "NULL"
+      nil
     end
   end
 
   def insertQSO(logID, frequency, band, roughMode, mode, datetime,
                 sentID, recvdID, transNum)
-    @db.query("insert into QSO (logID, frequency, band, mode, fixedMode, time, sentID, recvdID, transmitterNum) values (#{numOrNull(logID)}, #{numOrNull(frequency)}, #{strOrNull(band)}, #{capOrNull(roughMode)}, #{strOrNull(mode)}, #{dateOrNull(datetime)}, #{numOrNull(sentID)}, #{numOrNull(recvdID)}, #{numOrNull(transNum)});")
+    if not ALLOWED_BANDS.include?(band)
+      band = "unknown"
+    end
+    @db.execute("insert into QSO (logID, frequency, band, mode, fixedMode, time, sentID, recvdID, transmitterNum) values (?,?,?,?,?,?,?,?,?);",
+                [logID.to_i, frequency, band, roughMode, mode, dateOrNull(datetime), sentID.to_i, recvdID.to_i, transNum] ){ }
   end
 
   def removeContestQSOs(contestID)
     logs = logsForContest(contestID)
     if not logs.empty?
-      res = @db.query("select recvdID, sentID from QSO where logID in (#{logs.join(", ")});")
-      res.each(:as => :array) { |row| 
+      @db.execute("select recvdID, sentID from QSO where logID in (#{logs.join(", ")});") { |row|
         removeExchange([row[0], row[1]])
       }
-      @db.query("delete from QSO where logID in (#{logs.join(", ")});")
+      @db.execute("delete from QSO where logID in (#{logs.join(", ")});") { }
     end
     clearTeams(contestID)
-    @db.query("delete from Callsign where contestID = #{contestID};")
-    @db.query("delete from Log where contestID = #{contestID};")
+    @db.execute("delete from Callsign where contestID = ?;", [ contestID] ) { }
+    @db.execute("delete from Log where contestID = ?;", [ contestID] ) { }
   end
 
   def removeWholeContest(contestID)
     removeContestQSOs(contestID)
     removeOverrides(contestID)
     removePairs(contestID)
-    @db.query("delete from Contest where contestID = #{contestID} limit 1;")
+    @db.execute("delete from Contest where contestID = ? limit 1;", [ contestID] )
   end
 
   def logsForContest(contestID)
     logs = Array.new
-    res = @db.query("select id from Log where contestID = #{contestID} order by id asc;")
-    res.each(:as => :array) { |row|
+    @db.execute("select id from Log where contestID = ? order by id asc;", [contestID]) { |row|
       logs << row[0].to_i
     }
     logs
@@ -317,42 +346,29 @@ class ContestDatabase
   def logsByMultipliers(contestID, multipliers)
     logs = Array.new
     if multipliers.is_a?(String)
-      multiplierConstraints = " = \"#{@db.escape(multipliers)}\""
+      multiplierConstraints = " = \"#{SQLite3::Database::quote(multipliers)}\""
     else
       if multipliers.empty?
         return logs
       else
-        multiplierConstraints = " in (#{multipliers.map { |x| "\"" + @db.escape(x.to_s) + "\"" }.join(", ")})"
+        multiplierConstraints = " in (#{multipliers.map { |x| "\"" + SQLite3::Database::quote(x.to_s) + "\"" }.join(", ")})"
       end
     end
-    res = @db.query("select l.id from Log as l join Multiplier as m on l.multiplierID = m.id where l.contestID = #{contestID} and m.abbrev #{multiplierConstraints} order by l.verifiedscore desc, l.verifiedMultipliers desc, l.callsign asc")
-    res.each(:as => :array) { |row|
-      logs << row[0].to_i
+    @db.execute("select l.id from Log as l join Multiplier as m on l.multiplierID = m.id where l.contestID = #{contestID} and m.abbrev #{multiplierConstraints} order by l.verifiedscore desc, l.verifiedMultipliers desc, l.callsign asc;") { |row|
+     logs << row[0].to_i
     }
     return logs
   end
-
+ 
   def logsByContinent(contestID, continent)
-    result = Array.new
-    res = @db.query("select id from Multiplier where abbrev='DX' limit 1;")
-    multID = nil
-    res.each(:as => :array) { |row|
-      multID = row[0].to_i
-    }
-    if multID
-      res = @db.query("select l.id from Log as l join Entity as e on e.id = l.entityID where l.contestID = #{contestID} and l.multiplierID = #{multID} and e.continent = \"#{continent}\" order by l.verifiedscore desc, l.verifiedMultipliers desc, l.callsign asc")
-      res.each(:as => :array) {  |row|
-        result << row[0].to_i
-      }
-    end
-    result
+    Array.new
   end
 
   def numBandChanges(logID)
     count = 0
     prev = nil
-    res = @db.query("select q.band from QSO as q join Exchange as e on e.id = q.sentID where q.logID = #{logID.to_i} order by q.time asc, e.serial asc, q.id asc;")
-    res.each(:as => :array) { |row|
+    @db.execute("select q.band from QSO as q where q.logID = ? order by q.time asc, q.id asc;",
+                [ logID.to_i ]){ |row|
       if row[0].to_s != prev
         count = count + 1
         prev = row[0].to_s
@@ -527,7 +543,7 @@ class ContestDatabase
 
   def addTeam(name, managercall, manageremail, registertime, contestID)
     @db.query("insert into Team (name, managercall, manageremail, registertime, contestID) values (\"#{@db.escape(name)}\", \"#{@db.escape(managercall)}\", #{strOrNull(manageremail)}, #{dateOrNull(registertime)}, #{contestID.to_i});")
-    return @db.last_id
+    return @db.last_insert_row_id
   end
 
   def addTeamMember(cid, teamID, logID)
