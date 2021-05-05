@@ -99,12 +99,13 @@ class ContestDatabase
   end
 
   def createMultiplierTable
-    @db.execute("create table if not exists Multiplier (id integer primary key autoincrement, flid integer default null, abbrev char(5) not null unique, fullname char(32) not null, entityID integer, floridamultiplier bool not null, othermultiplier bool not null, multtype char(2) check (multtype in ('FL','CA','US','DX')) not null );")
+    @db.execute("create table if not exists Multiplier (id integer primary key autoincrement, flid integer default null, abbrev char(5) not null unique, fullname char(32) not null, entityID integer, floridamultiplier bool not null, othermultiplier bool not null, multtype char(2) check (multtype in ('FL','CA','US','DX')) not null, continent char(2) check(continent in ('AF','AN','AS','EU', 'MM', 'NA','OC', 'SA')) );")
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii", :skip_lines => /^#/) { |row|
+      f = row.map { |x| x.strip.upcase }
       begin
-        @db.execute("insert into Multiplier (abbrev, fullname, entityID, floridamultiplier, othermultiplier, multtype) values (?,?,?,?,?,?);",
-                    [ row[0].upcase, row[1].upcase, row[3].to_i, (row[4]=="true") ? 1 : 0, (row[5]=="true") ? 1 : 0, row[6].upcase ]) { }
-        if (row[0].upcase == row[2].upcase)
+        @db.execute("insert into Multiplier (abbrev, fullname, entityID, floridamultiplier, othermultiplier, multtype, continent) values (?,?,?,?,?,?,?);",
+                    [ f[0], f[1], f[3].to_i, (f[4]=="TRUE") ? 1 : 0, (f[5]=="TRUE") ? 1 : 0, f[6], f[7] ]) { }
+        if (f[0] == f[2])
           id = @db.last_insert_row_id
           @db.execute("update Multiplier set flid = ? where id = ? and flid is null limit 1;", [id, id]) { }
         end
@@ -115,13 +116,14 @@ class ContestDatabase
       end
     }
     CSV.foreach(File.dirname(__FILE__) + "/multipliers.csv", "r:ascii", :skip_lines => /^#/) { |row|
-      if (row[0].upcase != row[2].upcase) 
+      f = row.map { |x| x.strip.upcase }
+      if (f[0] != f[2]) 
         multiID=nil
         equivID=nil
-        @db.execute("select id from Multiplier where abbrev=? limit 1;", [row[0]]) { |drow|
+        @db.execute("select id from Multiplier where abbrev=? limit 1;", [f[0]]) { |drow|
           multiID = drow[0].to_i
         }
-        @db.execute("select id from Multiplier where abbrev=? limit 1;", [row[2]]) { |drow|
+        @db.execute("select id from Multiplier where abbrev=? limit 1;", [f[2]]) { |drow|
           equivID = drow[0].to_i
         }
         if multiID and equivID
