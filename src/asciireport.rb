@@ -42,7 +42,7 @@ MULTIPLIERS_BY_CALLAREA = {
   "VY2" => [ "PE" ].to_set.freeze      # Prince Edward Island
 }
 MULTIPLIERS_BY_CALLAREA.freeze
-CONTINENTS = [ "AS", "EU", "AF", "OC", "NA", "SA", "AN" ].to_set.freeze
+CONTINENTS = [ "AS", "EU", "AF", "OC", "NA", "SA", "AN", "MM" ].to_set.freeze
 
 total = Set.new
 MULTIPLIERS_BY_CALLAREA.each { |key, value|

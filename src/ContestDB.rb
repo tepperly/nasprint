@@ -363,7 +363,11 @@ class ContestDatabase
   end
  
   def logsByContinent(contestID, continent)
-    Array.new
+    logs = Array.new
+    @db.execute("select l.id from Log as l join Multiplier as m on l.multiplierID = m.id where l.contestID = ? and m.continent = ? order by l.verifiedscore desc, l.verifiedMultipliers desc, l.callsign asc;") { |row|
+      logs << row[0].to_i
+    }
+    logs
   end
 
   def numBandChanges(logID)
