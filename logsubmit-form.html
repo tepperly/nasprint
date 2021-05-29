@@ -20,9 +20,10 @@
   <script src="js/jquery.countdown-2.2.0/jquery.countdown.min.js"></script>
 </head>
 <body>
-<img  src="images/cqplogo80075.jpg" alt="California QSO Party" > 
-<div id="countdownclock" class="countdown">
-  Deadline for log submission is in <span id="clock"></span>
+  <img  src="images/cqplogo80075.jpg" alt="California QSO Party" >
+  <div id="countdownclock" class="countdown">
+    Deadline for log submission is in <span id="clock"></span> at 26-October-2020 23:59
+    <a href="https://en.wikipedia.org/wiki/Anywhere_on_Earth">Anywhere on Earth</a>.
 </div>
 <div id="tabs" style="display: none">
   <ul>
@@ -282,6 +283,7 @@ resubmit. Examples of the preferred QSO line syntax are available
 <option value="Radiosport Manitoba (VE)">Radiosport Manitoba (VE)</option>
 <option value="Redwood Empire DX Association">Redwood Empire DX Association</option>
 <option value="Rio Honda Amateur Radio Club">Rio Honda Amateur Radio Club</option>
+<option value="River City Amateur Radio Communications Society">River City Amateur Radio Communications Society</option>
 <option value="Riverside County Amateur Radio Association">Riverside County Amateur Radio Association</option>
 <option value="Rochester (NY) DX Association">Rochester (NY) DX Association</option>
 <option value="Samuel F Morse Amateur Radio Club">Samuel F Morse Amateur Radio Club</option>
@@ -364,7 +366,7 @@ resubmit. Examples of the preferred QSO line syntax are available
 	</select><br >
 	<label for="otherclubnameId" class="inLabel">Other Club:</label>
 	<input type="text" name="otherclubname" id="otherclubnameId" class="jForm"><br >
-        <label for="Multiclublog" class="inLabel">Split score between Multiple Clubs&dagger;:</label>
+        <label for="Multiclublog" class="inLabel">Split score between Multiple Clubs&dagger;?</label>
         <input type="checkbox" name="multiclub" value="Multiclub" id="Multiclublog" class="jForm">
 	<p><b>Categories</b> (check all that apply)</p>
 	<table>
@@ -668,6 +670,7 @@ resubmit. Examples of the preferred QSO line syntax are available
 <option value="Radiosport Manitoba (VE)">Radiosport Manitoba (VE)</option>
 <option value="Redwood Empire DX Association">Redwood Empire DX Association</option>
 <option value="Rio Honda Amateur Radio Club">Rio Honda Amateur Radio Club</option>
+<option value="River City Amateur Radio Communications Society">River City Amateur Radio Communications Society</option>
 <option value="Riverside County Amateur Radio Association">Riverside County Amateur Radio Association</option>
 <option value="Rochester (NY) DX Association">Rochester (NY) DX Association</option>
 <option value="Samuel F Morse Amateur Radio Club">Samuel F Morse Amateur Radio Club</option>
@@ -750,7 +753,7 @@ resubmit. Examples of the preferred QSO line syntax are available
 	</select><br >
 	<label for="AltotherclubnameId" class="inLabel">Other Club:</label>
 	<input type="text" name="otherclubname" id="AltotherclubnameId" class="jForma"><br >
-	<label for="AltMulticlublog" class="inLabel">Split score between Multiple Clubs&dagger;:</label>
+	<label for="AltMulticlublog" class="inLabel">Split score between Multiple Clubs&dagger;?</label>
         <input type="checkbox" name="multiclub" value="Multiclub" id="AltMulticlublog" class="jForma">
 	<p><b>Categories</b> (check all that apply)</p>
 	<table>
@@ -1017,6 +1020,7 @@ resubmit. Examples of the preferred QSO line syntax are available
 <option value="Radiosport Manitoba (VE)">Radiosport Manitoba (VE)</option>
 <option value="Redwood Empire DX Association">Redwood Empire DX Association</option>
 <option value="Rio Honda Amateur Radio Club">Rio Honda Amateur Radio Club</option>
+<option value="River City Amateur Radio Communications Society">River City Amateur Radio Communications Society</option>
 <option value="Riverside County Amateur Radio Association">Riverside County Amateur Radio Association</option>
 <option value="Rochester (NY) DX Association">Rochester (NY) DX Association</option>
 <option value="Samuel F Morse Amateur Radio Club">Samuel F Morse Amateur Radio Club</option>
@@ -1099,7 +1103,7 @@ resubmit. Examples of the preferred QSO line syntax are available
     </select><br >
     <label for="ALLotherclubnameId" class="inLabel">Other Club:</label>
     <input type="text" name="otherclubname" id="ALLotherclubnameId" class="jFormb"><br >
-    <label for="ALLMulticlublog" class="inLabel">Split score between Multiple Clubs&dagger;:</label>
+    <label for="ALLMulticlublog" class="inLabel">Split score between Multiple Clubs&dagger;?</label>
     <input type="checkbox" name="multiclub" value="Multiclub" id="ALLMulticlublog" class="jFormb">
     <p><b>Categories</b> (check all that apply)</p>
     <table>
@@ -1303,7 +1307,8 @@ function calcColor(validQ, maxQ, badMults) {
 }
  
   $(function () {
-    $('#clock').countdown('2020/10/26 23:59:59 +0000')
+      //    $('#clock').countdown('2020/10/26 23:59:59 +0000')
+    $('#clock').countdown(new Date('2020-10-26T23:59:59.999-12:00'))    
     .on('update.countdown', function(event) {
      var format = '%H hour%!H %M minute%!M %S second%!S';
      if(event.offset.totalDays > 0) {

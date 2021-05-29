@@ -14,11 +14,15 @@
 <p>The CQP takes Cabrillo files using either version 2.0 or
 <a href="http://wwrof.org/cabrillo/cabrillo-specification-v3/">version 3.0</a>. 
 The ideal QSO line syntax is as follows:</p>
-<pre>           MO                 -----SENDER'S INFO---- ----RECEIVER'S INFO----
+<pre>           MO                 -------SENT INFO------ -----RECEIVED INFO-----
 QSO: FREQ  DE DATE       TIME CALLSIGN     SER# QTH  CALL      SER#     QTH
 QSO: 14250 PH 2014-10-04 1600 W1AW/6       0001 SCLA NS6T         1     ALAM
+QSO:  7233 PH 2014-10-04 1603 W1AW/6       0002 SCLA N6O          7     CCOS
 </pre>
-<p>The exact amount of space between fields is not crucial. Ideally the
+<p>This example shows W1AW/6's log file with two QSOs from Santa Clara (SCLA) with
+sent serial numbers 1 and 2. The first two lines that label the columns are not
+meant to be included in the file.
+The exact amount of space between fields is not crucial. Ideally the
 sent QTH and received QTH should be one of the official 58 4-character
 California county abbreviations, the official 58 2-character
 US state and Canadian province abbreviations, or DX &mdash; all in the
@@ -26,9 +30,13 @@ US state and Canadian province abbreviations, or DX &mdash; all in the
 
 <p>We also support having an extra column at the end of the line for the
 transceiver number.</p>
-<pre>           MO                 -----SENDER'S INFO---- ----RECEIVER'S INFO----  Trans
+<pre>           MO                 -------SENT INFO------ -----RECEIVED INFO-----
 QSO: FREQ  DE DATE       TIME CALLSIGN     SER# QTH  CALL      SER#     QTH     #
 QSO: 14250 PH 2014-10-04 1600 W1AW/6       0001 SCLA NS6T         1     ALAM    1
+QSO:  7233 PH 2014-10-04 1603 W1AW/6       0002 SCLA N6O          7     CCOS    2
 </pre>
+<p>A signal report (e.g., 59 or 599) is not part of the exchange, so it does
+  not appear in the log.
+</p>
 </body>
 </html>

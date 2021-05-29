@@ -72,14 +72,14 @@ def callBase(str)
   parts = str.split("/")
   case parts.length
   when 0
-    str
+    return str
   when 1
-    parts[0]
+    return parts[0]
   when 2
     if parts[0] =~ /\d\z/ or (parts[0] !~ /\d/ and parts[1] !~ /\A\d\z/)
-      parts[1]
+      return parts[1]
     else 
-      parts[0]
+      return parts[0]
     end
   else
     return parts[1]

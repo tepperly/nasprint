@@ -135,7 +135,7 @@ def emailConfirmation(db, id)
   if entry = db.getEntry(id)
     if (entry["completed"] == 1) and entry["emailaddr"] and entry["emailaddr"].length > 0
       confEmail(db, entry)
-      backupEmail(db, entry)
+#      backupEmail(db, entry)
     end
   end
 end

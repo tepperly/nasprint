@@ -21,15 +21,23 @@ HTML_HEADER=<<HEADER_END
 HEADER_END
 
 INSTRUCTIONS=<<INSTRUCTIONS_END
-<p>Thank you for submitting your log for the California QSO Party. 
-We're tried to provide some feedback on your log in case there are
-errors. If the material in the "CQP %{year} Log Details" section is correct,
-the number of Readable QSO lines is close to the Total QSO lines, and
-the number of Multiplier errors is low, you can probably ignore any 
-warnings or error messages below. If the number of readable QSOs is low,
-you may want to try to edit your log and resubmit using the
-<a href="http://robot.cqp.org/cqp/logsubmit-form.html">CQP Log Upload form</a>.
-In any case, we will do our best to fairly score every Cabrillo log.
+<p>
+Thank you for submitting your log for the California QSO Party.
+With this automatically generated email, we're trying to provide some
+feedback on your log in case there are issues. If the material in the
+"CQP %{year} Log Details" section is correct, the number of Readable
+QSO lines is close to the Total QSO lines, and the number of
+Multiplier errors is low, you can probably ignore any warnings or
+error messages below. If the number of readable QSOs is low, you may
+want to try to edit your log and resubmit using the <a
+href="http://robot.cqp.org/cqp/logsubmit-form.html">CQP Log Upload
+form</a>.  In any case, we will do our best to fairly score every
+Cabrillo log.
+</p>
+<p>
+Thanks again,<br>
+<br>
+CQP Log Robot
 </p>
 INSTRUCTIONS_END
 

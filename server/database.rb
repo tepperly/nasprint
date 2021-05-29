@@ -12,6 +12,8 @@
 
 require_relative 'config'
 require 'mysql2'
+require 'set'
+require_relative 'admin/utils'
 
 class DatabaseError < Exception
 end
@@ -66,6 +68,22 @@ class LogDatabase
     end
     nil
   end
+
+  def allCallsigns
+    connect
+    result = Set.new
+    if @connection
+      res = @connection.query("select distinct callsign from CQPLog where callsign is not null;")
+      res.each(:as => :array) { |row| result.add(callBase(row[0])) }
+      res = @connection.query("select distinct callsign_confirm from CQPLog where callsign <> callsign_confirm && callsign_confirm is not null;")
+      res.each(:as => :array) { |row| result.add(callBase(row[0])) }
+      res = @connection.query("select distinct e.callsign from CQPExtra as e, CQPLog as l where l.id = e.logid && e.callsign <> l.callsign && e.callsign <> l.callsign_confirm and e.callsign is not null;")
+      res.each(:as => :array) { |row| result.add(callBase(row[0])) }
+    end
+    return result
+  end
+
+  
 
   def getID
     connect
