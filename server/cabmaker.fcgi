@@ -1,9 +1,43 @@
-<!doctype html>
+#!/usr/local/bin/ruby
+# -*- encoding: utf-8 -*-
+#
+# Cabmaker Save server
+# ns6t@arrl.net
+
+require 'fcgi'
+require 'cgi/cookie'
+
+COOKIE_NAME = "cabmaker_id"
+ONE_MONTH = 31 * 24 * 60 * 60
+ID_CHARSET = [('a'..'z'), ('A'..'Z'), ('0'..'9')].map { |i| i.to_a }.flatten
+
+def randomID
+  (0..16).map { ID_CHARSET[rand(ID_CHARSET.length)] }.join
+end
+
+def handleRequest(req)
+  # update expiration time
+  cookie = req.cookies[COOKIE_NAME]
+  if cookie and cookie.kind_of?(Array) and not cookie.kind_of?(CGI::Cookie)
+    if cookie.empty?
+      cookie= nil
+    else
+      cookie = cookie[0]
+    end
+  end
+
+  if not cookie
+    cookie = CGI::Cookie::new(COOKIE_NAME, randomID)
+  end
+  cookie.expires = Time.now + ONE_MONTH
+
+  req.out('cookie' => [ cookie ]) {
+'<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <title>CQP Manual Cabrillo Maker</title>
-    <link rel="icon" href="favicon.ico" sizes="16x16 32x32 40x40 64x64 128x128" type="image/vnd.microsoft.icon">
+    <link rel="icon" href="/cqp/favicon.ico" sizes="16x16 32x32 40x40 64x64 128x128" type="image/vnd.microsoft.icon">
 <style type="text/css">
 .mode {
     width: 50px;
@@ -37,24 +71,15 @@
 </style>    
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js" type="text/javascript"></script>
     <script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/jquery-ui.min.js" type="text/javascript"></script>
-    <script src="js/vendor/jquery.ui.widget.js" type="text/javascript"></script>
+    <script src="/cqp/js/vendor/jquery.ui.widget.js" type="text/javascript"></script>
     <script src="http://ajax.aspnetcdn.com/ajax/jquery.validate/1.13.0/jquery.validate.min.js" type="text/javascript"></script>
     <script src="http://ajax.aspnetcdn.com/ajax/jquery.validate/1.13.0/additional-methods.min.js" type="text/javascript"></script>
   </head>
   <body>
     <p>
-      <a href="https://youtu.be/t1nxwPdILdY" rel="noopener noreferrer"
-	 target="_blank"><img src="TutorialPlay.png"
-			     style="float:right;width:240px;hight:180px;"></a>
       This form is designed to generate a Cabrillo file for the
-      California QSO party.  This form may not work for everyone.
-      This <a href="https://youtu.be/t1nxwPdILdY"
-	      rel="noopener noreferrer"
-	      target="_blank">video
-	tutorial</a>
-      may help if your having trouble using this form or knowing what
-      to upload when you've finished.  It requires a relatively recent
-      browser.
+      California QSO party.  This form may not work for everyone. It
+      requires a relatively recent browser.
     </p>
     <form  id="cqpCabFormID">
       <label for="callsignID">Callsign*:</label>
@@ -89,7 +114,7 @@
       <input type="email" name="confirm" id="confirmID" class="jForm"><br >
       <label for="tranlocID">Transmitted location:</label>
       <input type="text" name="transloc" id="translocID">
-      (4-letter abbreviation for your CA County or 2-letter abbreviation for your US state, Canadian Province or "DX")
+      (abbreviation for your CA County, US state, Canadian Province or DX)
       <br><br>
       <label for="numqID">Number of QSOs*:</label>
       <input type="text" name="numq" id="numqID" value="1"> (number here sets the size of the QSO grid)
@@ -249,30 +274,28 @@ function qsoButton() {
 
 function bandToNum(str) {
   if (str == "440MHz") {
-    return "  432";
+    return "432";
   } else if (str == "2m") {
-    return "  144";
+    return "144";
   } else if (str == "6m") {
-    return "   50";
+    return "50";
   } else if (str == "10m") {
     return "28000";
-  } else if (str == "15m") {
-    return "21000";
   } else if (str == "20m") {
     return "14000";
   } else if (str == "40m") { 
-    return " 7000";
+    return "7000";
   } else if (str == "80m") {
-    return " 3500";
+    return "3500";
   } else if (str == "160m") {
-    return " 1800";
+    return "1800";
   }
   return "Unknown";
 }
 
 function timeStr(val) {
   if (val.length == 0) {
-    return " 0000 ";
+    return "0000";
   }
   var num = parseInt(val).toString();
   var len = num.length;
@@ -286,7 +309,7 @@ function timeStr(val) {
 
 function flushLeft(str, len) {
    var i = str.length;
-   var result = str.toUpperCase();
+   var result = str;
    while ( i < len) {
      result += " ";
      i += 1;
@@ -297,11 +320,11 @@ function flushLeft(str, len) {
 function newCabrilloContent() {
   var result = "";
   result += "START-OF-LOG: 3.0\n"
-  result += "CALLSIGN: " + $("#callsignID").val().toUpperCase() + "\n";
+  result += "CALLSIGN: " + $("#callsignID").val() + "\n";
   result += "NAME: " + $("#nameID").val() + "\n";
   result += "CONTEST: CA-QSO-PARTY\n";
   result += "CREATED-BY: cabmaker.html\n";
-  if ($('#assistedID').is(':checked')) {
+  if ($("#assistedID").is(":checked")) {
     result += "CATEGORY-ASSISTED: ASSISTED\n";
   }
   else {
@@ -312,38 +335,81 @@ function newCabrilloContent() {
   result += "CATEGORY-TRANSMITTER: " + $("#transnumID").val() + "\n";
   result += "CLUB: " + $("#clubID").val() + "\n";
   result += "EMAIL: " + $("#emailID").val() + "\n";
-  result += "LOCATION: " + $("#translocID").val().toUpperCase() + "\n";
-  $('.qsoline').each( function (index, elem) {
-    if ((elem.getElementsByClassName('call')[0].value.length > 0) ||
-        (elem.getElementsByClassName('serial')[0].value.length > 0) ||
-        (elem.getElementsByClassName('location')[0].value.length > 0)) {
-      result += "QSO: " + bandToNum(elem.getElementsByClassName("band")[0].value);
-      result += " " + elem.getElementsByClassName("mode")[0].value + " ";
-      result += " " + elem.getElementsByClassName('date')[0].value + " ";
-      result += timeStr(elem.getElementsByClassName('time')[0].value);
-      result += flushLeft(elem.getElementsByClassName('sent_call')[0].value,10);
-      result += flushLeft(elem.getElementsByClassName('sent_serial')[0].value,4);
-      result += flushLeft(elem.getElementsByClassName('sent_location')[0].value,4);
-      result += flushLeft(elem.getElementsByClassName('call')[0].value, 10);
-      result += flushLeft(elem.getElementsByClassName('serial')[0].value, 4);
-      result += flushLeft(elem.getElementsByClassName('location')[0].value, 4);
-      result += "\n";
-    }
+  result += "LOCATION: " + $("#translocID").val() + "\n";
+  $(".qsoline").each( function (index, elem) {
+    result += "QSO: " + bandToNum(elem.getElementsByClassName("band")[0].value);
+    result += " " + elem.getElementsByClassName("mode")[0].value + " ";
+    result += " " + elem.getElementsByClassName("date")[0].value + " ";
+    result += timeStr(elem.getElementsByClassName("time")[0].value);
+    result += flushLeft(elem.getElementsByClassName("sent_call")[0].value,10);
+    result += flushLeft(elem.getElementsByClassName("sent_serial")[0].value,4);
+    result += flushLeft(elem.getElementsByClassName("sent_location")[0].value,4);
+    result += flushLeft(elem.getElementsByClassName("call")[0].value, 10);
+    result += flushLeft(elem.getElementsByClassName("serial")[0].value, 4);
+    result += flushLeft(elem.getElementsByClassName("location")[0].value, 4);
+    result += "\n";
   });
   result += "END-OF-LOG:\n";
   return result;
 }
 
 function generateCabrillo() {
-  $('#cabrilloID').val(newCabrilloContent()); // clear text area
+  $("#cabrilloID").val(newCabrilloContent()); // clear text area
 }
 
+function serializeObj(arg)
+{
+    var o = {};
+    var a = arg.serializeArray();
+    $.each(a, function() {
+        if (o[this.name] !== undefined) {
+            if (!o[this.name].push) {
+                o[this.name] = [o[this.name]];
+            }
+            o[this.name].push(this.value || "");
+        } else {
+            o[this.name] = this.value || "";
+        }
+    });
+    return o.toString();
+};
 
-$(function () {
+var fun = function autosave() { 
+    var obj = $("#cqpCabFormID");
+    if (console && obj) {
+      console.log("JSON: " + serializeObj(obj) + "\n");
+    }
+    jQuery.ajax({
+            url: "http://robot.cqp.org/cqp/server/cabmakersave.fcgi",
+            data: serializeObj(obj),
+            type: "POST",
+            success: function (data) {
+                if (data && data == "success") {
+                } else {}
+            }
+        });
+}
+
+$(document).ready(function () {
   $("#MakeQSOsID").click(qsoButton);
   $("#genCabID").click(generateCabrillo);
+  setInterval(fun, 15000);
 });
 // -->
 </script>
   </body>
 </html>
+'
+  }
+end
+
+FCGI.each_cgi { |request|
+  begin
+    handleRequest(request)
+  rescue => e
+    $stderr.write(e.message + "\n")
+    $stderr.write(e.backtrace.join("\n"))
+    $stderr.flush()
+    raise
+  end
+}

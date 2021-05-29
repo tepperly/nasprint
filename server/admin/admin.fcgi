@@ -7,7 +7,10 @@
 #
 
 require 'fcgi'
+require 'csv'
+require 'set'
 require_relative '../database'
+require_relative 'utils'
 
 MISSING_THRESHOLD=50
 
@@ -24,7 +27,8 @@ HTML_HEADER=<<HEADER_END
       <P>Data as of: %{timestamp}<br>
          <a href="../received.fcgi">Received Logs</a><br>
          <a href="/cqp/logsubmit-form.html">Submission Page</a><br>
-         <a href="qsograph.fcgi">QSO Graph</a>
+         <a href="qsograph.fcgi">QSO by Band Graph</a><br>
+         <a href="qsototgraph.fcgi">QSO Totals Graph</a>
       </P>
       <TABLE %{tablestyle}>
       <CAPTION %{capstyle}>CQP %{year} Incoming Logs Summary</CAPTION>
@@ -99,7 +103,6 @@ MIDDLE=<<MIDDLE_END
 MIDDLE_END
 
 HTML_TRAILER = <<TRAILER_END
-    </TABLE>
 
      <h1>Entries by Power Level</h1>
      <img src="piechart.fcgi?type=power" height="450" width="500">
@@ -112,23 +115,31 @@ HTML_TRAILER = <<TRAILER_END
 TRAILER_END
 
 
-def rootCall(call)
-  # adapted from WX5S's CQP_RootCall.pm
-  call = call.upcase.gsub(/\s+/,"") # remove space and convert to upper case
-  parts = call.split("/")
-  if parts.length <= 1
-    return call
-  else
-    if parts[0] =~ /\d\z/
-      return parts[1]
+
+def clubReport(db, ids)
+  lines = db.clubReport(ids)
+  count = 1
+  return "<!-- #{lines.join(", ")}-->\n" +
+    "<table %{tablestyle}>
+<caption %{capstyle}>CQP %{year} Club Submissions</caption>
+<tr>
+  <th %{headeven}>Club</th><th %{headeven}>Category</th><th %{headeven}># Logs</th>
+</tr>
+" + lines.reduce("") { |total, line|
+    if count.even?
+      total = total.to_s + "<tr><td %{dataeven}>" + line[0].to_s +
+        "</td><td %{dataeven}>" + line[1].to_s +
+        "</td><td %{dataeven}>" + line[2].to_s +
+        "</td></tr>\n"
     else
-      if (parts[0] =~ /\d/) or (parts[1] =~ /\d$/)
-        return parts[1]
-      else
-        return parts[0]
-      end
+      total = total.to_s + "<tr><td %{dataodd}>" + line[0].to_s +
+        "</td><td %{dataodd}>" + line[1].to_s +
+        "</td><td %{dataodd}>" + line[2].to_s +
+        "</td></tr>\n"
     end
-  end
+    count = count + 1
+    total
+  } + "</table>\n\n"
 end
 
 
@@ -139,15 +150,22 @@ def handle_request(request, db)
   firstLogDate, lastLogDate = db.logDates
   callsigns = Hash.new(false)
   completedLogs.each { |id|
-    callsigns[db.getCallsign(id)] = true
+    tmp = db.getCallsign(id).upcase
+    callsigns[tmp] = true
+    callsigns[callBase(tmp)] = true
+    if CGI::unescapeHTML(tmp) != tmp
+      tmp = CGI::unescapeHTML(tmp)
+      callsigns[tmp] = true
+      callsigns[callBase(tmp)] = true
+    end
   }
   callsWorked = db.workedStats(completedLogs, MISSING_THRESHOLD)
   callsigns.keys.each { |call|
     callsWorked.delete(call)
-    callsWorked.delete(rootCall(call))
+    callsWorked.delete(callBase(call))
   }
   callsWorked.keys.each { |call|
-    if callsigns.has_key?(rootCall(call))
+    if callsigns.has_key?(callBase(call)) or callsigns.has_key?(call.upcase)
       callsWorked.delete(call)
     end
   }
@@ -218,7 +236,9 @@ def handle_request(request, db)
           total = total + "      <TR><TD %{dataodd}>" + call + "</TD><TD %{numodd}>" + callsWorked[call].to_s + "</TD></TR>\n"
         end
         total
-      } +
+      } + "</table>\n" + multiplierTable(db) + 
+      "   </table>\n\n" +
+      clubReport(db, completedLogs) +
       HTML_TRAILER) % attr
   }
 end

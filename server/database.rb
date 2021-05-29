@@ -47,7 +47,7 @@ class LogDatabase
           @connection.query("use CQPUploads;")
           @connection.query("create table if not exists CQPLog (id bigint primary key, callsign varchar(32), callsign_confirm varchar(32), userfilename varchar(1024), originalfile varchar(1024), asciifile varchar(1024), logencoding varchar(32), origdigest char(40), opclass ENUM('checklog', 'multi-multi', 'multi-single', 'single', 'single-assisted'), power ENUM('High', 'Low', 'QRP'), uploadtime datetime, uploadinstant double, emailaddr varchar(256), sentqth varchar(256), phonenum varchar(32), comments varchar(4096), maxqso int, parseqso int, county tinyint(1) unsigned,  youth tinyint(1) unsigned, mobile tinyint(1) unsigned, female tinyint(1) unsigned, school tinyint(1) unsigned, newcontester tinyint(1) unsigned, completed tinyint(1) unsigned not null default 0, source enum('unknown', 'email', 'form1', 'form2', 'form3', 'form4') not null default 'unknown', index callindex (callsign asc), index calltwoind (callsign_confirm asc), index uploadtimeind (uploadtime asc), index uploadinstind (uploadinstant asc));")
           @connection.query("create table if not exists CQPError (id int auto_increment primary key, message varchar(256), traceback varchar(1024), timestamp datetime);")
-          @connection.query("create table if not exists CQPExtra (id bigint primary key auto_increment, logid bigint, callsign varchar(32), opclass ENUM('checklog', 'multi-multi', 'multi-single', 'single', 'single-assisted'), power ENUM('High', 'Low', 'QRP'), uploadtime datetime, emailaddr varchar(256), sentqth varchar(256), phonenum varchar(32), comments varchar(4096), county tinyint(1) unsigned,  youth tinyint(1) unsigned, mobile tinyint(1) unsigned, female tinyint(1) unsigned, school tinyint(1) unsigned, newcontester tinyint(1) unsigned, source enum('unknown', 'email', 'form1', 'form2', 'form3', 'form4') not null default 'unknown', ipaddress varchar(22), index uploadtimeind (uploadtime asc));")
+          @connection.query("create table if not exists CQPExtra (id bigint primary key auto_increment, logid bigint, callsign varchar(32), opclass ENUM('checklog', 'multi-multi', 'multi-single', 'single', 'single-assisted'), power ENUM('High', 'Low', 'QRP'), uploadtime datetime, emailaddr varchar(256), sentqth varchar(256), phonenum varchar(32), comments varchar(4096), county tinyint(1) unsigned,  youth tinyint(1) unsigned, mobile tinyint(1) unsigned, female tinyint(1) unsigned, school tinyint(1) unsigned, newcontester tinyint(1) unsigned, source enum('unknown', 'email', 'form1', 'form2', 'form3', 'form4') not null default 'unknown', ipaddress varchar(22), clubname varchar(128), clubcat enum('unknown','small','medium','large') default 'unknown' not null, index uploadtimeind (uploadtime asc));")
           @connection.query("create table if not exists CQPWorked (id bigint primary key auto_increment, logid bigint not null, callsign varchar(32) not null, count smallint unsigned not null default 0, index logind (logid asc), index callind (callsign asc));")
         end
       end
@@ -158,8 +158,26 @@ class LogDatabase
     return nil, nil
   end
 
+  def nullOrString(str)
+    if str and ("NONE" != str) and ("OTHER" != str)
+      return "'" + Mysql2::Client::escape(str) + "'"
+    else
+      return "NULL"
+    end
+  end
+
+  def clubCategory(cat)
+    if cat then
+      cat = cat.strip.downcase
+      if ['unknown', 'small', 'medium', 'large'].include?(cat)  then
+        return "'" + cat + "'"
+      end
+    end
+    return "'unknown'"
+  end
+
   def addExtra(id,callsign, email, opclass, power, sentqth, phone, comments, county, youth, mobile, female, school, newcontester, source,
-               ipaddr)
+               ipaddr, clubname, clubcat)
     connect
     if @connection
       id = id.to_i
@@ -170,9 +188,9 @@ class LogDatabase
 #      $outfile.write(queryStr + "\n");
       @connection.query(queryStr)
       if ipaddr
-        @connection.query("insert into CQPExtra (logid, callsign, opclass, power, uploadtime, emailaddr, sentqth, phonenum, comments, county, youth, mobile, female, school, newcontester, source, ipaddress) values (#{id}, '#{Mysql2::Client::escape(callsign)}', '#{Mysql2::Client::escape(opclass)}', '#{Mysql2::Client::escape(power)}', NOW(), '#{Mysql2::Client::escape(email)}', '#{Mysql2::Client::escape(sentqth)}', '#{Mysql2::Client::escape(phone)}', '#{Mysql2::Client::escape(comments)}', #{county.to_i}, #{youth.to_i}, #{mobile.to_i}, #{female.to_i}, #{school.to_i}, #{newcontester.to_i}, '#{Mysql2::Client::escape(source)}', '#{Mysql2::Client::escape(ipaddr)}');")
+        @connection.query("insert into CQPExtra (logid, callsign, opclass, power, uploadtime, emailaddr, sentqth, phonenum, comments, county, youth, mobile, female, school, newcontester, source, ipaddress, clubname, clubcat) values (#{id}, '#{Mysql2::Client::escape(callsign)}', '#{Mysql2::Client::escape(opclass)}', '#{Mysql2::Client::escape(power)}', NOW(), '#{Mysql2::Client::escape(email)}', '#{Mysql2::Client::escape(sentqth)}', '#{Mysql2::Client::escape(phone)}', '#{Mysql2::Client::escape(comments)}', #{county.to_i}, #{youth.to_i}, #{mobile.to_i}, #{female.to_i}, #{school.to_i}, #{newcontester.to_i}, '#{Mysql2::Client::escape(source)}', '#{Mysql2::Client::escape(ipaddr)}', #{nullOrString(clubname)}, #{clubCategory(clubcat)});")
       else
-        @connection.query("insert into CQPExtra (logid, callsign, opclass, power, uploadtime, emailaddr, sentqth, phonenum, comments, county, youth, mobile, female, school, newcontester, source) values (#{id}, '#{Mysql2::Client::escape(callsign)}', '#{Mysql2::Client::escape(opclass)}', '#{Mysql2::Client::escape(power)}', NOW(), '#{Mysql2::Client::escape(email)}', '#{Mysql2::Client::escape(sentqth)}', '#{Mysql2::Client::escape(phone)}', '#{Mysql2::Client::escape(comments)}', #{county.to_i}, #{youth.to_i}, #{mobile.to_i}, #{female.to_i}, #{school.to_i}, #{newcontester.to_i}, '#{Mysql2::Client::escape(source)}');")
+        @connection.query("insert into CQPExtra (logid, callsign, opclass, power, uploadtime, emailaddr, sentqth, phonenum, comments, county, youth, mobile, female, school, newcontester, source, clubname, clubcat) values (#{id}, '#{Mysql2::Client::escape(callsign)}', '#{Mysql2::Client::escape(opclass)}', '#{Mysql2::Client::escape(power)}', NOW(), '#{Mysql2::Client::escape(email)}', '#{Mysql2::Client::escape(sentqth)}', '#{Mysql2::Client::escape(phone)}', '#{Mysql2::Client::escape(comments)}', #{county.to_i}, #{youth.to_i}, #{mobile.to_i}, #{female.to_i}, #{school.to_i}, #{newcontester.to_i}, '#{Mysql2::Client::escape(source)}', #{nullOrString(clubname)}, #{clubCategory(clubcat)});")
       end
       true
     else
@@ -269,6 +287,19 @@ class LogDatabase
         row.each { |column, value|
           result[column] = value
         }
+        res2 = @connection.query("select clubname, clubcat from CQPExtra where logid = #{id} limit 1;")
+        res2.each { |extrarow|
+          if extrarow["clubname"] and not extrarow["clubname"].empty?
+            result["clubname"] = extrarow["clubname"]
+          else
+            result["clubname"] = nil
+          end
+          if extrarow["clubcat"]
+            result["clubcat"] = extrarow["clubcat"]
+          else
+            result["clubcat"] = "unknown"
+          end
+        }
         return result
       }
     end
@@ -292,12 +323,23 @@ class LogDatabase
     result
   end
 
+def clubReport(ids)
+  result = Array.new
+  if @connection and (ids.length > 0)
+    res = @connection.query("select clubname, clubcat, count(*) from CQPExtra, CQPLog where CQPExtra.logid = CQPLog.id and clubname is not null and clubname != '' and CQPLog.id in (#{ids.join(", ")}) group by concat(clubname, '-', clubcat) order by clubname asc, clubcat asc;")
+    res.each(:as => :array) { |row|
+      result << [row[0].to_s, row[1].to_s, row[2].to_i]
+    }
+  end
+  return result
+end
+
   def incompleteEntries
     connect
     result = nil
     if @connection
       result = [ ]
-      res = @connection.query("select l1.id from CQPLog l1 left outer join CQPLog l2 on (l1.callsign = l2.callsign and l2.completed) where l2.id is null and not l1.completed group by l1.callsign asc order by l1.callsign asc;");
+      res = @connection.query("select l1.id from CQPLog l1 left outer join CQPLog l2 on (l1.callsign = l2.callsign and l2.completed) where l2.id is null and not l1.completed group by l1.callsign asc order by l1.callsign asc;")
       res.each(:as => :array) { |row|
         result << row[0].to_i
       }
@@ -314,7 +356,7 @@ class LogDatabase
     end
   end
 
-  def workedStats(entries, threshold=0)
+  def workedStats(entries, threshold=0, maxlines=nil)
     results = Hash.new(0)
     connect
     data = entries
@@ -322,7 +364,11 @@ class LogDatabase
       data = [ -1 ]
     end
     if @connection
-      res = @connection.query("select callsign, sum(count) as tot from CQPWorked where logid in (#{data.join(', ')}) group by callsign having tot >= #{threshold.to_i};")
+      if maxlines
+        res = @connection.query("select callsign, sum(count) as tot from CQPWorked where logid in (#{data.join(', ')}) group by callsign having tot >= #{threshold.to_i} order by tot desc limit #{maxlines.to_i};")
+      else
+        res = @connection.query("select callsign, sum(count) as tot from CQPWorked where logid in (#{data.join(', ')}) group by callsign having tot >= #{threshold.to_i} order by tot desc;")
+      end
       res.each(:as => :array) { |row|
         results[row[0]] = row[1].to_i
       }

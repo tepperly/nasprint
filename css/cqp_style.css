@@ -7,6 +7,15 @@ h1 {
     margin-bottom: 10px;
 }
 
+.countdown {
+    font-family: "Trebuchet MS", Verdana, Sans-serif;
+    font-style: normal;
+    font-weight: bold;
+    font-size: 1.2em;
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
 a {
     color: #428BCA;
     text-decoration: underline;
@@ -118,6 +127,11 @@ div.QSOReport h2, div.QCallReport h2 {
 .inLabel {
     width: 150px;
     text-align: right;
+}
+
+.inLabelCat {
+    width: 90px;
+    text-align: left;
 }
 
 #cabcontentId, #ALLcabcontentId {

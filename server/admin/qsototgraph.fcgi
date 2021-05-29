@@ -73,11 +73,19 @@ def dataFromLog(filename, bandtotals, timedata, details)
   }
 end
 
-def convertData(band, timedata)
+def sumData(hash)
+  result = 0
+  hash.each {|k,v|
+    result = result + v
+  }
+  return result
+end
+
+def convertData(timedata)
   result = Array.new
   timedata.each_index { |i|
     result << (CONTEST_START + MINUTES_PER_BIN * 60 * i)
-    result << timedata[i][band]
+    result << sumData(timedata[i])
   }
   result
 end
@@ -151,7 +159,7 @@ end
 def buildGraph(request, timedata, bandtotals)
   graph = SVG::Graph::TimeSeries.new( { :width => 1024,
                                         :height => 800,
-                                        :graph_title => "QSOs by Band for CQP #{CONTEST_START.strftime("%Y")}",
+                                        :graph_title => "Total QSOs for CQP #{CONTEST_START.strftime("%Y")}",
                                         :show_graph_title => true,
                                         :show_data_values => false,
                                         :timescale_divisions => "2 hours",
@@ -163,14 +171,9 @@ def buildGraph(request, timedata, bandtotals)
                                         :show_x_title => true,
                                         :scale_y_integers => true,
                                         :x_label_format => "%H:%M" } )
-  num = 0
-  BANDS.each {  |band|
-    if bandtotals[band] > 0
-      num = num + 1
-      graph.add_data({ :data => convertData(band, timedata), :title => band })
-    end
-  }
-  if num == 0
+  if (not timedata.empty?)
+    graph.add_data( { :data => convertData(timedata), :title => "QSOs for all bands"})
+  else
     graph.add_data(emptyData)
   end
   request.out("image/svg+xml") {

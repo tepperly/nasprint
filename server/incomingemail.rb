@@ -85,11 +85,11 @@ def processEmailLog(rawContent, fixedContent, filename, subject, sender, headers
     db.addExtra(logID, callsign, sender, log.calcOpClass, log.powerStr,
                 log.filterQTH[0].to_s, "", "",
                 log.county?, log.youth?, log.mobile?, log.female?, log.school?,
-                log.newcontester?, "email", nil)
+                log.newcontester?, "email", nil, log.club, nil)
     attrib = makeAttributes(logID, callsign, sender, sender, log.filterQTH[0].to_s,
                             "", "", log.county?, log.youth?, log.mobile?,
                             log.female?, log.school?, log.newcontester?,
-                            log.powerStr.upcase, log.calcOpClass.upcase)
+                            log.club, nil, nil, log.calcOpClass, log.power)
     patchedContent = patchLog(asciiContent, attrib) # add X-CQP lines
     open(asciiFilename.gsub(/\.ascii$/, ".log"),
          File::Constants::CREAT | File::Constants::EXCL | 
@@ -99,7 +99,7 @@ def processEmailLog(rawContent, fixedContent, filename, subject, sender, headers
     }
     outE = OutgoingEmail.new
     html = logHtml(log, db.getEntry(logID))
-    outE.sendEmailAlt(sender, "CQP 2015 Log Confirmation", htmlToPlain(html, "text/html"), html)
+    outE.sendEmailAlt(sender, "CQP 2019 Log Confirmation", htmlToPlain(html, "text/html"), html)
     return true
   end
   false
@@ -145,7 +145,17 @@ def checkMail(mail, subject, sender, headers, db, logCheck)
 end
 
 def getReturnEmail(mail)
-  mail.from[0]
+  begin
+    if mail.reply_to and mail.reply_to.kind_of?(Array) and mail.reply_to.length == 1
+      return mail.reply_to[0]
+    else
+      return mail.from[0]
+    end
+  rescue => e
+    $stderr.write("Exception: " + e.class.to_s + "\nMessage: " + e.message + "\nTraceback: \n: " + e.backtrace.join("\n") + "\n")
+    $stderr.flush
+    return mail.from[0]
+  end
 end
 
 begin
@@ -173,10 +183,10 @@ begin
       numlogs = checkMail(mail, mail.subject, getReturnEmail(mail), mail.header, db, logCheck)
 #    print "Mail message #{uid} had #{numlogs} log(s)\n"
       if numlogs > 0
-        #    imap.store(uid, "+X-GM-LABELS", ["CQP2015/Log"])
+        #    imap.store(uid, "+X-GM-LABELS", ["CQP2019/Log"])
         imap.copy(seqno, CQPConfig::INCOMING_IMAP_SUCCESS_FOLDER)
       else
-        #    imap.store(uid, "+X-GM-LABELS", ["CQP2015/Unknown"])
+        #    imap.store(uid, "+X-GM-LABELS", ["CQP2019/Unknown"])
         imap.copy(seqno, CQPConfig::INCOMING_IMAP_FAIL_FOLDER)
       end
       #  imap.store(uid, "-X-GM-LABELS", ["\\Inbox"])

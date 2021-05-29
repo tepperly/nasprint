@@ -42,6 +42,28 @@ def guessEmail(str)
   nil
 end
 
+def getClub(name, altname)
+  if name and (not ["OTHER", "NONE"].include?(name)) and (not name.strip.empty?)
+    return name
+  end
+  if altname and not altname.strip.empty?
+    return altname
+  end
+  return nil
+end
+
+def contentsMatch(content, filename)
+  begin
+    open(filename, File::Constants::RDONLY, :encoding => "US-ASCII") { |inf|
+      fileContent = inf.read()
+      return content == fileContent
+    }
+  rescue
+    return false
+  end
+  return false
+end
+
 def handleRequest(request, db, logCheck)
   timestamp = Time.new.utc
   logID=nil
@@ -154,38 +176,64 @@ def handleRequest(request, db, logCheck)
       if not logID
         logID = request["logID"].to_i
       end
-      db.addExtra(logID, request["callsign"],
-                  request["email"], 
+      clubName = 
+      db.addExtra(logID, CGI::unescapeHTML(request["callsign"]),
+                  CGI::unescapeHTML(request["email"]), 
                   request["opclass"],
                   request["power"],
-                  request["sentQTH"],
-                  request["phone"],
-                  request["comments"],
+                  CGI::unescapeHTML(request["sentQTH"]),
+                  CGI::unescapeHTML(request["phone"]),
+                  CGI::unescapeHTML(request["comments"]),
                   checkBox(request, "expedition"), checkBox(request, "youth"),
                   checkBox(request, "mobile"), checkBox(request, "female"),
                   checkBox(request, "school"), checkBox(request, "new"), 
-                  source, nil)
+                  source, nil, 
+                  getClub(request["clubname"], request["otherclubname"]), 
+                  request["clubsize"])
       asciiFile = db.getASCIIFile(logID)
       if asciiFile
-        attrib = makeAttributes(logID, request["callsign"],
-                                request["email"], request["confirm"], 
-                                request["sentqth"],
-                                request["phone"],
-                                request["comments"],
+        attrib = makeAttributes(logID, CGI::unescapeHTML(request["callsign"]),
+                                CGI::unescapeHTML(request["email"]), request["confirm"], 
+                                CGI::unescapeHTML(request["sentqth"]),
+                                CGI::unescapeHTML(request["phone"]),
+                                CGI::unescapeHTML(request["comments"]),
                                 checkBox(request, "expedition"), checkBox(request, "youth"),
                                 checkBox(request, "mobile"), checkBox(request, "female"),
                                 checkBox(request, "school"), checkBox(request, "new"),
-                                request['power'], request['opclass'])
+                                request['clubname'],
+                                request['otherclubname'],
+                                request['clubsize'],
+                                request['opclass'],
+                                request['power'])
         open(asciiFile,File::Constants::RDONLY,
              :encoding => "US-ASCII") { |io|
           content = io.read()
           content = patchLog(content, attrib) # add X-CQP lines
-          open(asciiFile.gsub(/\.ascii$/, ".log"), 
-               File::Constants::CREAT | File::Constants::EXCL | 
-               File::Constants::WRONLY,
-               :encoding => "US-ASCII") { |lout|
-            lout.write(content)
-          }
+          iteration=0
+          notWritten = true
+          while (notWritten)
+            if (iteration > 0)
+              suffix=("_" + iteration.to_s)
+            else
+              suffix=""
+            end
+            logFilename = asciiFile.gsub(/\.ascii$/, suffix + ".log")
+            begin
+              open(logFilename, 
+                   File::Constants::CREAT | File::Constants::EXCL | 
+                   File::Constants::WRONLY,
+                   :encoding => "US-ASCII") { |lout|
+                lout.write(content)
+              }
+              notWritten = false
+            rescue
+              if (contentsMatch(content, logFilename))
+                notWritten = false
+              else
+                iteration = iteration + 1
+              end
+            end
+          end
         }
       end
     end
