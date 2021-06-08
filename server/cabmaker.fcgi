@@ -1,4 +1,4 @@
-#!/usr/local/bin/ruby
+#!/usr/local/ruby/bin/ruby
 # -*- encoding: utf-8 -*-
 #
 # Cabmaker Save server
@@ -165,7 +165,7 @@ def handleRequest(req)
 	      </select>
 	    </td>
 	    <td>
-	      <input name="date1" id="date1" value="2020-10-03" class="date" type="text">
+	      <input name="date1" id="date1" value="2021-10-02" class="date" type="text">
 	    </td>
 	    <td>
 	      <input name="time1" id="time1" value="" class="time" type="text">
@@ -233,7 +233,7 @@ function updateQSOGrid(grid, num) {
 	    </select>\
 	  </td>\
 	  <td>\
-	    <input name=\"date" + numqsos + "\" id=\"date" + numqsos + "\" value=\"2020-10-03\" class=\"date\" type=\"text\">\
+	    <input name=\"date" + numqsos + "\" id=\"date" + numqsos + "\" value=\"2021-10-02\" class=\"date\" type=\"text\">\
 	  </td>\
 	  <td>\
 	    <input name=\"time" + numqsos + "\" id=\"time" + numqsos + "\" value=\"\" class=\"time\" type=\"text\">\

@@ -1,4 +1,4 @@
-#!/usr/local/bin/ruby
+#!/usr/local/ruby/bin/ruby
 # -*- encoding: utf-8 -*-
 # CQP email
 # Tom Epperly NS6T
@@ -7,17 +7,34 @@
 #
 
 require 'base64'
-require 'net/smtp'
+# require 'net/smtp'
+require 'tempfile'
+require 'gmail_xoauth'
 require_relative 'config'
+require_relative 'loghtml'
+require_relative 'logscan'
+
+def htmlToPlain(str, mimeType)
+  if mimeType and (mimeType =~ /^text\/html/i)
+    file = Tempfile.new('cqp_html_txt', :encoding => Encoding::UTF_8)
+    file.write(str)
+    file.close
+    IO.popen("w3m -dump -T \"text/html\" -I UTF-8 -O UTF-8 #{file.path}", :encoding => Encoding::UTF_8) { |input|
+      str = input.read
+    }
+  end
+  str
+end
 
 class OutgoingEmail
-  def initialize
+  def initialize(accessTok = nil)
     @smtp = Net::SMTP.new(CQPConfig::EMAIL_SERVER, CQPConfig::EMAIL_PORT)
+    @accessTok = accessTok
     if CQPConfig::EMAIL_USE_TLS
-      @smtp.enable_starttls
+      @smtp.enable_starttls_auto
     end
-    if CQPConfig::EMAIL_LOGIN_REQUIRED
-      @smtp.start(CQPConfig::EMAIL_DOMAIN, CQPConfig::EMAIL_ADDRESS, CQPConfig::EMAIL_PASSWORD, :login)
+    if @accessTok
+      @smtp.start(CQPConfig::EMAIL_DOMAIN, CQPConfig::EMAIL_ADDRESS, @accessTok.accessToken, :xoauth2)
     else
       @smtp.start(CQPConfig::EMAIL_DOMAIN)
     end
@@ -62,7 +79,7 @@ def nonCabrilloWarning(num)
   ""
 end
 
-def confEmail(db, entry)
+def confEmail(db, entry, accessTok=nil)
   catmap = { "county" => "CA County Expedition",
     "mobile" => "Mobile",
     "school" => "School",
@@ -76,9 +93,18 @@ def confEmail(db, entry)
     end
   }
   categories = categories.join(", ")
-  confirm = OutgoingEmail.new
-  confirm.sendEmail(entry["emailaddr"], "CQP 2020 Log Confirmation", "\
-CQP 2020 Log Confirmation
+  confirm = OutgoingEmail.new(accessTok)
+  if entry['source'] == 'email'
+    logCheck = CheckLog.new
+    log = logCheck.checkLogStr(entry['asciifile'], entry['id'],
+                               IO.read(entry['asciifile'], mode: 'rb',
+                                       encoding: 'ascii'))
+    html = logHtml(log, entry)
+    confirm.sendEmailAlt(entry["emailaddr"], "CQP #{CQPConfig::CONTEST_YEAR} Log Confirmation",
+                         htmlToPlain(html, "text/html"), html)
+  else
+    confirm.sendEmail(entry["emailaddr"], "CQP #{CQPConfig::CONTEST_YEAR} Log Confirmation", "\
+CQP #{CQPConfig::CONTEST_YEAR} Log Confirmation
 
           Callsign: #{entry['callsign_confirm']}
        Entry-Class: #{db.translateClass(entry['opclass'])}
@@ -108,10 +134,11 @@ Here is the link: http://robot.cqp.org/.
 
 Tom NS6T
 ")
+  end
 end
 
 
-def backupEmail(db, entry)
+def backupEmail(db, entry, accessTok=nil)
   columns = [ "id", "callsign", "callsign_confirm", "origdigest", "opclass", "power", "uploadtime", "emailaddr", "sentqth",
               "phonenum", "county", "youth", "mobile", "female", "school", "newcontester" ]
   maxwidth = 0
@@ -120,12 +147,12 @@ def backupEmail(db, entry)
       maxwidth = col.length
     end
   }
-  body = "CQP 2020 Log Entry Received\n\n"
+  body = "CQP #{CQPConfig::CONTEST_YEAR} Log Entry Received\n\n"
   columns.each { |col|
     body << ("%#{maxwidth}s: %s\n" % [col.upcase, entry[col].to_s])
   }
-  confirm = OutgoingEmail.new
-  confirm.sendEmail(CQPConfig::LOG_EMAIL_ACCOUNT, "CQP 2020 Log Received", body, 
+  confirm = OutgoingEmail.new(accessTok)
+  confirm.sendEmail(CQPConfig::LOG_EMAIL_ACCOUNT, "CQP #{CQPConfig::CONTEST_YEAR} Log Received", body, 
                     [{ "mime" => "application/octet", "filename" => File.basename(entry['originalfile']),
                        "content" => File.read(entry['originalfile'], {:mode => "rb"}) } ])
 end

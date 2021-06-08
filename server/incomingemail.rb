@@ -1,4 +1,4 @@
-#!/usr/local/bin/ruby
+#!/usr/local/ruby/bin/ruby
 # -*- encoding: utf-8 -*-
 # CQP configuration information
 # Tom Epperly NS6T
@@ -7,7 +7,6 @@
 #
 require 'net/imap/gmail'
 require 'mail'
-require 'tempfile'
 require_relative 'email'
 require_relative 'config'
 require_relative 'charset'
@@ -16,18 +15,8 @@ require_relative 'database'
 require_relative 'loghtml'
 require_relative 'logscan'
 require_relative 'logops'
+require_relative 'oauthaccesstok'
 
-def htmlToPlain(str, mimeType)
-  if mimeType and (mimeType =~ /^text\/html/i)
-    file = Tempfile.new('cqp_html_txt', :encoding => Encoding::UTF_8)
-    file.write(str)
-    file.close
-    IO.popen("w3m -dump -T \"text/html\" -I UTF-8 -O UTF-8 #{file.path}", :encoding => Encoding::UTF_8) { |input|
-      str = input.read
-    }
-  end
-  str
-end
 
 def fixCharset(content, mimeType, charset)
   if Encoding::ASCII_8BIT == content.encoding
@@ -97,9 +86,9 @@ def processEmailLog(rawContent, fixedContent, filename, subject, sender, headers
          :encoding => "US-ASCII") { |lout|
       lout.write(patchedContent)
     }
-    outE = OutgoingEmail.new
-    html = logHtml(log, db.getEntry(logID))
-    outE.sendEmailAlt(sender, "CQP 2020 Log Confirmation", htmlToPlain(html, "text/html"), html)
+#    outE = OutgoingEmail.new
+#    html = logHtml(log, db.getEntry(logID))
+#    outE.sendEmailAlt(sender, "CQP 2020 Log Confirmation", htmlToPlain(html, "text/html"), html)
     return true
   end
   false
@@ -163,8 +152,18 @@ begin
   logCheck = CheckLog.new
   imap = Net::IMAP::Gmail.new(CQPConfig::INCOMING_IMAP_HOST, CQPConfig::INCOMING_IMAP_PORT, usessl = true, certs = nil, verify = false)
   # Net::IMAP.debug = true
-  imap.login(CQPConfig::INCOMING_IMAP_USER, CQPConfig::INCOMING_IMAP_PASSWORD)
-  
+  dbconn = db.connect
+  logger = DBLogger.new(dbconn)
+  accessTok = OAuthAccessTok.new(logger = logger, conn = dbconn)
+  logger = nil
+  imap.authenticate('XOAUTH2', CQPConfig::INCOMING_IMAP_USER, accessTok.accessToken)
+
+  [ CQPConfig::INCOMING_IMAP_ARCHIVE, CQPConfig::INCOMING_IMAP_SUCCESS_FOLDER, CQPConfig::INCOMING_IMAP_FAIL_FOLDER ].each { |folder|
+    if imap.list("", folder).empty?
+      print "Create IMAP folder #{folder}\n"
+      imap.create(folder)
+    end
+  }
   imap.select(CQPConfig::INCOMING_IMAP_FOLDER)
 
   msgs = imap.uid_search(["ALL"])

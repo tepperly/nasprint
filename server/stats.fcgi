@@ -1,4 +1,4 @@
-#!/usr/local/bin/ruby
+#!/usr/local/ruby/bin/ruby
 # -*- encoding: utf-8 -*-
 # CQP upload statistics script
 # Tom Epperly NS6T

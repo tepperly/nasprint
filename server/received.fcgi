@@ -1,4 +1,4 @@
-#!/usr/local/bin/ruby
+#!/usr/local/ruby/bin/ruby
 # -*- encoding: utf-8 -*-
 # CQP upload script
 # Tom Epperly NS6T
@@ -6,6 +6,7 @@
 #
 #
 require 'fcgi'
+require_relative 'config'
 require_relative 'database'
 
 
@@ -59,7 +60,7 @@ class CallsignReport
           @request.div("id" => "masthead") {
              @request.img("src" => "/cqp/images/cqplogo80075.jpg", "alt" => "California QSO Party") 
           } +
-          @request.h1() { "CQP 2020 Logs Received" } +
+          @request.h1() { "CQP #{CQPConfig::CONTEST_YEAR} Logs Received" } +
           @request.p() { "The call signs for all logs received are
     shown below. Please ensure any log you've submitted is shown
     here. If it isn't, return to the " + @request.a("href" => "/cqp/logsubmit-form.html") { "log submittal page" } + " to upload again." } +

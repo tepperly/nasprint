@@ -1,4 +1,4 @@
-#!/usr/local/bin/ruby
+#!/usr/local/ruby/bin/ruby
 # -*- encoding: utf-8 -*-
 # CQP upload script
 # Tom Epperly NS6T
@@ -240,7 +240,8 @@ def handleRequest(request, db, logCheck)
       end
     end
   end
-  emailConfirmation(db, logID)
+  # email is no done by a separate process
+  # emailConfirmation(db, logID) 
   content = nil
   encodedConent = nil
   if source !~ /form[34]/
