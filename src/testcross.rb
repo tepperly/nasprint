@@ -48,6 +48,14 @@ opts.each { |opt,arg|
   end
 }
 
+def hasOverride?(db, cid, callsign)
+  res = db.query("select id from Overrides where callsign = \"#{callsign}\" and contestID=#{cid} limit 1;")
+  res.each(:as => :array) { |row|
+    return row[0]
+  }
+  nil
+end
+
 def checkCallsigns(db, cid, user, pwd)
   if user and pwd
     qrz = QRZLookup.new(user, pwd)
@@ -57,7 +65,7 @@ def checkCallsigns(db, cid, user, pwd)
   xmldb = readXMLDb()
   res = db.query("select id, basecall from Callsign where contestID = #{cid.to_i} and validcall is null;")
   res.each(:as => :array) { |row|
-    if xmldb.has_key?(row[1]) or lookupCall(qrz, xmldb, row[1])
+    if xmldb.has_key?(row[1]) or lookupCall(qrz, xmldb, row[1]) or hasOverride?(db, cid, row[1])
       db.query("update Callsign set validcall = 1 where id = #{row[0].to_i} limit 1;")
     else
       db.query("update Callsign set validcall = 0 where id = #{row[0].to_i} limit 1;");
