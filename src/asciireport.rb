@@ -168,7 +168,7 @@ end
 
 def writeCertificateCSV(db, contestID)
   CSV.open("certificate.csv", "w") { |csvout|
-    res = db.query("select email, callsign, trim(name), opclass, 'UNUSED', abbrev, DENSE_RANK() OVER (PARTITION BY opclass ORDER BY verifiedscore DESC) as classRank, DENSE_RANK() OVER (PARTITION BY multiplierId ORDER BY verifiedscore DESC) as MultiplierRank, verifiedQSOs, verifiedMultipliers, verifiedscore FROM (Log left outer join Multiplier on Log.multiplierID = Multiplier.id) where contestID = #{contestID} ORDER by opclass DESC, verifiedscore DESC;")
+    res = db.query("select email, callsign, trim(name), opclass, 'UNUSED', abbrev, DENSE_RANK() OVER (PARTITION BY opclass ORDER BY verifiedscore DESC) as classRank, DENSE_RANK() OVER (PARTITION BY multiplierId, opclass ORDER BY verifiedscore DESC) as MultiplierRank, verifiedQSOs, verifiedMultipliers, verifiedscore FROM (Log left outer join Multiplier on Log.multiplierID = Multiplier.id) where contestID = #{contestID} ORDER by opclass DESC, verifiedscore DESC;")
     res.each(:as => :array) { |row|
       csvout << row
     }
