@@ -45,7 +45,7 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     end
   end
   
-  def initialize(call, email, opclass, qth, power, isCCE, isYOUTH, isYL, isNEW, isSCHOOL,isMOBILE, entity, id, clockadj, multID)
+  def initialize(call, email, opclass, qth, power, isCCE, isYOUTH, isYL, isNEW, isSCHOOL,isMOBILE, isCOUNTYLINE, isONEDAY, entity, id, clockadj, multID)
     @id = id
     @clockadj = clockadj
     @call = call
@@ -73,6 +73,8 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     @isYL = isYL
     @isNEW = isNEW
     @isSCHOOL = isSCHOOL
+    @isCOUNTYLINE = isCOUNTYLINE
+    @isONEDAY = isONEDAY
     @scoreoverride = nil
     @multoverride = nil
     @isMOBILE = isMOBILE
@@ -123,7 +125,7 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
   end
 
   def to_s
-    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isSCHOOL}\",\"#{@isMOBILE}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{@multipliers.size},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isCOUNTYLINE}\",\"#{@isMOBILE}\",\"#{@isONEDAY}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{@multipliers.size},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -200,7 +202,7 @@ class Report
 
   def greenModeStats(id, mode, multID)
     @db.query("select count(*), sum(q.score = 0), sum(q.score = 1), sum(q.score=2) from QSO as q where q.logID = ? and q.sent_multiplierID = ? and q.judged_mode in (#{mode.map { |x| "'" + x + "'"}.join(', ')}) and NOT q.matchType in ('None', 'Dupe', 'OutsideContest', 'TimeShiftFull', 'TimeShiftPartial');", [ id, multID ] ) {|row|
-      print "!! Don't add up\n" if row[0] and (row[0] > 0) and (row[0] != row[1]+row[2]+row[3])
+      print "!! Don't add up\n" if row[0] and (row[0] > 0) and (row[0] != row[1].to_i+row[2].to_i+row[3].to_i)
       return row[0].to_i, row[1].to_i, row[2].to_i
     }
     return nil, nil, nil
@@ -273,8 +275,8 @@ class Report
 
   def scoredLogs(contestID)
     logs = Array.new
-    @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev, l.isCCE, l.isYOUTH, l.isYL, l.isNEW, l.isSCHOOL, l.isMOBILE, l.entityID, l.powclass, l.clockadj from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID  where contestID = ? order by callsign asc;", [contestID]) { |row|
-      log = Log.new(row[0], row[1], row[2], row[5], row[13], @db.toBool(row[6]), @db.toBool(row[7]), @db.toBool(row[8]), @db.toBool(row[9]), @db.toBool(row[10]), @db.toBool(row[11]), row[12], row[3].to_i, row[14].to_i, row[4].to_i)
+    @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev, l.isCCE, l.isYOUTH, l.isYL, l.isNEW, l.isSCHOOL, l.isMOBILE, l.entityID, l.powclass, l.clockadj, l.isCOUNTYLINE, l.isONEDAY from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID  where contestID = ? order by callsign asc;", [contestID]) { |row|
+      log = Log.new(row[0], row[1], row[2], row[5], row[13], @db.toBool(row[6]), @db.toBool(row[7]), @db.toBool(row[8]), @db.toBool(row[9]), @db.toBool(row[10]), @db.toBool(row[11]), @db.toBool(row[15]), @db.toBool(row[16]), row[12], row[3].to_i, row[14].to_i, row[4].to_i)
       scoreLog(row[3], row[4], log)
       log.optime = operatingTime(@db, row[3])
       logs << log
@@ -501,7 +503,7 @@ class Report
     begin
       @db.begin_transaction
       logs.each { |log|
-        @db.query("update Log set verifiedscore = ?, verifiedCWQSOs = ?, verifiedPHQSOs = ?, verifiedMultipliers = ? where id = ? limit 1;",
+        @db.query("update Log set verifiedscore = ?, verifiedCWQSOs = ?, verifiedPHQSOs = ?, verifiedMultipliers = ? where id = ?;",
                   [log.score, log.numCW, log.numPH, log.nummultipliers, log.id]) { }
         @db.query("delete from Scores where logID = ? and multID = ?;", [log.id, log.multID]) { }
         @db.query("insert into Scores (logID, multID, verified_score, verified_mult, verified_ph, verified_cw) values (?, ?, ?, ?, ?, ?);",
@@ -510,7 +512,7 @@ class Report
     ensure
       @db.end_transaction
     end
-    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"QTH Class\",\"Power\",\"On Time(min)\",\"CCE?\",\"YOUTH?\",\"YL?\",\"NEW?\",\"SCHOOL?\",\"MOBILE?\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
+    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"QTH Class\",\"Power\",\"On Time(min)\",\"CCE?\",\"YOUTH?\",\"YL?\",\"NEW?\",\"COUNTY-LINE?\",\"MOBILE?\",\"ONE-DAY?\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
     logs.each { |log|
       out.write(log.to_s + "\r\n")
     }
@@ -547,6 +549,19 @@ class Report
     results.sort! { |x,y| x[2] <=> y[2] }
     results.each { |row|
       out.write("\"" + row[0] + "\",\"" + row[1] + "\",\"" + row[2].to_s + "\"\n")
+    }
+  end
+
+  def full58List(out = $stdout, contestID)
+    results = Array.new
+    @db.query("select distinct s.logID, s.multID, m.isCA, m.abbrev, c.basecall, l.opclass from Log as l join Scores as s  on s.logID = l.id join Multiplier as m on m.id = s.multID join Callsign as c on c.id = l.callID where l.contestID = #{contestID} and l.opclass != 'CHECKLOG' and s.verified_mult = 58 order by l.id asc;") { |row|
+      results << [row[4], row[3], timeTo58(row[0], row[1], @db.toBool(row[2])), row[0], row[5]]
+    }
+    results.sort! { |x,y| x[2] <=> y[2] }
+    CSV(out, :write_headers => true, :headers => ["station callsign", "location", "time 58th confirmed multiplier", "operator class"]) { |csv_out|
+      results.each { |row|
+        csv_out <<  [ row[0], row[1], row[2].to_s, row[4].to_s ]
+      }
     }
   end
 end

@@ -318,7 +318,7 @@ class MismatchedLogs
       bandMode << q.bandMode
       result += q.metric(dominant)
     }
-    return result + 100*bandMode.length
+    return result# + 100*bandMode.length
   end
 
   def allAmbiguous
@@ -351,7 +351,7 @@ class MismatchedLogs
     @qsos << qso
   end
 
-  attr_reader :qsos
+  attr_reader :qsos, :logs
 end
 
   

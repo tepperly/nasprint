@@ -10,6 +10,7 @@ require 'qsomatch'
 require 'jaro_winkler'
 require 'set'
 require 'yaml'
+require 'time'
 
 def hillFunc(value, full, none)
   value = value.abs
@@ -55,10 +56,10 @@ end
 
 
 def linkJudgedCallBandMode(db, q1id, q2id)
-  db.query("update QSO as q1 set judged_recvdID = (select q2.sent_callID from QSO as q2 where q2.id = q1.matchID limit 1) where q1.id in (?, ?) limit 2;",
+  db.query("update QSO as q1 set judged_recvdID = (select q2.sent_callID from QSO as q2 where q2.id = q1.matchID limit 1) where q1.id in (?, ?);",
            [ q1id, q2id ]) { }
-  db.query("update QSO set judged_mode = fixedMode where id in (select q1.id from QSO as q1, QSO as q2 where q1.id in (?, ?) and q2.id in (?,?) and q1.matchID = q2.id and q2.matchID = q1.id and q1.fixedMode = q2.fixedMode limit 2) limit 2;",  [q1id, q2id, q1id, q2id]) { }
-  db.query("update QSO set judged_band = band where id in (select q1.id from QSO as q1, QSO as q2 where q1.id in (?, ?) and q2.id in (?,?) and q1.matchID = q2.id and q2.matchID = q1.id and q1.band = q2.band limit 2) limit 2;",  [q1id, q2id, q1id, q2id]) { }
+  db.query("update QSO set judged_mode = fixedMode where id in (select q1.id from QSO as q1, QSO as q2 where q1.id in (?, ?) and q2.id in (?,?) and q1.matchID = q2.id and q2.matchID = q1.id and q1.fixedMode = q2.fixedMode limit 2);",  [q1id, q2id, q1id, q2id]) { }
+  db.query("update QSO set judged_band = band where id in (select q1.id from QSO as q1, QSO as q2 where q1.id in (?, ?) and q2.id in (?,?) and q1.matchID = q2.id and q2.matchID = q1.id and q1.band = q2.band limit 2);",  [q1id, q2id, q1id, q2id]) { }
 end
 
 class Match
@@ -89,9 +90,9 @@ class Match
     type2 = @q2.fullMatch?(@q1, time) ? "Full" : "Partial"
     begin
       db.begin_transaction
-      db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q2.id, type1, @q1.id]) { }
+      db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL;", [@q2.id, type1, @q1.id]) { }
       if 1 == db.affected_rows
-        db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL limit 1;", [@q1.id, type2, @q2.id]) { }
+        db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchType = 'None' and matchID is NULL;", [@q1.id, type2, @q2.id]) { }
         if 1 == db.affected_rows
           linkJudgedCallBandMode(db, @q1.id, @q2.id)
           return type1, type2
@@ -111,6 +112,8 @@ class CrossMatch
   NOBANDMODE_TIME_MATCH = 5     # in minutes
   PERFECT_TIME_MATCH = 15       # in minutes
   MAXIMUM_TIME_MATCH = 30*60    # 30 hours in minutes
+  ALLOWED_MODES = [ "PH", "CW"].to_set.freeze
+  ALLOWED_BANDS = %w{ 10m 15m 20m 40m 80m 160m  }.to_set.freeze
 
   def initialize(db, contestID, cdb)
     @db = db
@@ -126,6 +129,7 @@ class CrossMatch
       @db.query("update QSOExtra set comment = NULL where #{@logs.membertest("logID")};") { }
       @db.query("update Log set verifiedscore = null, verifiedPHQSOs = null, verifiedCWQSOs = null, verifiedMultipliers = null where #{@logs.membertest("id")};") { }
       @db.query("delete from Participant where contestID = #{@contestID};") { }
+      @db.query("delete from Checklog where contestID = #{@contestID};") { }
     ensure
       @db.end_transaction
     end
@@ -194,8 +198,8 @@ class CrossMatch
   def printDupeMatch(id1, id2)
     queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, qe.sent_callsign, q.sent_serial, ms.abbrev, qe.sent_location, cr.basecall, qe.recvd_callsign, q.recvd_serial, mr.abbrev, qe.recvd_location " +
                     " from QSO as q join QSOExtra as qe on qe.id = q.id, Callsign as cr, Callsign as cs, Multiplier as ms, Multiplier as mr where " +
-                    linkCallsign("q.sent_","cs") + " and " + linkCallsign("q.recvd_", "cr") + " and " +
-                    linkMultiplier("q.sent_","ms") + " and " + linkMultiplier("q.recvd_", "mr") + " and " +
+                    linkCallsign("q.sent","cs") + " and " + linkCallsign("q.recvd", "cr") + " and " +
+                    linkMultiplier("q.sent","ms") + " and " + linkMultiplier("q.recvd", "mr") + " and " +
       " q.id in (#{id1.to_i}, #{id2.to_i});"
     qsos = Array.new
     @db.query(queryStr) { |row|
@@ -206,9 +210,9 @@ class CrossMatch
       qsos.each { |q|
         ids.delete(q.id)
       }
-      queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, qe.sent_callsign, q.sent_serial, 'NULL', qe.sent_location, cr.basecall, qe.recvd_callsign, q.recv_serial, 'NULL', qe.recvd_location " +
-                    " from QSO as q, Callsign as cr, Callsign as cs where " +
-                    linkCallsign("q.sent_","cs") + " and " + linkCallsign("q.recvd_", "cr") + " and " +
+      queryStr = "select q.id, q.logID, q.frequency, q.band, q.fixedMode, q.time, cs.basecall, qe.sent_callsign, q.sent_serial, 'NULL', qe.sent_location, cr.basecall, qe.recvd_callsign, q.recvd_serial, 'NULL', qe.recvd_location " +
+                    " from QSO as q join QSOExtra as qe on qe.id = q.id, Callsign as cr, Callsign as cs where " +
+                    linkCallsign("q.sent","cs") + " and " + linkCallsign("q.recvd", "cr") + " and " +
         " q.id in (#{ids.join(',')});"
       qsos = Array.new
       @db.query(queryStr) { |row|
@@ -224,6 +228,18 @@ class CrossMatch
     m = Match.new(qsos[0], qsos[1], pm, cp)
     print m.to_s + "\n"
   end
+
+  def explainLinkFail(qsoID)
+    found = false
+    print "Linking QSO #{qsoID} to another QSO failed\n"
+    @db.query("select matchID, matchType from QSO where id = ? limit 1;", [ qsoID]) { |row|
+      print "\tmatchID = " + row[0].to_s + "\n\tmatchType = " + row[1].to_s + "\n"
+      found = true
+    }
+    if not found
+      print "\tCannot locate QSO\n"
+    end
+  end
  
   def linkQSOs(queryStr, match1, match2, quiet=true, markDupe=true)
     count1 = 0
@@ -236,23 +252,26 @@ class CrossMatch
       begin
         @db.begin_transaction
         found = false
-        @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None' limit 1;", [row[1].to_i, match1, row[0].to_i]) { }
+        @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None';", [row[1].to_i, match1, row[0].to_i]) { }
         if 1 == @db.affected_rows
-          @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None' limit 1;",
+          @db.query("update QSO set matchID = ?, matchType = ? where id = ? and matchID is null and matchType = 'None';",
                     [row[0].to_i, match2, row[1].to_i]) { }
           if 1 != @db.affected_rows
             @db.rollback
+            explainLinkFail(row[1].to_i) if not quiet
           else
             count1 += 1
             count2 += 1
             linkJudgedCallBandMode(@db, row[0].to_i, row[1].to_i)
             found = true
           end
+        else
+          explainLinkFail(row[0].to_i) if not quiet
         end
         if markDupe and not found
-          @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i]) { }
+          @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?);", [row[0].to_i, row[1].to_i]) { }
           dupeCount += @db.affected_rows
-          @db.query("update QSO set judged_multiplierID = recvd_multiplierID where matchID is null and matchType = 'Dupe' and judged_multiplierID is null and id in (?, ?) limit 2;", [row[0].to_i, row[1].to_i]) { }
+          @db.query("update QSO set judged_multiplierID = recvd_multiplierID where matchID is null and matchType = 'Dupe' and judged_multiplierID is null and id in (?, ?);", [row[0].to_i, row[1].to_i]) { }
         end
       ensure
         @db.end_transaction
@@ -307,31 +326,74 @@ class CrossMatch
       if qsoData.has_key?("judged_multiplier")
         multID = @cdb.lookupMultiplier(qsoData["judged_multiplier"])[0]
         if multID
-          @db.query("update QSO set judged_multiplierID = ? where id = ? limit 1;",
+          @db.query("update QSO set judged_multiplierID = ? where id = ?;",
                     [ multID.to_i, qID ]) { }
-          @db.query("update QSOExtra set comment = ? where id = ? limit 1;",
+          @db.query("update QSOExtra set comment = ? where id = ? and comment is null;",
                     ["QSO actually with #{qsoData["judged_multiplier"]}", qID]) { }
         else
           print "Unknown multiplier #{qsoData["judged_multiplier"]}\n"
         end
       end
+      if qsoData.has_key?("judged_mode")
+        if ALLOWED_MODES.include?(qsoData["judged_mode"])
+          @db.query("update QSO set judged_mode = ? where id = ?;",
+                    [ qsoData["judged_mode"], qID ])
+        else
+          print "Override mode is unallowed " + qsoData["judged_mode"] + "\n"
+        end
+      end
+      if qsoData.has_key?("judged_band")
+        if ALLOWED_BANDS.include?(qsoData["judged_band"])
+          @db.query("update QSO set judged_band = ? where id = ?;",
+                    [ qsoData["judged_band"], qID ])
+        else
+          print "Override band is unallowed " + qsoData["judged_band"] + "\n"
+        end
+      end
       if qsoData.has_key?("score")
-        @db.query("update QSO set score = ? where id = ? limit 1;",
+        @db.query("update QSO set score = ? where id = ?;",
                   [ qsoData["score"].to_i, qID ]) { }
       end
     end
   end
 
+  def setOverrideExtra(id, q, matchType)
+    qID = nil
+    @db.query("select id from QSO where logID = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and time = \"" +
+              @db.formattime(q["time"]) + "\" and matchType = ? limit 1;",
+              [ id, q["frequency"].to_i,
+                q["serial"].to_i,
+                @cdb.lookupMultiplier(q["qth"])[0].to_i,
+                matchType ]) { |row|
+      qID = row[0].to_i
+    }
+    if q.has_key?("score") and q["score"]
+      @db.query("update QSO set score=? where id = ?;",
+                [q["score"].to_i, qID.to_i]) { }
+    end
+    if q.has_key?("comment") and q["comment"]
+      @db.query("update QSOExtra set comment=? where id = ? and comment is null;",
+                [q["comment"], qID.to_i]) { }
+    end
+  end
+
+  def fixTime(q)
+    if q.has_key?("time") and q["time"].kind_of?(String)
+      q["time"] = Time.parse(q["time"])
+    end
+  end
+    
   def overrideMatches
     matchCount = 0
     dupeCount = 0
     if File.exists?("overrides.yml")
-      yml = YAML.load_file("overrides.yml")
+      yml = YAML.safe_load_file("overrides.yml", permitted_classes: [Time])
       if yml.has_key?("matches")
         yml["matches"].each { |match|
           if match["match"]
             q1 = match["qso_one"]
             q2 = match["qso_two"]
+            [ q1, q2 ].each { |q| fixTime(q) }
             logID1 = lookupLog(q1["station"])
             logID2 = lookupLog(q2["station"])
             queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 " +
@@ -347,14 +409,22 @@ class CrossMatch
                        @cdb.lookupMultiplier(q2["qth"])[0].to_s + " and " +
                        "q1.time = \"" + @db.formattime(q1["time"]) + "\" and " +
                        "q2.time = \"" + @db.formattime(q2["time"]) + "\" and " +
-                       "q1.logID != q2.logID limit 1;"
-            print queryStr + "\n"
+                       "q1.matchID is null and " +
+                       "q2.matchID is null and " +
+                       "q1.logID != q2.logID order by " +
+                       "((q1.recvd_multiplierID = " + @cdb.lookupMultiplier(q2["qth"])[0].to_s + ") + " +
+                       "(q2.recvd_multiplierID = " + @cdb.lookupMultiplier(q1["qth"])[0].to_s + ")) " +
+                       "desc limit 1;"
             num1, num2, dupes = linkQSOs(queryStr, q1["match_type"], q2["match_type"])
             if (num1 + num2) != 2
-              print "!!!OVERRIDE FAILED!!!\n"
+              print "!!!OVERRIDE FAILED #{num1} #{num2}!!!\n#{match}\n"
             end
             setJudged(logID1, q1, q1["match_type"])
             setJudged(logID2, q2, q2["match_type"])
+            [ [logID1, q1], [ logID2, q2 ] ].each { |id, q|
+              setOverrideExtra(id, q, q["match_type"])
+            }
+              
             matchCount += (num1+num2)
             dupeCount += dupes
           end
@@ -511,14 +581,14 @@ class CrossMatch
     @db.query(queryStr, [@contestID, @contestID])  { |row|
       oneType, num1, num2 = chooseType(row[1], num1, num2)
       twoType, num1, num2 = chooseType(row[3], num1, num2)
-      @db.query("update QSO set matchType=? where id = ? limit 1;", [oneType, row[0].to_i])
-      @db.query("update QSO set matchType=? where id = ? limit 1;", [twoType, row[2].to_i])
+      @db.query("update QSO set matchType=? where id = ?;", [oneType, row[0].to_i])
+      @db.query("update QSO set matchType=? where id = ?;", [twoType, row[2].to_i])
     }
     @db.query("select q1.id, q1.matchType, q2.id from QSO as q1, QSO as q2, Log as l1, Log as l2 where q1.matchType = 'TimeShiftFull' and q1.matchID = q2.id and q1.id = q2.matchID and q2.matchType in ('TimeShiftFull', 'TimeShiftPartial') and l1.id = q1.logID and l2.id = q2.logID and l1.contestID = ? and l2.contestID = ? and l1.trustedclock and not l2.trustedclock order by q1.id asc;", [@contestID, @contestID]) { |row|
       oneType, num1, num2 = chooseType(row[1], num1, num2)
       twoType, num1, num2 = chooseType('TimeShiftPartial', num1, num2)
-      @db.query("update QSO set matchType=? where id = ? limit 1;", [oneType, row[0].to_i])
-      @db.query("update QSO set matchType=? where id = ? limit 1;", [twoType, row[2].to_i])
+      @db.query("update QSO set matchType=? where id = ?;", [oneType, row[0].to_i])
+      @db.query("update QSO set matchType=? where id = ?;", [twoType, row[2].to_i])
     }
     @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and " +
               @logs.membertest("logID") + ";") { }
@@ -551,8 +621,75 @@ class CrossMatch
       list << row[0].to_i
     }
     
-    @db.query("update QSO set matchType = 'Dupe', judged_multiplierID=recvd_multiplierID, judged_mode=fixedMode, judged_band=band, judged_recvdID=recvd_callID where id in (#{list.join(",")}) and matchType = 'None' and matchID is null limit #{list.length};") { }
+    @db.query("update QSO set matchType = 'Dupe', judged_multiplierID=recvd_multiplierID, judged_mode=fixedMode, judged_band=band, judged_recvdID=recvd_callID where id in (#{list.join(",")}) and matchType = 'None' and matchID is null;") { }
     return @db.affected_rows
+  end
+
+  def halfCredit(qid1, qid2, unrelBand, unrelMode, unrelSerial, unrelClock)
+    notMatch = 0
+    # this needs to work before judged quantities have been assigned
+    @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q2.sent_multiplierID, q1.recvd_serial, q1.matchType, q1.band, q1.fixedMode, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial, q2.band, q2.fixedMode, q1.sent_multiplierID from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and q1.score is null and q1.id = ? and q2.id = ? order by q1.id asc;", [qid1, qid2]) { |row|
+      row[2] = row[2].to_i
+      log1Adj = logAdj(row[2])
+      row[12] = row[12].to_i
+      log2Adj = logAdj(row[12])
+      if ((@db.toDateTime(row[1])+log1Adj) - (@db.toDateTime(row[11])+log2Adj)).abs > PERFECT_TIME_MATCH*60
+        if unrelClock.include?(row[2].to_i) or not unrelClock.include?(row[12])
+          notMatch += 1
+        end
+      end
+      if row[3].nil? or (row[3] != row[13]) # call signs mismatch
+        notMatch += 1
+      end
+      if row[4].nil? or ((not row[5].nil?) and row[4] != row[5]) # multiplier mismatch
+        notMatch += 1
+      end
+      if row[8].nil? or ((not (row[15].nil?)) and (row[8] != row[15]))
+        if unrelBand.include?(row[2]) or not unrelBand.include?(row[12])
+          notMatch += 1
+        end
+      end
+      if row[9].nil? or ((not (row[16].nil?)) and (row[9] != row[16]))
+        if unrelMode.include?(row[2]) or not unrelMode.include?(row[12])
+          notMatch += 1
+        end
+      end
+      if row[6].nil? or ((not (row[14].nil?)) and ((row[6] < (row[14]-1)) or (row[6] > (row[14]+1)))) # serial mismatch
+        # don't ding people who don't have a serial number
+        # match with an station known to have an unreliable log
+        # w.r.t. to sent serial numbers
+        if not unrelSerial.include?(row[12])
+          notMatch += 1
+        end
+      end
+    }
+    return notMatch <= 1
+  end
+
+  def avoidCountylineLoggingNils(unreliableClock, quiet=true)
+    count = 0
+    unreliableBand, unreliableMode, unreliableSerial = findUnreliable
+    @db.query("select q1.id, q1.matchType, q1.matchID, q2.id, q2.sent_multiplierID from QSO as q1, QSO as q2 where q1.logID = q2.logID and q1.id != q2.id and q1.frequency = q2.frequency and q1.band = q2.band and q1.fixedMode = q2.fixedMode and q1.time = q2.time and q1.sent_serial = q2.sent_serial and q1.sent_callID = q2.sent_callID and q1.sent_multiplierID != q2.sent_multiplierID and q1.matchID is not null and q2.matchID is null and q2.matchType = 'None' and q1.matchType in ('Full', 'Partial') and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc, q2.id asc;") { |row|
+      if not quiet
+        @cdb.printQSO($stdout, row[0].to_i)
+        print "\tID: #{row[0]}\n"
+        print "\tMatch type: #{row[1]}\n"
+        print "\tOther QSO: #{row[3]}\n"
+      end
+      if (row[1] == "Full")
+        @db.query("update QSO set matchType = 'Bye' where id = ?;", row[3]) { }
+        count += 1
+      else
+        if halfCredit(row[0], row[2], unreliableBand, unreliableMode, unreliableSerial, unreliableClock)
+          @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=? where id = ?;", row[4].to_i, row[3]) { }
+          count += 1
+        else
+          @db.query("update QSO set matchType = 'NIL' where id = ?;", row[3]) { }
+          @db.query("update QSOExtra set comment = 'Related county-line QSO is a D2' where id = ? and comment is null;", row[3]) { }
+        end
+      end
+    }
+    count
   end
   
   def markNIL
@@ -912,6 +1049,27 @@ class CrossMatch
     return 0
   end
 
+  def badClocksFromOverrides(result)
+    if File.exists?("overrides.yml")
+      yml = YAML.safe_load_file("overrides.yml", permitted_classes: [Time])
+      if yml.has_key?("unreliable")
+        if yml["unreliable"].has_key?("clock") and yml["unreliable"]["clock"].respond_to?(:each)
+          yml["unreliable"]["clock"].each { |call|
+            if call.kind_of?(String)
+              id = @cdb.findLog(call)
+              if id
+                result << id
+                @db.query("update Log set trustedclock = #{@db.false} where id = ?;", id) { }
+              end
+            else
+              print "Unexpected entry overrides[\"unreliable\"][\"clock\"]: #{call}\n"
+            end
+          }
+        end
+      end
+    end
+  end
+
   def determineUnreliableClocks
     result = Set.new
     begin
@@ -926,12 +1084,14 @@ class CrossMatch
           # mark it as untrusted
           result << row[0].to_i
           done = false
-          @db.query("update Log set trustedclock = #{@db.false} where id = #{row[0].to_i} limit 1;") { }
+          @db.query("update Log set trustedclock = #{@db.false} where id = #{row[0].to_i};") { }
         }
       end
     ensure
       @db.end_transaction
     end
+    badClocksFromOverrides(result)
+    
     result.freeze
     return result
   end
@@ -954,7 +1114,7 @@ class CrossMatch
     unreliableMode = Set.new
     unreliableSerial = Set.new
     if File.exists?("overrides.yml")
-      yml = YAML.load_file("overrides.yml")
+      yml = YAML.safe_load_file("overrides.yml", permitted_classes: [Time])
       if yml.has_key?("unreliable")
         addUnrel(unreliableSerial, yml["unreliable"], "serial_num")
         addUnrel(unreliableBand, yml["unreliable"], "band")
@@ -1029,12 +1189,12 @@ class CrossMatch
           end
         end
         if (notMatch == 0 and row[7] != "Full")
-          @db.query("update QSO set matchType='Full' where id = ? limit 1;",
+          @db.query("update QSO set matchType='Full' where id = ?;",
                     [ row[0] ])
         end
         if (notMatch != 0 and row[7] == "Full")
           print "QSO ID #{row[0]} is a #{row[7]} match with #{notMatch} mismatches #{comment}\n"
-          @db.query("update QSO set matchType='Partial' where id = ? limit 1;",
+          @db.query("update QSO set matchType='Partial' where id = ?;",
                     [ row[0] ])
         end
         case notMatch
@@ -1045,7 +1205,7 @@ class CrossMatch
         else
           score = 0
         end
-        @db.query("update QSO set score = ? where id = ? limit 1;",
+        @db.query("update QSO set score = ? where id = ?;",
                   [ score, row[0]])
       }
       @db.query("update QSO set score = 2 where #{@logs.membertest("logID")} and matchType = 'Bye' and score is null;")

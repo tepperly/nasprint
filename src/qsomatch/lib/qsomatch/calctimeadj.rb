@@ -163,7 +163,7 @@ class CalcTimeAdj
           @db.begin_transaction
           res.each { |line|
             clock_adjustment = line.to_f
-            @db.query("update Log set clockadj = ? where id = ? limit 1;", 
+            @db.query("update Log set clockadj = ? where id = ?;", 
                       [clock_adjustment, @vartoid[rowcount]]) { }
             if clock_adjustment >= 3600
               @badclocks << rowcount
@@ -225,7 +225,7 @@ class CalcTimeAdj
                     ") and matchType != 'OutsideContest';") { |row|
       ids << row[0].to_i
     }
-    @db.query("update QSO set matchType = 'OutsideContest' where id in (#{ids.join(",")}) limit 1;") { }
+    @db.query("update QSO set matchType = 'OutsideContest' where id in (#{ids.join(",")});") { }
     count = count + @db.affected_rows
     count
   end

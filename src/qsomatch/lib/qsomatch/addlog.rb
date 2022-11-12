@@ -125,12 +125,14 @@ def addLog(db, cID, cab, ct)
                         calcPowClass(cab),
                         opclass,
                         multID, entID, cab.name, cab.club, calcNumOps(opclass,cab),
-                        cab.hasSpecialCategory?("COUNTY"),
+                        (cab.hasSpecialCategory?("COUNTY") or cab.hasSpecialCategory?("ONE-DAY") or cab.hasSpecialCategory?("COUNTY-LINE")),
                         cab.hasSpecialCategory?("MOBILE"),
                         cab.hasSpecialCategory?("NEW_CONTESTER"),
                         cab.hasSpecialCategory?("SCHOOL"),
                         cab.hasSpecialCategory?("YL"),
                         cab.hasSpecialCategory?("YOUTH"),
+                        cab.hasSpecialCategory?("ONE-DAY"),
+                        cab.hasSpecialCategory?("COUNTY-LINE")
                         )
       addQSOs(db, cID, logID, cab.qsos)
       addOperators(db, logID, cab.opList, basecall)
@@ -138,6 +140,6 @@ def addLog(db, cID, cab, ct)
       print "!!Can't add a log for #{cab.logcall} with no location\n"
     end
   else
-    print "!!Can't add a log without a callsign\n"
+    print "!!Can't add a log without a callsign '#{cab.filename}'\n"
   end
 end

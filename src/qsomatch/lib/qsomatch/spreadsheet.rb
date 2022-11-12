@@ -181,7 +181,7 @@ class Spreadsheet
     }
   end
 
-  def qsoAward(num, sheet, regcon, title, column, coldesc)
+  def qsoAward(num, sheet, regcon, title, column, coldesc, zeroColumn)
     @workbook.styles { |s|
       header = s.add_style :b => true, :alignment => {:horizontal => :center}
       index = s.add_style :alignment => {:horizontal => :center}
@@ -189,22 +189,22 @@ class Spreadsheet
       callsign = s.add_style :alignment => {:horizontal => :left}, :b => true
       missing = s.add_style :alignment => {:horizontal => :left}, :i => true
       right_warn = s.add_style :alignment => {:horizontal => :right}, :bg_color => "ff0000"
-      sheet.add_row([nil, title, coldesc + " QSOs", "Difference"],
+      sheet.add_row([nil, title, coldesc + " QSOs", "Score", "Difference"],
                     :style=>[nil, header, header, header])
       prev = nil
       i = 1
-      @db.query("select c.basecall, m.abbrev, s.#{column} from Scores as s,Log as l, Multiplier as m, Callsign as c where s.logID = l.id and l.contestID = ? and s.multID = m.id and l.callID = c.id and #{regcon} and l.opclass in ('SINGLE', 'SINGLE_ASSISTED') order by s.#{column} desc limit ?;",
+      @db.query("select c.basecall, m.abbrev, s.#{column}, s.verified_score from Scores as s,Log as l, Multiplier as m, Callsign as c where s.logID = l.id and l.contestID = ? and s.multID = m.id and l.callID = c.id and #{regcon} and l.opclass in ('SINGLE', 'SINGLE_ASSISTED') and s.#{zeroColumn} = 0 order by s.verified_score desc limit ?;",
                 [@contestID, num]) { |row|
         if prev
-          diff = prev - row[2].to_i
-          sheet.add_row([i, row[0]+"/"+row[1], row[2].to_i, diff],
-                        :style=>[index, callsign, right,
+          diff = prev - row[3].to_i
+          sheet.add_row([i, row[0]+"/"+row[1], row[2].to_i, row[3].to_i, diff],
+                        :style=>[index, callsign, right, right,
                           ((diff <= 10) ? right_warn : right)])
         else
-          sheet.add_row([i, row[0]+"/"+row[1], row[2].to_i],
-                        :style=>[index, callsign, right])
+          sheet.add_row([i, row[0]+"/"+row[1], row[2].to_i, row[3].to_i],
+                        :style=>[index, callsign, right, right])
         end
-        prev = row[2].to_i
+        prev = row[3].to_i
         i += 1
       }
       if i == 1
@@ -256,8 +256,8 @@ class Spreadsheet
         specialAward(num, sheet, constraint, "Low Power Multi-Multi County Expedition", "opclass = 'MULTI_MULTI' and isCCE and powclass = 'LOW'")
       end
       firstToAllMults(3, sheet, region + " First to 58", " and " + constraint)
-      qsoAward(2, sheet, constraint, "Most Phone QSOs", "verified_ph", "PH")
-      qsoAward(2, sheet, constraint, "Most CW QSOs", "verified_cw", "CW")
+      qsoAward(2, sheet, constraint, "Highest Phone-Only Score", "verified_ph", "PH", "verified_cw")
+      qsoAward(2, sheet, constraint, "Highest CW-Only Score", "verified_cw", "CW", "verified_ph")
     }
   end
 
@@ -466,9 +466,9 @@ class Spreadsheet
   ALLPOWERS.freeze
 
   def addMostQSOs(sheet, name, namestyle, headstyle, callsign, qth, num,
-                  criteria, column)
-    sheet.add_row [name,nil,"Num QSOs", nil, nil, nil, nil,
-                   name,nil,"Num QSOs", nil, nil, nil]
+                  column, extraConstraint)
+    sheet.add_row [name,nil,"Num QSOs", nil, "Score", nil, nil,
+                   name,nil,"Num QSOs", nil, "Score", nil]
     sheet.merge_cells(sheet.rows.last.cells[(0..1)])
     sheet.rows.last.cells[(2..5)].each { |c| c.style = headstyle }
     sheet.merge_cells(sheet.rows.last.cells[(2..3)])
@@ -479,17 +479,17 @@ class Spreadsheet
     sheet.merge_cells(sheet.rows.last.cells[(7..8)])
     sheet.merge_cells(sheet.rows.last.cells[(9..10)])
     sheet.merge_cells(sheet.rows.last.cells[(11..12)])
-    ca = topPlaqCat("m.isCA", ALLPOWERS, %w{SINGLE SINGLE_ASSISTED}, 1, false, "",
-                    criteria)
-    nonca = topPlaqCat("not m.isCA", ALLPOWERS, %w{SINGLE SINGLE_ASSISTED}, 1, false, "",
-                       criteria)
+    ca = topPlaqCat("m.isCA", ALLPOWERS, %w{SINGLE SINGLE_ASSISTED}, 1, false, extraConstraint,
+                    "s.verified_score")
+    nonca = topPlaqCat("not m.isCA", ALLPOWERS, %w{SINGLE SINGLE_ASSISTED}, 1, false, extraConstraint,
+                       "s.verified_score")
     [ca.length, nonca.length].max.times { |i|
       sheet.add_row((ca[i] ? [ca[i][0], ca[i][1], ca[i][column].to_s + " QSOs",
-                        nil, nil, nil]
+                        nil, ca[i][5], nil]
                       : [ "None", nil, nil, nil, nil. nil]) +
                     [ nil ] +
                     (nonca[i] ? [nonca[i][0], nonca[i][1], nonca[i][column].to_s + " QSOs",
-                        nil, nil, nil]
+                        nil, nonca[i][5], nil]
                       : [ "None", nil, nil, nil, nil, nil]) ,
                     :style => [ callsign, qth, num, nil, nil, nil, nil,
                       callsign, qth, num, nil, nil, nil ] )
@@ -770,10 +770,10 @@ class Spreadsheet
         addTwoRegions(sheet, "Top Multi-Single", awardname, header,
                       ALLPOWERS, %w{MULTI_SINGLE}, 1, callsign, qth, num, score, opsstyle,
                       false)
-        addMostQSOs(sheet, "Most CW QSOs", awardname, header, callsign, qth, num,
-                    "s.verified_cw", 3)
-        addMostQSOs(sheet, "Most PH QSOs", awardname, header, callsign, qth, num,
-                    "s.verified_ph", 4)
+        addMostQSOs(sheet, "Highest CW-only Score", awardname, header, callsign, qth, num,
+                    3, " and (s.verified_ph = 0) ")
+        addMostQSOs(sheet, "Highest PH-only Score", awardname, header, callsign, qth, num,
+                    4, " and (s.verified_cw = 0) ")
         addClubAwards(sheet, awardname, header, callsign, num, score)
         addFirst58(sheet, awardname, header, callsign, qth, num)
         rightColumnRow = sheet.rows.length+1

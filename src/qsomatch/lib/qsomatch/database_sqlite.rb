@@ -21,6 +21,9 @@ class DatabaseSQLite
     @in_transaction = false
     @db = SQLite3::Database.new(opts["filename"])
     @db.busy_timeout(500)
+    @db.execute("PRAGMA journal_mode=WAL;")
+    @db.execute("PRAGMA cache_size = -8000;")
+    @db.execute("PRAGMA synchronous = NORMAL;")
     if $verbose
       @db.trace { |sql|
         print "SQLite3 Statement #{Time.now.to_s} (#{@in_transaction ? 1 : 0}): #{sql}\n"

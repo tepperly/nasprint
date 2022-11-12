@@ -34,8 +34,10 @@ class ReportPDF
   LOGO_FILE=File.dirname(__FILE__)+"/images/nccc_generic.png"
   HEADER_HEIGHT=44
   LEGEND = [
+    "1E = One-Day County Expedition",
     "C = <i>Checklog</i>",
-    "E = Country Expedition",
+    "CL = County-Line Expedition",
+    "E = County Expedition",
     "L = Low Power",
     "M = Mobile",
     "M/M = Multi-Multi",

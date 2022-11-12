@@ -8,8 +8,8 @@ require 'csv'
 require 'time'
 require 'set'
 
-CONTEST_START=Time.utc(2020,10,3,16, 00)
-CONTEST_END=Time.utc(2020,10,4,22,00)
+CONTEST_START=Time.utc(2022,10,1,16, 00)
+CONTEST_END=Time.utc(2022,10,2,22,00)
 
 def mySplit(str, pattern)
   result = [ ]
@@ -207,10 +207,11 @@ end
 
 class Cabrillo
   MULTIPLIER_ALIASES = readMultipliers(File.dirname(__FILE__) + "/multipliers.csv")
-  KNOWN_CATEGORIES = %w{ COUNTY MOBILE NEW_CONTESTER SCHOOL YL YOUTH }.to_set
+  KNOWN_CATEGORIES = %w{ COUNTY MOBILE NEW_CONTESTER SCHOOL YL YOUTH ONE-DAY COUNTY-LINE}.to_set
   KNOWN_CATEGORIES.freeze
 
   def initialize(filename)
+    @printErrorHeader = true
     @logID = nil
     @cleanparse = true
     @filename = filename
@@ -252,13 +253,22 @@ class Cabrillo
   end
 
   attr_reader :cleanparse, :logcall, :qsos, :club, :name, :badmults,
-              :badSentMults, :operators
+              :badSentMults, :operators, :filename
+
+  def reportError(message)
+    callsign = logCall
+    if (@printErrorHeader and callsign)
+      $stderr.write("Callsign: '#{callsign}' Filename: '#{@filename}'\n")
+      @printErrorHeader = false
+    end
+    $stderr.write(message)
+  end
 
   def trans(oldstate, newstate)
     if @parsestate <= oldstate
       @parsestate = newstate
     else
-      $stderr.write("Unexpected state transition #{@parsestate} #{oldstate} #{newstate} in #{@filename}.\n")
+      reportError("Unexpected state transition #{@parsestate} #{oldstate} #{newstate} in #{@filename}.\n")
       @parsestate = newstate
     end
   end
@@ -561,7 +571,7 @@ class Cabrillo
         if KNOWN_CATEGORIES.include?(cat) 
           @dbSpecialCategories << cat
         else
-          $stderr.write("Unknown category #{cat} in X-CQP-CATEGORIES line\n")
+          reportError("Unknown category #{cat} in X-CQP-CATEGORIES line\n")
         end
       }
       @x_lines << line
@@ -698,11 +708,11 @@ class Cabrillo
           line.gsub!(/[^-a-zA-Z\/0-9 :]/," ")
           if processLine(line)       # try again
             @cleanparse = false
-            $stderr.write(msg)
+            reportError(msg)
           end
         else
           @cleanparse = false
-          $stderr.write(msg)
+          reportError(msg)
         end
       end
     }
@@ -993,7 +1003,7 @@ NAME: #{@name}
       when /\A(\s*|AND)\Z/
         # ignore empty string and conjunctions
       else
-        $stderr.write("Missing action for category: '#{tok}'\n")
+        reportError("Missing action for category: '#{tok}'\n")
       end
     }
   end

@@ -144,7 +144,7 @@ class ContestDatabase
     }
     CSV.foreach(File.dirname(__FILE__) + "/prefixlist.txt", "r:ascii") { |row|
       begin
-        @db.query("update Entity set prefix = ? where id = ? limit 1;",
+        @db.query("update Entity set prefix = ? where id = ?;",
                   [row[1].to_s, row[0].to_i]) { }
       rescue Mysql2::Error => e
         if e.error_number != 1062 # ignore duplicate entry
@@ -220,9 +220,9 @@ class ContestDatabase
     @db.query("create table if not exists Checklog (id integer primary key #{@db.autoincrement}, contestID integer not null, callID integer not null, multiplierID integer not null);") { }
     @db.query("create unique index if not exists ccind on Checklog (contestID, multiplierID, callID);") { }
     if @db.has_enum?
-      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass enum('QRP', 'LOW', 'HIGH'), opclass enum('CHECKLOG', 'SINGLE', 'SINGLE_ASSISTED', 'MULTI_SINGLE', 'MULTI_MULTI'), numops int, verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, trustedclock bool not null default #{@db.false}, name varchar(128), club varchar(128), isCCE bool not null default #{@db.false}, isYOUTH bool not null default #{@db.false}, isYL bool not null default #{@db.false}, isNEW bool not null default #{@db.false}, isSCHOOL bool not null default #{@db.false}, isMOBILE bool not null default #{@db.false});") { }
+      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass enum('QRP', 'LOW', 'HIGH'), opclass enum('CHECKLOG', 'SINGLE', 'SINGLE_ASSISTED', 'MULTI_SINGLE', 'MULTI_MULTI'), numops int, verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, trustedclock bool not null default #{@db.false}, name varchar(128), club varchar(128), isCCE bool not null default #{@db.false}, isYOUTH bool not null default #{@db.false}, isYL bool not null default #{@db.false}, isNEW bool not null default #{@db.false}, isSCHOOL bool not null default #{@db.false}, isMOBILE bool not null default #{@db.false}, isONEDAY bool not null default #{@db.false}, isCOUNTYLINE bool not null default #{@db.false});") { }
     else
-      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass char(7), opclass char(15), numops int, verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs, verifiedMultipliers integer, clockadj integer not null default 0, trustedclock bool not null default #{@db.false}, name varchar(128), club varchar(128), isCCE bool not null default #{@db.false}, isYOUTH bool not null default #{@db.false}, isYL bool not null default #{@db.false}, isNEW bool not null default #{@db.false}, isSCHOOL bool not null default #{@db.false}, isMOBILE bool not null default #{@db.false});") { }
+      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass char(7), opclass char(15), numops int, verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs, verifiedMultipliers integer, clockadj integer not null default 0, trustedclock bool not null default #{@db.false}, name varchar(128), club varchar(128), isCCE bool not null default #{@db.false}, isYOUTH bool not null default #{@db.false}, isYL bool not null default #{@db.false}, isNEW bool not null default #{@db.false}, isSCHOOL bool not null default #{@db.false}, isMOBILE bool not null default #{@db.false}, isONEDAY bool not null default #{@db.false}, isCOUNTYLINE bool not null default #{@db.false});") { }
     end
     @db.query("create index if not exists callind on Log (callsign);") { }
     @db.query("create index if not exists contestind on Log (contestID);") { }
@@ -361,7 +361,7 @@ class ContestDatabase
   end
 
   def capOrNull(str)
-    str ? str.upcase : nil
+    str ? str.to_s.upcase : nil
   end
 
   def numOrNull(num)
@@ -377,15 +377,16 @@ class ContestDatabase
   end
 
   def markReceived(callID)
-    @db.query("update Callsign set logrecvd = 1 where id = ? limit 1;", [callID.to_i]) { }
+    @db.query("update Callsign set logrecvd = 1 where id = ?;", [callID.to_i]) { }
   end
 
-  def addLog(contID, callsign, callID, email, powclass, opclass, multID, entID, name, club, numops, isCCE, isMobile, isNew, isSchool, isYL, isYouth)
-    @db.query("insert into Log (contestID, callsign, callID, email, powclass, opclass, multiplierID, entityID, name, club, numops, isCCE, isMOBILE, isNEW, isSCHOOL, isYL, isYOUTH) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+  def addLog(contID, callsign, callID, email, powclass, opclass, multID, entID, name, club, numops, isCCE, isMobile, isNew, isSchool, isYL, isYouth, isOneDay, isCountyLine)
+    @db.query("insert into Log (contestID, callsign, callID, email, powclass, opclass, multiplierID, entityID, name, club, numops, isCCE, isMOBILE, isNEW, isSCHOOL, isYL, isYOUTH, isONEDAY, isCOUNTYLINE) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
               [contID.to_i, capOrNull(callsign), callID.to_i, email, powclass, 
                 opclass, multID.to_i, numOrNull(entID), name, club, numops,
                 @db.boolToDB(isCCE), @db.boolToDB(isMobile), @db.boolToDB(isNew),
-                @db.boolToDB(isSchool), @db.boolToDB(isYL), @db.boolToDB(isYouth)
+                @db.boolToDB(isSchool), @db.boolToDB(isYL), @db.boolToDB(isYouth),
+                @db.boolToDB(isOneDay), @db.boolToDB(isCountyLine)
               ]) { }
 
     return @db.last_id
@@ -544,7 +545,7 @@ class ContestDatabase
     removeContestQSOs(contestID)
     removeOverrides(contestID)
     removePairs(contestID)
-    @db.query("delete from Contest where contestID = ? limit 1;", [contestID]) { }
+    @db.query("delete from Contest where contestID = ?;", [contestID]) { }
   end
 
   def logsForContest(contestID)
@@ -587,6 +588,34 @@ class ContestDatabase
       }
     end
     false
+  end
+
+  def serialNum(num)
+    num ? num.to_i : 9999
+  end
+
+  FULL_TYPES = Set.new(%w{Full Bye}).freeze
+  PARTIAL_TYPES = Set.new(%w{Partial PartialBye}).freeze
+  def matchType(qsoType, score)
+    if FULL_TYPES.include?(qsoType)
+      return (score < 2) ? ("%s (D%d)" % [qsoType, (2-score)]) : qsoType
+    elsif PARTIAL_TYPES.include?(qsoType)
+      return "%s (D%d)" % [qsoType, (2-score)]
+    elsif score > 0
+      return "%s (credit %d out of 2)" % [qsoType, score]
+    else
+      return qsoType
+    end
+  end
+
+  def printQSO(out, id)
+    @db.query("select q.frequency, q.fixedMode, q.time, qe.sent_callsign, q.sent_serial, coalesce(m1.abbrev,qe.sent_location) as sentmult,  qe.recvd_callsign, q.recvd_serial, coalesce(m2.abbrev,qe.recvd_location) as recvdmult, q.matchType, qe.comment, q.score from (QSO as q left join Multiplier as m1 on m1.id = q.sent_multiplierID) left join Multiplier as m2 on m2.id = q.recvd_multiplierID, QSOExtra as qe on q.id = qe.id where q.id = ?;", [id]) { |row|
+    td = @db.toDateTime(row[2])
+    out << ("QSO: %5d %2s %4d-%02d-%02d %02d%02d %-10s %4d %-4s %-10s %4d %-4s %%{%s: %s}%%\r\n" %
+            [row[0], row[1], td.year, td.month, td.mday, td.hour, td.min, row[3], serialNum(row[4]), row[5],
+             row[6], serialNum(row[7]), row[8], matchType(row[9], row[11].to_i),
+             row[10].to_s])
+    }
   end
 
   def numBandChanges(logID)
@@ -828,13 +857,16 @@ class ContestDatabase
   end
 
   def checkDupeLogs(cid)
+    emptyDigest = qsoDigest(-255)
     logSpace = Hash.new
     logsForContest(cid).each { |logID|
       digest = qsoDigest(logID)
-      if logSpace.has_key?(digest)
-        logSpace[digest] << logID
-      else
-        logSpace[digest] = [ logID ]
+      if digest != emptyDigest
+        if logSpace.has_key?(digest)
+          logSpace[digest] << logID
+        else
+          logSpace[digest] = [ logID ]
+        end
       end
     }
     # remove logs without duplicates

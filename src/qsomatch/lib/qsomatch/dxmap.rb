@@ -47,6 +47,16 @@ class Entity
       :ituZone, :latitude, :longitude, :timeadj
 
   NOTDX=Set.new([1, 6, 110, 291]).freeze
+  CANADIAN=Set.new([1 ]).freeze
+  FCC=Set.new([6, 110, 291]).freeze
+
+  def canadian?
+    CANADIAN.include?(@entityID) # Canadian entities
+  end
+
+  def fcc?
+    FCC.include?(@entityID) # US, Hawaii, Alaska
+  end
 
   def dx?
     not NOTDX.include?(@entityID) # non US, Alaska, Canada, Hawaii

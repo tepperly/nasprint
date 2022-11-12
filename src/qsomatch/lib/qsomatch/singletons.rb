@@ -154,8 +154,8 @@ class ResolveSingletons
 
   def resolve
     @db.query("select distinct q.id from QSO as q where matchType = 'None' and (q.recvd_multiplierID is null or q.recvd_serial is null);") { |row|
-      @db.query("update QSO set matchType = 'Removed'  where id = ? limit 1;", [row[0]]) { }
-      @db.query("update QSOExtra set comment='No received serial number or multiplier for this QSO.' where id = ? limit 1;", [row[0]]) { }
+      @db.query("update QSO set matchType = 'Removed'  where id = ?;", [row[0]]) { }
+      @db.query("update QSOExtra set comment='No received serial number or multiplier for this QSO.' where id = ? and comment is null;", [row[0]]) { }
     }
     @db.query("select q.id, q.recvd_callID, q.recvd_serial, q.fixedMode, q.recvd_multiplierID from QSO as q where " +
                     @logIDs.membertest("q.logID") +
@@ -166,48 +166,48 @@ class ResolveSingletons
           likelyCall = callMatchToParticipant(call.to_s, row[4], "CW" == row[3])
           if likelyCall
             likelyCallObj = @callFromBasename[likelyCall]
-            @db.query("update QSO set matchType = 'PartialBye' where id = ? limit 1;", [row[0]]) { }
-            @db.query("update QSOExtra set comment='Busted call likely match #{likelyCall} (seen in #{likelyCallObj ? likelyCallObj.numQSOs : 0} QSOs) or unique.' where id = ? limit 1;", [row[0]]) { }
+            @db.query("update QSO set matchType = 'PartialBye' where id = ?;", [row[0]]) { }
+            @db.query("update QSOExtra set comment='Busted call likely match #{likelyCall} (seen in #{likelyCallObj ? likelyCallObj.numQSOs : 0} QSOs) or unique.' where id = ? and comment is null;", [row[0]]) { }
           else
-            @db.query("update QSO set matchType = 'Unique' where id = ? limit 1;", [row[0]]) { }
-            @db.query("update QSOExtra set comment='High serial number a station only worked #{call.numQSOs.to_i} time(s).' where id = ? limit 1;", [row[0]]) { }
+            @db.query("update QSO set matchType = 'Unique' where id = ?;", [row[0]]) { }
+            @db.query("update QSOExtra set comment='High serial number a station only worked #{call.numQSOs.to_i} time(s).' where id = ? and comment is null;", [row[0]]) { }
           end
         else
           if call.illegal or (not call.valid and call.numQSOs <= 5) then
             likelyCall = callMatchToParticipant(call.to_s, row[4], "CW" == row[3])
             if likelyCall
               likelyCallObj = @callFromBasename[likelyCall]
-              @db.query("update QSO set matchType = 'PartialBye' where id = ? limit 1;", [row[0]]) { }
-              @db.query("update QSOExtra set comment='Busted call likely match #{likelyCall} (seen in #{likelyCallObj ? likelyCallObj.numQSOs : 0} QSOs) or illegal.' where id = ? limit 1;", [row[0]]) { }
+              @db.query("update QSO set matchType = 'PartialBye' where id = ?;", [row[0]]) { }
+              @db.query("update QSOExtra set comment='Busted call likely match #{likelyCall} (seen in #{likelyCallObj ? likelyCallObj.numQSOs : 0} QSOs) or illegal.' where id = ?  and comment is null;", [row[0]]) { }
             else
               # illegal callsign
               list = possibleMatches(call.id, call.callsign, "CW" == row[3], 0.875)
               if list
-                @db.query("update QSO set matchType = 'Removed' where id = ? limit 1;", [row[0]]) { }
-                @db.query("update QSOExtra set comment='Busted callsign - potential matches: #{list.join(" ")}.' where id = ? limit 1;", [row[0]]) { }
+                @db.query("update QSO set matchType = 'Removed' where id = ?;", [row[0]]) { }
+                @db.query("update QSOExtra set comment='Busted callsign - potential matches: #{list.join(" ")}.' where id = ? and comment is null;", [row[0]]) { }
               else
-                @db.query("update QSO set matchType = 'Removed' where id = ? limit 1;", [row[0]]) { }
-                @db.query("update QSOExtra set comment='Illegal callsign not close to known participants.' where id = ? limit 1;", [row[0]]) { }
+                @db.query("update QSO set matchType = 'Removed' where id = ?;", [row[0]]) { }
+                @db.query("update QSOExtra set comment='Illegal callsign not close to known participants.' where id = ? and comment is null;", [row[0]]) { }
               end
             end
           else
             if call.numQSOs >= 10 or (call.valid and call.numQSOs >= 5)
-              @db.query("update QSO set matchType = 'Bye' where id = ? limit 1;", [row[0]]) { }
+              @db.query("update QSO set matchType = 'Bye' where id = ?;", [row[0]]) { }
             else
               list = possibleMatches(call.id, call.callsign, "CW" == row[3])
               mc = farMoreCommon(list, call.numQSOs)
               if mc and exchangeClose(row[0],mc)
-                @db.query("update QSO set matchType = 'Removed' where id = ? limit 1;", [row[0]]) { }
-                @db.query("update QSOExtra set comment='Busted call - likely match: #{mc.callsign}.'  where id = ? limit 1;", [row[0]]) { }
+                @db.query("update QSO set matchType = 'Removed' where id = ?;", [row[0]]) { }
+                @db.query("update QSOExtra set comment='Busted call - likely match: #{mc.callsign}.'  where id = ? and comment is null;", [row[0]]) { }
               else
-                @db.query("update QSO set matchType = 'Bye' where id = ? limit 1;", [row[0]]) { }
+                @db.query("update QSO set matchType = 'Bye' where id = ?;", [row[0]]) { }
               end
             end
           end
         end
       else
-        @db.query("update QSO set matchType = 'Removed' where id = ? limit 1;", [row[0]]) { }
-        @db.query("update QSOExtra set comment='Unknown callsign ID in record.' where id = ? limit 1;", [row[0]]) { }
+        @db.query("update QSO set matchType = 'Removed' where id = ?;", [row[0]]) { }
+        @db.query("update QSOExtra set comment='Unknown callsign ID in record.' where id = ? and comment is null;", [row[0]]) { }
       end
     }
   end
@@ -256,10 +256,10 @@ class ResolveSingletons
       qsos.shift  # remove the first element to prevent marking it as a dupe
       print "update QSO set matchType = 'Dupe', score=0 where id in (" +
                 qsos.map { |i| i[0] }.join(", ") +
-                ") limit #{qsos.length};\n"
+                ");\n"
       @db.query("update QSO set matchType = 'Dupe', score=0 where id in (" +
                 qsos.map { |i| i[0] }.join(", ") +
-                ") limit #{qsos.length};")
+                ");")
       ar = @db.affected_rows
       print "Rows affected: #{ar}\n"
       return ar
@@ -296,6 +296,12 @@ class ResolveSingletons
     return result
   end 
 
+  def fixTime(q)
+    if q.has_key?("time") and q["time"].kind_of?(String)
+      q["time"] = Time.parse(q["time"])
+    end
+  end
+
   def applyOverrides
     count = 0
     overrides = Overrides.new("overrides.yml")
@@ -305,24 +311,31 @@ class ResolveSingletons
 #      print call.to_s + " " + mults.to_s + "\n"
       if mults and not mults.empty?
         found=false
+        callID=nil
         @db.query("select id from Callsign where contestID = ? and basecall = ? limit 1;",
                   [ @contestID, call ] ) { |row|
           found=true
-          callID = row[0]
-          mults.each { |qth|
-            multID = @cdb.lookupMultiplier(qth)
-            if multID
-              begin
-#                print "Adding #{call} #{@contestID} #{multID[0]} #{callID}\n"
-                @db.query("insert into Checklog (contestID, multiplierID, callID) values (?, ?, ?);",
-                          [ @contestID, multID[0], callID ]) { }
-              rescue SQLite3::Exception => e
-                print "SQL error\n"
-              end
-            else
-              print "Can't find multiplier #{qth}\n"
+          callID=row[0].to_i
+        }
+        if not found
+          @db.query("insert into Callsign (contestID, basecall, validcall) values (?, ?, ?);",
+                    [ @contestID, call, @db.boolToDB(overrides.lookupValid(call)) ] ) { }
+          callID = @db.last_id
+          found  = true
+        end
+        mults.each { |qth|
+          multID = @cdb.lookupMultiplier(qth)
+          if multID
+            begin
+              #                print "Adding #{call} #{@contestID} #{multID[0]} #{callID}\n"
+              @db.query("insert into Checklog (contestID, multiplierID, callID) values (?, ?, ?);",
+                        [ @contestID, multID[0], callID ]) { }
+            rescue SQLite3::Exception => e
+              print "SQL error: #{e.message}\n"
             end
-          }
+          else
+            print "Can't find multiplier #{qth}\n"
+          end
         }
         if not found
           print "Can't find callsign #{call}\n"
@@ -332,9 +345,10 @@ class ResolveSingletons
       end
     }
     overrides.getSingletons.each  { |single|
+      fixTime(single)
       id = lookupLog(single["station"])
       if (single.has_key?("judged_multiplier"))
-        queryStr = "update QSO set matchType = ?, judged_multiplierID = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\" limit 1;"
+        queryStr = "update QSO set matchType = ?, judged_multiplierID = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\";"
         list =  [ single["match_type"],
                   @cdb.lookupMultiplier(single["judged_multiplier"])[0],
                   id,
@@ -342,7 +356,7 @@ class ResolveSingletons
                   single["serial"],
                   @cdb.lookupMultiplier(single["qth"])[0] ]
       else
-        queryStr = "update QSO set matchType = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\" limit 1;"
+        queryStr = "update QSO set matchType = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\";"
         list =  [ single["match_type"], id,
                   @db.formattime(single["time"]), single["frequency"],
                   single["serial"],

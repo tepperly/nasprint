@@ -6,6 +6,7 @@ require 'database'
 require 'dxmap'
 require 'bandmode'
 require 'contestdb'
+require 'fcc'
 require 'pdfreport'
 require 'callsign'
 require 'club'
@@ -21,6 +22,7 @@ require 'report'
 require 'errors'
 require 'dumplog'
 require 'json'
+require 'set'
 
 
 $year = nil
@@ -28,6 +30,8 @@ $name = nil
 $explain = false
 $totallydestroy = false
 $skipclock = true
+$fccdb = nil
+$canadadb = nil
 $recordsdb = nil
 $restart = false
 $create = false
@@ -43,6 +47,7 @@ opts = GetoptLong.new(
                       [ '--check', '-C', GetoptLong::NO_ARGUMENT],
                       [ '--check-dupe', '-c', GetoptLong::NO_ARGUMENT],
                       [ '--canada', '-v', GetoptLong::REQUIRED_ARGUMENT],
+                      [ '--fcc', '-f', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--category-check', '-A', GetoptLong::NO_ARGUMENT],
                       [ '--calc-clock-adj', '-x', GetoptLong::NO_ARGUMENT],
                       [ '--no-init', '-I', GetoptLong::NO_ARGUMENT],
@@ -63,7 +68,6 @@ opts = GetoptLong.new(
                       )
 
 cmddbopts = Hash.new
-canadacsv=nil
 opts.each { |opt, arg|
   case opt
   when '--new'
@@ -71,10 +75,11 @@ opts.each { |opt, arg|
   when '--calc-clock-adj'
     $skipclock = false
   when '--canada'
-    $action = :canada
-    canadacsv=arg
+    $canadadb = arg
   when '--no-init'
     $readinit = false
+  when '--fcc'
+    $fccdb = arg
   when '--qrzuser'
     $qrzuser = arg
   when '--verbose'
@@ -230,6 +235,19 @@ def checkCallsigns(db, cid, user, pwd)
     qrz = nil
   end
   xmldb = readXMLDb()
+  fcc = nil
+  if $fccdb
+    fcc = FCC.new($fccdb)
+  else
+    print "Running with *NO* FCC license file!\n"
+  end
+  if $canadadb
+    canada = loadCanadianLicenses($canadadb)
+    canada.freeze
+  else
+    print "Running with *NO* Canadian license file!\n"
+    canada = nil
+  end
   if File.readable?("valid1x1.json")
     validOneByOnes = Set.new(JSON.parse(File.read("valid1x1.json")))
     def validOneByOnes.useQRZ?
@@ -239,28 +257,82 @@ def checkCallsigns(db, cid, user, pwd)
     $stderr.write("Missing valid1x1.json\n")
     validOneByOnes = AllIncluded.new # says everything is valid
   end
-  db.query("select id, basecall from Callsign where contestID = ? and validcall is null;", [cid.to_i]) { |row|
+  locator = CallsignLocator.new
+  db.query("select id, basecall from Callsign where contestID = ? and validcall is null order by basecall asc;", [cid.to_i]) { |row|
     if row[1].length > 3 or validOneByOnes.useQRZ?
       if xmldb.has_key?(row[1]) 
-        db.query("update Callsign set validcall = ? where id = ? limit 1;",
+        db.query("update Callsign set validcall = ? where id = ?;",
                  [(xmldb[row[1]] ? 1 : 0), row[0].to_i])
-      elsif lookupCall(qrz, xmldb, row[1])
-        db.query("update Callsign set validcall = 1 where id = ? limit 1;",
-                 [row[0].to_i])
-      elsif isDXCall(row[1]) # QRZ is not a reliable authority for DX
-        db.query("update Callsign set validcall = 1 where id = ? limit 1;",
-                 [row[0].to_i])
       else
-        db.query("update Callsign set validcall = 0 where id = ? limit 1;",
-                 [row[0].to_i]);
-        print "Callsign #{row[1]} is unknown to QRZ.\n"
+        ent = locator.lookup(row[1])
+        if ent
+          if ent.fcc?
+            if fcc
+              if fcc.validHFLicense?(row[1])
+                lookupCall(qrz, xmldb, row[1])
+                db.query("update Callsign set validcall = 1 where id = ?;",
+                         [row[0].to_i])
+              else
+                print "US callsign is not valid: #{row[1]}\n"
+                db.query("update Callsign set validcall = #{db.false}, illegalcall=#{db.true} where id = ?;", [row[0].to_i])
+              end
+            else
+              # no FCC database available use QRZ
+              if lookupCall(qrz, xmldb, row[1])
+                db.query("update Callsign set validcall = 1 where id = ?;",
+                         [row[0].to_i])
+              else
+                print "US callsign is not known to QRZ: #{row[1]}\n"
+                db.query("update Callsign set validcall = 0 where id = ?;",
+                         [row[0].to_i])
+              end
+            end
+          elsif ent.canadian?
+            if canada
+              if canada.has_key?(row[1])
+                # known Canadian license from file
+                db.query("update Callsign set validcall = 1 where id = ?;",
+                         [row[0].to_i])
+              else
+                print "Canadian callsign #{row[1]} is not licensed\n"
+                db.query("update Callsign set validcall = 0, illegalcall=1 where id = ?;",
+                         [row[0].to_i])
+              end
+            else
+              if lookupCall(qrz, xmldb, row[1]) or ent.dx?
+                db.query("update Callsign set validcall = 1 where id = ?;",
+                         [row[0].to_i])
+              else
+                print "Callsign #{row[1]} is not known to QRZ\n"
+                db.query("update Callsign set validcall = 0 where id = ?;",
+                         [row[0].to_i])
+              end
+            end
+          else
+            if lookupCall(qrz, xmldb, row[1]) or ent.dx?
+              # QRZ is not a reliable authority for DX
+              db.query("update Callsign set validcall = 1 where id = ?;",
+                       [row[0].to_i])
+            end
+          end   
+        else
+          if lookupCall(qrz, xmldb, row[1])
+            # QRZ is not a reliable authority for DX
+            db.query("update Callsign set validcall = 1 where id = ?;",
+                     [row[0].to_i])
+          else
+            print "Callsign #{row[1]} is unknown to QRZ and entity can't be determined.\n"
+            db.query("update Callsign set validcall = #{db.false}, illegalcall=#{db.true} where id = ?;",
+                     [row[0].to_i])
+          end
+        end
       end
     else
       if validOneByOnes.include?(row[1])
-        db.query("update Callsign set validcall = 1 where id = ? limit 1;",
+        db.query("update Callsign set validcall = 1 where id = ?;",
                  [row[0].to_i]);
       else
-        db.query("update Callsign set validcall = 0 where id = ? limit 1;",
+        db.query("update Callsign set validcall = 0 where id = ?;",
                  [row[0].to_i]);
       end
     end
@@ -268,7 +340,7 @@ def checkCallsigns(db, cid, user, pwd)
   if File.readable?("illegalcalls.json")
     list = JSON.parse(File.read("illegalcalls.json"))
     list.each { |callsign|
-      db.query("update Callsign set validcall = 0, illegalcall = 1 where basecall= ? limit 1;",
+      db.query("update Callsign set validcall = 0, illegalcall = 1 where basecall= ?;",
                [ callsign ])
     }
   else
@@ -300,7 +372,8 @@ end
 
 def report58(db, contestID, contestDB)
   r =Report.new(db, contestID)
-  r.firstTo58($stdout, contestID)
+  r.full58List($stdout, contestID)
+#  r.firstTo58($stdout, contestID)
 end
 
 def hdrl(str)
@@ -327,10 +400,15 @@ def powAbbrev(power, long)
   ""
 end
 
-def extras(isCCE, isYL, isMOBILE)
+def extras(isCCE, isOneDay, isCountyLine, isYL, isMOBILE)
   result = ""
-  if isCCE
+  if isOneDay
+    result += " 1E"
+  elsif isCCE
     result += " E"
+  end
+  if isCountyLine
+    result += " CL"
   end
   if isYL
     result += " YL"
@@ -341,17 +419,17 @@ def extras(isCCE, isYL, isMOBILE)
   result
 end
 
-def abbrevType(opclass, power, isCCE=nil, isYL=nil, isMOBILE=nil)
+def abbrevType(opclass, power, isCCE=nil, isOneDay=nil, isCountyLine=nil, isYL=nil, isMOBILE=nil)
   result = ""
   case opclass
   when 'SINGLE'
-    result = "SO" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
+    result = "SO" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isOneDay, isCountyLine, isYL, isMOBILE)
   when 'SINGLE_ASSISTED'
-    result = "SOA" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
+    result = "SOA" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isOneDay, isCountyLine, isYL, isMOBILE)
   when 'MULTI_SINGLE'
-    result = 'M/S' + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
+    result = 'M/S' + powAbbrev(power,isCCE.nil?) + extras(isCCE, isOneDay, isCountyLine, isYL, isMOBILE)
   when 'MULTI_MULTI'
-    result = 'M/M' + powAbbrev(power,isCCE.nil?) + extras(isCCE, isYL, isMOBILE)
+    result = 'M/M' + powAbbrev(power,isCCE.nil?) + extras(isCCE, isOneDay, isCountyLine, isYL, isMOBILE)
   when 'CHECKLOG'
     result = 'C'
   end
@@ -398,6 +476,22 @@ def markAsRecord(regionName, row, opclass, powclass)
   end
 end
 
+def addDXExtras(db, groups, contestID)
+  if groups.length >= 1
+    curGroup = groups[0]
+  else
+    curGroup = Group.new([hdrl(curName),hdr("CW"),hdr("PH"), hdr("Total"), hdr("Mult"), hdr("Score"), hdr("Type")],
+                         [0, 250, 290, 330, 370, 410, 470],
+                         [250, 40, 40, 40, 40, 60, 70])
+    groups << curGroup
+  end
+  db.query("select distinct c.basecall from Checklog as chk, Callsign as c on chk.callID = c.id, Multiplier as m on m.id = chk.multiplierID where chk.contestID = ? and c.contestID = ? and m.abbrev = 'DX' order by c.basecall asc;",
+           [ contestID, contestID]) { |row|
+    curGroup.rows << [ row[0], checkFill,checkFill,checkFill,checkFill,checkFill,
+                       abbrevType("CHECKLOG", "HIGH") ]
+  }
+end
+
 def addExtraChecklogs(db, curGroup, curName, contestID)
   db.query("select distinct c.basecall from Checklog as chk, Callsign as c on chk.callID = c.id, Multiplier as m on m.id = chk.multiplierID where chk.contestID = ? and c.contestID = ? and m.fullname = ? order by c.basecall asc;",
            [ contestID, contestID, curName ]) { |row|
@@ -411,7 +505,7 @@ def makeGroups(db, contestID, extraCon, recdb)
   groups = [ ]
   curName = nil
   curGroup = nil
-  db.query("select m.fullname, l.callsign, l.opclass, l.powclass, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.isCCE, l.isYL, l.isMOBILE, l.id, m.abbrev from Multiplier as m left outer join (Log as l join Scores as s on l.id = s.logID and  l.contestID = ?) on s.multID = m.id where #{extraCon} order by m.fullname asc, CASE l.opclass WHEN 'SINGLE' THEN 0 WHEN 'SINGLE_ASSISTED' THEN 0 WHEN 'MULTI_SINGLE' THEN 1 WHEN 'MULTI_MULTI' THEN 2  WHEN 'CHECKLOG' THEN 10 END asc, s.verified_score desc, l.callsign asc;", [contestID]) { |row|
+  db.query("select m.fullname, l.callsign, l.opclass, l.powclass, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.isCCE, l.isYL, l.isMOBILE, l.id, m.abbrev, l.isONEDAY, l.isCOUNTYLINE from Multiplier as m left outer join (Log as l join Scores as s on l.id = s.logID and  l.contestID = ?) on s.multID = m.id where #{extraCon} order by m.fullname asc, CASE l.opclass WHEN 'SINGLE' THEN 0 WHEN 'SINGLE_ASSISTED' THEN 0 WHEN 'MULTI_SINGLE' THEN 1 WHEN 'MULTI_MULTI' THEN 2  WHEN 'CHECKLOG' THEN 10 END asc, s.verified_score desc, l.callsign asc;", [contestID]) { |row|
     if row[0] != curName or row[0].nil?
       if curGroup and curName
         addExtraChecklogs(db, curGroup, curName, contestID)
@@ -426,7 +520,9 @@ def makeGroups(db, contestID, extraCon, recdb)
       callsign = lookupOperatorList(db, row[1], row[11])
       if row[2] != "CHECKLOG"
         curGroup.rows << [ callsign, n(row[4]), n(row[5]), n(row[4].to_i+row[5].to_i),
-          n(row[6]), n(row[7]), abbrevType(row[2], row[3], db.toBool(row[8]),db.toBool(row[9]),
+                           n(row[6]), n(row[7]), abbrevType(row[2], row[3], db.toBool(row[8]),
+                                                            db.toBool(row[13]), db.toBool(row[14]),
+                                                            db.toBool(row[9]),
                                            db.toBool(row[10]) )]
         rec = lookupRecord(recdb, row[12], row[2], row[3])
         if rec and (row[7] > rec)
@@ -436,7 +532,8 @@ def makeGroups(db, contestID, extraCon, recdb)
         end
       else
         curGroup.rows << [ callsign,checkFill,checkFill,checkFill,checkFill,checkFill,
-          abbrevType(row[2], row[3], db.toBool(row[8]),db.toBool(row[9]), db.toBool(row[10]) )]
+                           abbrevType(row[2], row[3], db.toBool(row[8]),db.toBool(row[13]), db.toBool(row[14]),
+                                      db.toBool(row[9]), db.toBool(row[10]) )]
       end
     else
       curGroup.rows << "No logs submitted for scoring"
@@ -575,6 +672,7 @@ def makePDFReports(db, contestID, recdb)
   pr.printGroups(g)
   pr.render("test_VE.pdf")
   g = makeGroups(db, contestID, "m.abbrev = 'DX'", recdb)
+  addDXExtras(db, g, contestID)
   if g and not g.empty?
     pr = ReportPDF.new($year.to_s + " California QSO Party\nDX Results")
     g = repackageGroups(g)        # Sub divide DX by region
@@ -599,6 +697,12 @@ def quoteStrings(line)
   line.map { |item|
     (item.kind_of?(String) and not item.empty?) ? ('"' + item + '"') : item
   }
+end
+
+US_ENTITIES = %w{ Hawaii Alaska }.to_set.freeze
+
+def adjustEntityName(name)
+  US_ENTITIES.include?(name) ? "United States of America" : name
 end
 
 def certificateCSV(db, contestID, contestDB)
@@ -627,7 +731,7 @@ def certificateCSV(db, contestID, contestDB)
         line[11] = "DX Country"
         line[12] = "COUNTRY"
       end
-      line[13] = row[12]
+      line[13] = adjustEntityName(row[12])
       ops = [ ]
       db.query("select callsign from Operator where logID = ? and callsign != 'XX9XXX' order by id asc;", [row[0].to_i]) { |oprow|
         ops << oprow[0]
@@ -689,14 +793,31 @@ def reportContest(db, contestID, contestDB)
   print "All Done Reporting\n"
 end
 
+def loadCanadianLicenses(filename)
+  callsigns=Hash.new
+  CSV.foreach(filename, :headers => true, :col_sep => ";", :encoding => "ISO8859-1", :quote_char => nil) { |row|
+    callsigns[row[0]] = true
+  }
+  callsigns
+end
+
 def validateCanadianCallsigns(db, contestID, contestDB, canadacsv)
   callsigns=Hash.new
   CSV.foreach(canadacsv, :headers => true, :col_sep => ";", :encoding => "ISO8859-1", :quote_char => nil) { |row|
     callsigns[row[0]] = true
   }
+  loc = CallsignLocator.new
   db.query("select id, basecall from Callsign where contestID = ?;", [ contestID ] ) { |row|
     if (callsigns.has_key?(row[1]))
-      db.query("update Callsign set validcall = #{db.true} where id = ? limit 1;", [ row[0] ]) { }
+      db.query("update Callsign set validcall = #{db.true} where id = ?;", [ row[0] ]) { }
+    else
+      ent = loc.lookup(row[1])
+      if ent
+        if ent.canadian?
+          print "Candian callsign #{row[1]} is invalid\n"
+          db.query("update Callsign set validcall = #{db.false} where id = ?;", [ row[0] ]) { }
+        end
+      end
     end
   }
 end
@@ -724,6 +845,9 @@ def scoreContest(db, contestID, contestDB)
   print "Perfect matches (with a band or mode mismatch): #{num1} (dupes #{dupeCount})\n"
   num1 = cm.oneNearCallsign
   print "Perfect matches with one near callsign: #{num1} full #{num1} partial\n"
+  $stdout.flush
+  clcount = cm.avoidCountylineLoggingNils([ ].to_set, false)
+  print "Avoid county-line NILs for incomplete logging: #{clcount}\n"
   $stdout.flush
   num3, partial, dupeCount  = cm.partialMatch
   print "Full matches partial: #{num3}\n"
@@ -766,7 +890,7 @@ def scoreContest(db, contestID, contestDB)
     ct.buildMatrix              # second time it knows the bad clocks
     open("clock_report2.csv", "w:ascii") { |outfile|
       ct.report(outfile)
-    }
+1    }
     ct.reportByLog
   end
   timeviolation = ct.markOutOfContest
@@ -779,6 +903,8 @@ def scoreContest(db, contestID, contestDB)
   $stdout.flush
   d1 = cm.ignoreDups
   print "Duplicates of matches: #{d1}\n"
+  clcount = cm.avoidCountylineLoggingNils(badClocks, false)
+  print "Avoid county-line NILs for incomplete logging: #{clcount}\n"
   nil1 = cm.markNIL
   print "Not In Log penalties: #{nil1}\n"
   $stdout.flush
@@ -814,7 +940,7 @@ def scoreContest(db, contestID, contestDB)
 end
 
 begin
-  if $name and $year and [:load, :score, :checkdupes, :rare, :report, :fifty_eight, :canada ].include?($action)
+  if $name and $year and [:load, :score, :checkdupes, :rare, :report, :fifty_eight ].include?($action)
     db = makeDB(dbopts)
     cdb = ContestDatabase.new(db, ctl)
     contestID = cdb.addOrLookupContest($name, $year, $create)
@@ -845,8 +971,6 @@ begin
     report58(db, contestID, cdb)
   when :rare
     rareReport(db, contestID, cdb)
-  when :canada
-    validateCanadianCallsigns(db, contestID, cdb, canadacsv)
   when :checkdupes
     if cdb and contestID
       cdb.checkDupeLogs(contestID)

@@ -167,7 +167,7 @@ class Multiplier
 
     @db.query("select distinct l.id, c.basecall, l.callsign, m.entityID from Log as l join Callsign as c on l.callID = c.id left join Multiplier as m on m.id = l.multiplierID where l.entityID is null;") { |row|
       if row[3]
-        @db.query("update Log set entityID = ? where id = ? limit 1;",
+        @db.query("update Log set entityID = ? where id = ?;",
                   [row[3].to_i, row[0].to_i]) { }
       else                      # multiplier entity is NULL
         entity = over.lookupEntity(row[1])
@@ -180,7 +180,7 @@ class Multiplier
           entity = lookupEntity(@callDB[row[2]])
         end
         if entity
-          @db.query("update Log set entityID = ? where id = ? limit 1;",
+          @db.query("update Log set entityID = ? where id = ?;",
                     [entity.to_i, row[0].to_i]) { }
         end
       end
@@ -358,7 +358,7 @@ class Multiplier
   def transferJudged
     count = 0
     @db.query("select q1.id, q2.sent_multiplierID from QSO as q1 join QSO as q2 on q2.id = q1.matchID where #{@logs.membertest("q1.logID")} and q1.matchID is not null and q1.judged_multiplierID is null and q2.sent_multiplierID is not null;") { |row|
-      @db.query("update QSO set judged_multiplierID = ? where id = ? limit 1;",
+      @db.query("update QSO set judged_multiplierID = ? where id = ?;",
                 [ row[1], row[0] ]) { }
       count += @db.affected_rows
     }

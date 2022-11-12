@@ -10,7 +10,7 @@ class Overrides
       @yml = @@override_files[filename]
     else
       if File.exists?(filename)
-        @yml = YAML.load_file(filename)
+        @yml = YAML.safe_load_file(filename, permitted_classes: [Time])
         @yml.freeze
       else
         @yml = { }
@@ -18,6 +18,22 @@ class Overrides
       end
       @@override_files[filename] = @yml
     end
+  end
+
+  def stationsWithBadClocks
+    result = Array.new
+    if @yml.has_key?("unreliable")
+      if @yml["unreliable"].has_key?("clock") and @yml["unreliable"]["clock"].respond_to?(:each)
+        @yml["unreliable"]["clock"].each { |call|
+          if call.kind_of?(String)
+            result << call
+          else
+            print "Unexpected entry in back_clocks: #{call}\n"
+          end
+        }
+      end
+    end
+    result
   end
 
   def participants
@@ -55,6 +71,17 @@ class Overrides
     end
     nil
   end
+
+  def lookupValid(callsign)
+    if @yml.has_key?("callsigns")
+      callOverrides=@yml["callsigns"]
+      if callOverrides.has_key?(callsign) and callOverrides[callsign].has_key?("valid")
+        return callOverrides[callsign]["valid"]
+      end
+    end
+    true
+  end
+      
 
   def getSingletons
     if @yml.has_key?("singletons")

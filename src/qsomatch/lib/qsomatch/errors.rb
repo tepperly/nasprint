@@ -74,19 +74,19 @@ def fillInComment(db, contestID)
       print "Looks like a full match was missed #{row[0]} #{row[4]} #{row[12]}\n"
       showMatch(db, row[0], row[4], row[17], row[12])
     else
-      db.query("update QSOExtra set comment=? where id = ? limit 1;",
+      db.query("update QSOExtra set comment=? where id = ? and comment is null;",
                [comments.join(", "), row[0]]) { }
     end
   }
   db.query("select id, judged_multiplierID, recvd_multiplierID from QSO where matchType in ('PartialBye', 'Bye') and score = 0;") { |row|
     if (row[1] != row[2])
-      db.query("update QSOExtra set comment = 'neither station is CA (judged QTH #{multName(db, row[1])})' where id = ? and comment is null limit 1;", [ row[0] ]) { }
+      db.query("update QSOExtra set comment = 'neither station is CA (judged QTH #{multName(db, row[1])})' where id = ? and comment is null;", [ row[0] ]) { }
     else
-      db.query("update QSOExtra set comment = 'neither station is CA' where id = ? and comment is null limit 1;", [ row[0] ]) { }
+      db.query("update QSOExtra set comment = 'neither station is CA' where id = ? and comment is null;", [ row[0] ]) { }
     end
   }
   db.query("select q.id, e.name, e.continent from QSO as q join Multiplier as m on (q.recvd_multiplierID = m.id and m.abbrev = 'DX') join Entity as e on e.id = q.recvd_entityID where q.matchType in ('Full', 'Bye');") { |row|
-    db.query("update QSOExtra set comment = ('DX=' + ? + ' (' + ? + ')') where id = ? limit 1;",
+    db.query("update QSOExtra set comment = ('DX=' + ? + ' (' + ? + ')') where id = ? and comment is null;",
              [row[1].to_s, row[2].to_s, row[0].to_i]) { }
   }
 end
