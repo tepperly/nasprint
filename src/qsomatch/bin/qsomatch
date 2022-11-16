@@ -599,7 +599,7 @@ ABBREV_TO_CONTINENT = {
   "AS" => "Asia",
   "EU" => "Europe",
   "AF" => "Africa",
-  "OC" => "Oceana"
+  "OC" => "Oceania"
 }
 ABBREV_TO_CONTINENT.freeze
 

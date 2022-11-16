@@ -54,7 +54,7 @@ class ResolveSingletons
       ent = loc.lookup(row[1])
       if ent then
         if ("OC" == ent.continent or OTHERCONTEST_ENTITIES.include?(ent.entityID))  and not c.illegal
-          c.otherContest = true   # might be participant in Oceana DX
+          c.otherContest = true   # might be participant in Oceania DX
         end
         c.isDX = ent.dx?
       end

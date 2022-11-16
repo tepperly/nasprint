@@ -669,25 +669,27 @@ class CrossMatch
   def avoidCountylineLoggingNils(unreliableClock, quiet=true)
     count = 0
     unreliableBand, unreliableMode, unreliableSerial = findUnreliable
-    @db.query("select q1.id, q1.matchType, q1.matchID, q2.id, q2.sent_multiplierID from QSO as q1, QSO as q2 where q1.logID = q2.logID and q1.id != q2.id and q1.frequency = q2.frequency and q1.band = q2.band and q1.fixedMode = q2.fixedMode and q1.time = q2.time and q1.sent_serial = q2.sent_serial and q1.sent_callID = q2.sent_callID and q1.sent_multiplierID != q2.sent_multiplierID and q1.matchID is not null and q2.matchID is null and q2.matchType = 'None' and q1.matchType in ('Full', 'Partial') and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc, q2.id asc;") { |row|
+    @db.query("select q1.id, q1.matchType, q1.matchID, q2.id from QSO as q1, QSO as q2 where q1.logID = q2.logID and q1.id != q2.id and q1.frequency = q2.frequency and q1.band = q2.band and q1.fixedMode = q2.fixedMode and q1.time = q2.time and q1.sent_serial = q2.sent_serial and q1.sent_callID = q2.sent_callID and q1.sent_multiplierID != q2.sent_multiplierID and q1.matchID is not null and q2.matchID is null and q2.matchType = 'None' and q1.matchType in ('Full', 'Partial') and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc, q2.id asc;") { |row|
       if not quiet
         @cdb.printQSO($stdout, row[0].to_i)
         print "\tID: #{row[0]}\n"
         print "\tMatch type: #{row[1]}\n"
         print "\tOther QSO: #{row[3]}\n"
       end
-      if (row[1] == "Full")
-        @db.query("update QSO set matchType = 'Bye' where id = ?;", row[3]) { }
-        count += 1
-      else
-        if halfCredit(row[0], row[2], unreliableBand, unreliableMode, unreliableSerial, unreliableClock)
-          @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=? where id = ?;", row[4].to_i, row[3]) { }
+      @db.query("select sent_multiplierID from QSO where id = ?", row[2]) { |qth_row|
+        if (row[1] == "Full")
+          @db.query("update QSO set matchType = 'Bye', judged_multiplierID=? where id = ?;", [qth_row[0].to_i, row[3].to_i ]) { }
           count += 1
         else
-          @db.query("update QSO set matchType = 'NIL' where id = ?;", row[3]) { }
-          @db.query("update QSOExtra set comment = 'Related county-line QSO is a D2' where id = ? and comment is null;", row[3]) { }
+          if halfCredit(row[0], row[2], unreliableBand, unreliableMode, unreliableSerial, unreliableClock)
+            @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=? where id = ?;", [qth_row[0].to_i, row[3].to_i] ) { }
+            count += 1
+          else
+            @db.query("update QSO set matchType = 'NIL', judged_multiplierID=? where id = ?;", [qth_row[0].to_i, row[3].to_i]) { }
+            @db.query("update QSOExtra set comment = 'Related county-line QSO is a D2' where id = ? and comment is null;", row[3]) { }
+          end
         end
-      end
+      }
     }
     count
   end
