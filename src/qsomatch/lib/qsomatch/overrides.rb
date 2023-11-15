@@ -9,7 +9,7 @@ class Overrides
     if @@override_files.has_key?(filename)
       @yml = @@override_files[filename]
     else
-      if File.exists?(filename)
+      if File.exist?(filename)
         @yml = YAML.safe_load_file(filename, permitted_classes: [Time])
         @yml.freeze
       else

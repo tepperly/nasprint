@@ -33,10 +33,13 @@ $skipclock = true
 $fccdb = nil
 $canadadb = nil
 $recordsdb = nil
+$translateCA=false
 $restart = false
 $create = false
 $readinit = true
 $action = nil
+$catcheck = false
+$cabcheck = false
 $qrzuser = nil
 $qrzpwd = nil
 $verbose = nil
@@ -50,6 +53,7 @@ opts = GetoptLong.new(
                       [ '--fcc', '-f', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--category-check', '-A', GetoptLong::NO_ARGUMENT],
                       [ '--calc-clock-adj', '-x', GetoptLong::NO_ARGUMENT],
+                      [ '--translate-ca','-W', GetoptLong::NO_ARGUMENT],
                       [ '--no-init', '-I', GetoptLong::NO_ARGUMENT],
                       [ '--qrzuser', '-u', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--exceptions', '-X', GetoptLong::REQUIRED_ARGUMENT],
@@ -80,6 +84,8 @@ opts.each { |opt, arg|
     $readinit = false
   when '--fcc'
     $fccdb = arg
+  when '--translate-ca'
+    $translateCA = true
   when '--qrzuser'
     $qrzuser = arg
   when '--verbose'
@@ -92,13 +98,19 @@ opts.each { |opt, arg|
   when '--report'
     $action = :report
   when '--category-check'
-    $action = :catcheck
+    if not $action
+      $action = :catcheck
+    end
+    $catcheck = true
   when '--fifty-eight'
     $action = :fifty_eight
   when '--rare'
     $action = :rare
   when '--check'
-    $action = :check
+    if not $action
+      $action = :check
+    end
+    $cabcheck = true
   when '--check-dupe'
     $action = :checkdupes
   when '--load'
@@ -134,7 +146,7 @@ def loadFiles(args, cdb, contestID, ctl, db)
       db.begin_transaction
     end
     catout = nil
-    if $action == :catcheck
+    if $catcheck
       catout = open("category_check.csv", "w:ascii")
       catout.write('"Callsign","Cab Power","Cab Class","Web Power","Web Class","Power","Class"' + "\n")
     end
@@ -144,7 +156,7 @@ def loadFiles(args, cdb, contestID, ctl, db)
         if cab and cdb
           addLog(cdb, contestID, cab, ctl)
         end
-        if $action == :check
+        if $cabcheck
           if cab
             if not cab.cleanparse
               $stderr.flush
@@ -177,7 +189,8 @@ def loadFiles(args, cdb, contestID, ctl, db)
             print "#{filename} failed to parse at all.\n"
             $stdout.flush
           end
-        elsif $action == :catcheck
+        end
+        if $catcheck
           if cab.conflicted?
             catout.write( '"' + cab.logCall + '","' +
               ((not cab.logCat.power.nil?) ? cab.logCat.power.to_s.upcase :
@@ -185,7 +198,8 @@ def loadFiles(args, cdb, contestID, ctl, db)
               ((not cab.logCat.numop.nil?) ? cab.classFromCat(cab.logCat) :
                cab.classFromCat(cab.dbCat)) + '","' +
               cab.logPower + '","' + cab.cqpOpClass + '","' +
-              cab.logPower + '","' + cab.cqpOpClass + "\"\n")
+                          cab.logPower + '","' + cab.cqpOpClass + "\",\"" +
+                          cab.logEmail.to_s + "\"\n")
           end
         end
       rescue ArgumentError => e
@@ -763,7 +777,7 @@ def reportContest(db, contestID, contestDB)
   end
   makePDFReports(db, contestID, recdb)
   print "Dumping logs\n"
-  dumpLogs(db, contestID)
+  dumpLogs(db, contestID, $translateCA)
   print "Making spreadsheets\n"
   s = Spreadsheet.new(db, contestID)
   s.plaqueAwards(recdb)
@@ -903,38 +917,48 @@ def scoreContest(db, contestID, contestDB)
   $stdout.flush
   d1 = cm.ignoreDups
   print "Duplicates of matches: #{d1}\n"
+  $stdout.flush
   clcount = cm.avoidCountylineLoggingNils(badClocks, false)
   print "Avoid county-line NILs for incomplete logging: #{clcount}\n"
+  $stdout.flush
   nil1 = cm.markNIL
   print "Not In Log penalties: #{nil1}\n"
   $stdout.flush
   m = Multiplier.new(db, contestID, contestDB)
   print "Finding stations that are likely participants without logs\n"
+  $stdout.flush
   numParticipants = singles.findParticipants(m)
   print "Designated #{numParticipants} as participants from singleton QSOs\n"
   print "Resolving singletons\n"
   $stdout.flush
   singles.resolve
   print "Checking that every QSO has an appropriate sent multiplier\n"
+  $stdout.flush
   count = m.checkSentMultIDs
   print "#{count} QSOs updated\n"
   print "Matched QSOs get the judged multipier of the sender\n"
+  $stdout.flush
   transferred = m.transferJudged
   print "#{transferred} multipliers assigned\n"
   print "Resolving DX\n"
+  $stdout.flush
   m.resolveDX
   print "Resolving bye multipliers\n"
+  $stdout.flush
   m.checkByeMultipliers
   m.savePrevious("callmults.json")
   print "Resolving band/mode mismatches\n"
+  $stdout.flush
   bmm = BandModeMismatch.new(db, contestID, contestDB)
   bmm.resolve
   print "Assigning initial scores to QSO(s)\n"
+  $stdout.flush
   cm.initialScore(badClocks)
   print "Final dupe check\n"
   num = singles.finalDupeCheck
   print "#{num} Dupe QSOs identified during final check\n."
   print "Filling in comments\n"
+  $stdout.flush
   fillInComment(db, contestID)
   print "All Done Scoring\n"
 end
@@ -987,7 +1011,7 @@ rescue
   $stderr.print $!.backtrace.join("\n")
 ensure
   if db 
-    db.close
+#    db.close
   end
 end
 

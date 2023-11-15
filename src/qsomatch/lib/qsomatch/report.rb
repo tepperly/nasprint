@@ -97,14 +97,14 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
   end
 
   def nummultipliers=(val)
-    @multoverride = val
+    @multoverride = [58, val].min
   end
   
   def nummultipliers
     if @multoverride
       return @multoverride
     end
-    @multipliers.size
+    [58, @multipliers.size].min
   end
 
   def score=(val)
@@ -121,11 +121,11 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
   def ls_line
     print "!! #{@call}: numPH != claimedPH - 0.5*d1PH - d2PH : #{numPH} != #{@greenPH[0]} - 0.5*#{@greenPH[2]} - #{@greenPH[1]}\n" if numPH != (@greenPH[0] - @greenPH[1] -0.5* @greenPH[2]).to_i
     print "!! #{@call}: numCW != claimedCW - 0.5*d1CW - d2CW : #{numCW} != #{@greenCW[0]} - 0.5*#{@greenCW[2]} - #{@greenCW[1]}\n" if numCW != (@greenCW[0] - @greenCW[1] - 0.5*@greenCW[2]).to_i
-    "LS,#{@call},,#{@numClaimed},#{@numDupe},#{@claimedMults},#{@greenCW[0]},#{@greenPH[0]},#{(@greenCW[0]*3+2*@greenPH[0])*@claimedMults},#{@greenChecked},#{@greenCW[1]},#{@greenCW[2]},#{@greenPH[1]},#{@greenPH[2]},#{@multipliers.length},#{score},#{@qth},#{greenArea},#{@entity}"
+    "LS,#{@call},,#{@numClaimed},#{@numDupe},#{@claimedMults},#{@greenCW[0]},#{@greenPH[0]},#{(@greenCW[0]*3+2*@greenPH[0])*@claimedMults},#{@greenChecked},#{@greenCW[1]},#{@greenCW[2]},#{@greenPH[1]},#{@greenPH[2]},#{[58,@multipliers.length].min},#{score},#{@qth},#{greenArea},#{@entity}"
   end
 
   def to_s
-    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isCOUNTYLINE}\",\"#{@isMOBILE}\",\"#{@isONEDAY}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{@multipliers.size},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isCOUNTYLINE}\",\"#{@isMOBILE}\",\"#{@isONEDAY}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{[58,@multipliers.size].min},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -236,7 +236,7 @@ class Report
     if @db.toBool(isCA)
       # for CA stations any CA county counts as a CA multiplier
       @db.query("select m.id from Multiplier as m join (Log as l join QSO as q on l.id = q.logID) on q.#{claimed ? "recvd_multiplierID" : "judged_multiplierID" } = m.id where l.id = ? and q.matchType in (#{matchType.map { |x| "'" + x + "'"}.join(", ")}) and q.sent_multiplierID = ? and q.score >= 1 and m.ismultiplier and m.isCA limit 1;", [ id, multID ]) { |row|
-        if claimed
+       if claimed
           claimed << "CA"
         else
           log.addMultiplier("CA")

@@ -164,6 +164,7 @@
 "CONT","CCOS",291
 "CONTRA COSTA","CCOS",291
 "CONTRA","CCOS",291
+"CONTRACOSTA","CCOS",291
 "COSTA","CCOS",291
 "CP","DX",104
 "CROATIA","DX",497
@@ -271,6 +272,7 @@
 "GEORGI","GA",291
 "GEORGIA","GA",291
 "GERMANY","DX",230
+"GH","ON",1
 "GI","DX",265
 "GJ","DX",122
 "GL","GLEN",291
@@ -414,6 +416,7 @@
 "LOS","LANG",291
 "LOSA","LANG",291
 "LOSANG","LANG",291
+"LOSANGELES","LANG",291
 "LOSANGLES","LANG",291
 "LOUI","LA",291
 "LOUISI","LA",291
@@ -432,13 +435,11 @@
 "MAN","MB",1
 "MANA","MB",1
 "MANATO","MB",1
-"MAR","MR",1
 "MARI","MARN",291
 "MARIN","MARN",291
 "MARIP","MARP",291
 "MARIPO","MARP",291
 "MARIPOSA","MARP",291
-"MARITIME","MR",1
 "MARN","MARN",291,"Marin"
 "MARP","MARP",291,"Mariposa"
 "MARPOSA","MARP",291
@@ -447,6 +448,7 @@
 "MAS","MA",291
 "MASS","MA",291
 "MASSAC","MA",291
+"MASSACHUSETTS","MA",291
 "MATEO","SMAT",291
 "MB","MB",1,"Manitoba"
 "MD","MD",291,"Maryland"
@@ -486,7 +488,6 @@
 "MONTEREY","MONT",291
 "MONTERREY","MONT",291
 "MOT","MONT",291
-"MR","MR",1,"Maritimes (NB, NL, NS, PEI)"
 "MRN","MARN",291
 "MRP","MARP",291
 "MS","MS",291,"Mississippi"
@@ -497,7 +498,7 @@
 "NAMIBIA","DX",464
 "NAP","NAPA",291
 "NAPA","NAPA",291,"Napa"
-"NB","MR",1
+"NB","NB",1,"New Brunswick"
 "NC","NC",291,"North Carolina"
 "NCAR","NC",291
 "NCAROL","NC",291
@@ -521,7 +522,7 @@
 "NJ","NJ",291,"New Jersey"
 "NJER","NJ",291
 "NJERS","NJ",291
-"NL","MR",1
+"NL","NL",1,"Newfoundland"
 "NLI","NY",291
 "NM","NM",291,"New Mexico"
 "NMEX","NM",291
@@ -532,10 +533,10 @@
 "NORTHERN","DX",265
 "NORWAY","DX",266
 "NP2","DX",285
-"NS","MR",1
-"NT","NT",1,"Northern Territories"
+"NS","NS",1,"Nova Scotia"
+"NT","NT",1,"Northwest Territories"
 "NTX","TX",291
-"NU","NT",1
+"NU","NU",1,"Nunavut"
 "NV","NV",291,"Nevada"
 "NWT","NT",1
 "NY","NY",291,"New York"
@@ -551,6 +552,7 @@
 "OK","OK",291,"Oklahoma"
 "OKLA","OK",291
 "OKLAHO","OK",291
+"OKLAHOMA","OK",291
 "OM","DX",504
 "ON","ON",1,"Ontario"
 "ONE","ON",1
@@ -577,8 +579,8 @@
 "P5","DX",344
 "PA","PA",291,"Pennsylvania"
 "PANAMA","DX",88
-"PE","MR",1
-"PEI","MR",1
+"PE","PE",1,"Prince Edward Island"
+"PEI","PE",1
 "PEN","PA",291
 "PENN","PA",291
 "PENNSY","PA",291
@@ -767,6 +769,7 @@
 "TEN","TN",291
 "TENN","TN",291
 "TENNES","TN",291
+"TENNESSEE","TN",291
 "TEX","TX",291
 "TEXAS","TX",291
 "TF","DX",242
@@ -819,15 +822,15 @@
 "V7","DX",168
 "V8","DX",345
 "VA","VA",291,"Virginia"
-"VA1","MR",1
+"VA1","NS",1
 "VA2","QC",1
 "VA3","ON",1
 "VA4","MB",1
 "VA5","SK",1
 "VA6","AB",1
 "VA7","BC",1
-"VE0","MR",1
-"VE1","MR",1
+"VE0","DX",1
+"VE1","NS",1
 "VE2","QC",1
 "VE3","ON",1
 "VE4","MB",1
@@ -835,7 +838,7 @@
 "VE6","AB",1
 "VE7","BC",1
 "VE8","NT",1
-"VE9","MR",1
+"VE9","NB",1
 "VEN","VENT",291
 "VENT","VENT",291,"Ventura"
 "VENTUR","VENT",291
@@ -855,9 +858,8 @@
 "VK9N","DX",189
 "VK9W","DX",303
 "VK9X","DX",35
-"VO1","MR",1
-"VO2","MR",1
-"VO9","MR",1
+"VO1","NL",1
+"VO2","NL",1
 "VP2E","DX",12
 "VP2M","DX",96
 "VP2V","DX",65
@@ -870,12 +872,15 @@
 "VU","DX",324
 "VU4","DX",11
 "VU7","DX",142
-"VY1","NT",1
+"VY0","NU",1
+"VY1","YT",1
+"VY2","PE",1
 "WA","WA",291,"Washington"
 "WALES","DX",294
 "WAS","WA",291
 "WASH","WA",291
 "WASHIN","WA",291
+"WASHINGTON","WA",291
 "WCF","FL",291
 "WEST","WV",291
 "WI","WI",291,"Wisconsin"
@@ -905,21 +910,20 @@
 "YB","DX",327
 "YI","DX",333
 "YJ","DX",158
-"YK","DX",384
+"YK","YT",384
 "YL","DX",145
 "YN","DX",86
-"YNWT","NT",1
 "YO","DX",275
 "YOL","YOLO",291
 "YOLO","YOLO",291,"Yolo"
 "YOR","NY",291
 "YORK","NY",291
 "YS","DX",74
-"YT","NT",1
+"YT","YT",1,"Yukon Territory"
 "YUB","YUBA",291
 "YUBA","YUBA",291,"Yuba"
-"YUK","NT",1
-"YUKON","NT",1
+"YUK","YT",1
+"YUKON","YT",1
 "YV","DX",148
 "YV0","DX",17
 "Z2","DX",452

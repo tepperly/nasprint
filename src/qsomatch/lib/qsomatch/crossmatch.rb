@@ -386,7 +386,7 @@ class CrossMatch
   def overrideMatches
     matchCount = 0
     dupeCount = 0
-    if File.exists?("overrides.yml")
+    if File.exist?("overrides.yml")
       yml = YAML.safe_load_file("overrides.yml", permitted_classes: [Time])
       if yml.has_key?("matches")
         yml["matches"].each { |match|
@@ -984,6 +984,7 @@ class CrossMatch
     if (("No" == result and m1 >= 0.5) or
         ("Yes" == result and m1 <= 0.4))
       print "Is this a match (y/n): "
+      $stdout.flush
       answer = STDIN.gets
       if [ "Y", "YES"].include?(answer.strip.upcase)
         return "Yes"
@@ -1052,7 +1053,7 @@ class CrossMatch
   end
 
   def badClocksFromOverrides(result)
-    if File.exists?("overrides.yml")
+    if File.exist?("overrides.yml")
       yml = YAML.safe_load_file("overrides.yml", permitted_classes: [Time])
       if yml.has_key?("unreliable")
         if yml["unreliable"].has_key?("clock") and yml["unreliable"]["clock"].respond_to?(:each)
@@ -1115,7 +1116,7 @@ class CrossMatch
     unreliableBand = Set.new
     unreliableMode = Set.new
     unreliableSerial = Set.new
-    if File.exists?("overrides.yml")
+    if File.exist?("overrides.yml")
       yml = YAML.safe_load_file("overrides.yml", permitted_classes: [Time])
       if yml.has_key?("unreliable")
         addUnrel(unreliableSerial, yml["unreliable"], "serial_num")

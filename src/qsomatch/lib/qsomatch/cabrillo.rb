@@ -8,8 +8,8 @@ require 'csv'
 require 'time'
 require 'set'
 
-CONTEST_START=Time.utc(2022,10,1,16, 00)
-CONTEST_END=Time.utc(2022,10,2,22,00)
+CONTEST_START=Time.utc(2023,10,7,16, 00)
+CONTEST_END=Time.utc(2023,10,8,22,00)
 
 def mySplit(str, pattern)
   result = [ ]
@@ -185,7 +185,7 @@ class OperatorClass
     end
   end
 
-  ALLOWED_TRANS_VALUES = { :one => true, :unlimited => true, :swl => true }
+  ALLOWED_TRANS_VALUES = { :one => true, :two => true, :unlimited => true, :swl => true }
   def numtrans=(value)
     if ALLOWED_TRANS_VALUES[value]
       @numtrans = value
@@ -387,6 +387,10 @@ class Cabrillo
       trans(1, 1)
       @logCat.numop = :multi
       @logCat.numtrans = :one
+    when /\Acategory-operator:\s*multi-two\s*\Z/i
+      trans(1, 1)
+      @logCat.numop = :multi
+      @logCat.numtrans = :two
     when /\Acategory-operator:\s*multi-multi\s*\Z/i
       trans(1, 1)
       @logCat.numop = :multi
@@ -458,6 +462,8 @@ class Cabrillo
       if $1
         if $1.upcase == "ONE"
           @logCat.numtrans = :one
+        elsif $1.upcase == "TWO"
+          @logCat.numtrans = :two
         elsif $1.upcase == "SWL"
           @logCat.numtrans = :swl
         else
@@ -784,7 +790,8 @@ class Cabrillo
     when :single
       return cat.assisted ? "SINGLE_ASSISTED" : "SINGLE"
     when :multi
-      return (cat.numtrans == :one) ? "MULTI_SINGLE" : "MULTI_MULTI"
+      return (cat.numtrans == :one) ? "MULTI_SINGLE" :
+               ((cat.numtrans == :two) ? "MULTI_TWO" : "MULTI_MULTI")
     end
     "CHECKLOG"
   end
@@ -945,6 +952,11 @@ NAME: #{@name}
       @logCat.numtrans = :one
       str.gsub!(/MULTI-SINGLE|M-S/i," ")
     end
+    if (str =~ /MULTI-TWO|MULTI-2|M-2/i)
+      @logCat.numop = :multi
+      @logCat.numtrans = :two
+      str.gsub!(/MULTI-TWO|M-2/i," ")
+    end
     if (str =~ /NON-ASSIS?TED/)
       @logCat.assisted = false
       str.gsub!(/NON-ASSIS?TED/,"")
@@ -961,7 +973,7 @@ NAME: #{@name}
       when 'LIMITED'
         @logCat.numtrans = :one
       when 'TWO'
-        @logCat.numtrans = :unlimited
+        @logCat.numtrans = :two
       when "SCHOOL"
         @logCat.station = :school
       when "HIGH", "LOW", "QRP"
@@ -993,6 +1005,9 @@ NAME: #{@name}
       when "MS"
         @logCat.numop = :multi
         @logCat.numtrans = :one
+      when "M2"
+        @logCat.numop = :multi
+        @logCat.numtrans = :two
       when "MEDIUM", "HP"
         @logCat.power = :high
       when /OP|CLUB|50|OVER/
@@ -1042,6 +1057,10 @@ NAME: #{@name}
       @dbCat.assisted = true    # not really sure
       @dbCat.numop = :multi
       @dbCat.numtrans = :one
+    when "multi-two"
+      @dbCat.assisted = true    # not really sure
+      @dbCat.numop = :multi
+      @dbCat.numtrans = :two
     when "multi-multi"
       @dbCat.assisted = true    # not really sure
       @dbCat.numop = :multi
