@@ -581,7 +581,7 @@ class Cabrillo
         end
       }
       @x_lines << line
-    when /\Ax-cqp-opclass:\s*(checklog|multi-single|multi-multi|single|single-assisted)\s*\Z/i
+    when /\Ax-cqp-opclass:\s*(checklog|multi-single|multi-two|multi-multi|single|single-assisted)\s*\Z/i
       @x_lines << line
       self.dboptype=$1.downcase
     when /\Ax-cqp-id:\s*(\d+)\s*/i

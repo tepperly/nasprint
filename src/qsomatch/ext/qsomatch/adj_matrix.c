@@ -228,7 +228,6 @@ void jw_adj_matrix_free(jw_AdjMatrix *matrix){
 
 static unsigned int countLen(const char *array[])
 {
-  unsigned int result = 0;
   int i = 0;
   while (array[i] && array[i+1]) {
     i += 2;

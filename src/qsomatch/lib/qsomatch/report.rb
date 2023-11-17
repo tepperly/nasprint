@@ -521,24 +521,37 @@ class Report
 
   def timeTo58(id, multID, isCA)
     result = nil
+    lastMultiplier = nil
     @db.query("select q.judged_multiplierID, min(q.time) as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA = #{isCA ? @db.false : @db.true} group by q.judged_multiplierID order by ftime desc limit 1;") { |row|
       result = @db.toDateTime(row[1])
+      lastMultiplier = row[0].to_i
     }
     if result and isCA
-      @db.query("select min(q.time) as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchTYpe in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA limit 1;") { |row|
+      @db.query("select min(q.time), q.judged_multiplierID as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA limit 1;") { |row|
         newtime = @db.toDateTime(row[0])
         if newtime > result
+          lastMultiplier = row[1].to_i
           result = newtime
         end
       }
     end
-    return result
+    multStr = nil
+    callStr = nil
+    if result and lastMultiplier
+      @db.query("select c.basecall, m.abbrev from QSO as q, Callsign as c, Multiplier as m where q.sent_multiplierID = ? and q.judged_multiplierID = ? and m.id = q.judged_multiplierID and c.id = q.recvd_callID and q.logID = ? and q.time = ? and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') limit 1;", [multID, lastMultiplier, id, @db.formattime(result)] ) { |row|
+        multStr = row[1].to_s
+        callStr = row[0].to_s
+      }
+    end
+    # return the time, the call the station worked to get the 58th, and the multiplier of the 58th
+    return [result, callStr, multStr]
   end
 
   def firstTo58List(contestID, extracon="")
     results = Array.new
     @db.query("select distinct s.logID, s.multID, m.isCA, m.abbrev, c.basecall from Log as l join Scores as s  on s.logID = l.id join Multiplier as m on m.id = s.multID join Callsign as c on c.id = l.callID where l.contestID = #{contestID} and l.opclass in ('SINGLE','SINGLE_ASSISTED') and s.verified_mult = 58 #{extracon} order by l.id asc;") { |row|
-      results << [row[4], row[3], timeTo58(row[0], row[1], @db.toBool(row[2])), row[0]]
+      time = timeTo58(row[0], row[1], @db.toBool(row[2]))
+      results << [row[4], row[3], time[0], row[0], time[1], time[2]]
     }
     results.sort! { |x,y| x[2] <=> y[2] }
     results
@@ -555,12 +568,13 @@ class Report
   def full58List(out = $stdout, contestID)
     results = Array.new
     @db.query("select distinct s.logID, s.multID, m.isCA, m.abbrev, c.basecall, l.opclass from Log as l join Scores as s  on s.logID = l.id join Multiplier as m on m.id = s.multID join Callsign as c on c.id = l.callID where l.contestID = #{contestID} and l.opclass != 'CHECKLOG' and s.verified_mult = 58 order by l.id asc;") { |row|
-      results << [row[4], row[3], timeTo58(row[0], row[1], @db.toBool(row[2])), row[0], row[5]]
+      time = timeTo58(row[0], row[1], @db.toBool(row[2]))
+      results << [row[4], row[3], time[0], row[0], row[5], time[1], time[2]]
     }
     results.sort! { |x,y| x[2] <=> y[2] }
-    CSV(out, :write_headers => true, :headers => ["station callsign", "location", "time 58th confirmed multiplier", "operator class"]) { |csv_out|
+    CSV(out, write_headers: true, headers: ["station callsign", "location", "time 58th confirmed multiplier", "operator class","last station", "last multiplier"]) { |csv_out|
       results.each { |row|
-        csv_out <<  [ row[0], row[1], row[2].to_s, row[4].to_s ]
+        csv_out <<  [ row[0], row[1], row[2].to_s, row[4].to_s, row[5].to_s, row[6].to_s ]
       }
     }
   end
