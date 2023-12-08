@@ -238,7 +238,7 @@ class ResolveSingletons
       qsos << [ row[0].to_i, row[1], @db.toDateTime(row[2]) ]
     }
     qsos.each { |q|
-      print lookupQSO(@db, q[0]).to_s + "\n"
+      @cdb.printQSO($stdout, q[0])
     }
     if (qsos.length > 1)
       qsos.sort! { |x,y| 
@@ -256,7 +256,14 @@ class ResolveSingletons
       qsos.shift  # remove the first element to prevent marking it as a dupe
       print "update QSO set matchType = 'Dupe', score=0 where id in (" +
                 qsos.map { |i| i[0] }.join(", ") +
-                ");\n"
+            ");\n"
+      traced = ($traceQSOset & qsos.map { |x| x[0] }.to_set)
+      if not traced.empty?
+        traced.each { |qso_id|
+          print "Marking the following QSO as a Dupe (III)"
+          @cdb.printQSO($stdout, qso_id)
+        }
+      end
       @db.query("update QSO set matchType = 'Dupe', score=0 where id in (" +
                 qsos.map { |i| i[0] }.join(", ") +
                 ");")

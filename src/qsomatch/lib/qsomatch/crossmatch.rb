@@ -174,11 +174,14 @@ class CrossMatch
       sent + "_multiplierID is null)) "
   end
 
+  def nearCallMultMatch(recvd, sent)
+    return " (" + recvd + "_multiplierID = " + sent + "_multiplierID or " +
+      sent + "_multiplierID is null) "
+  end
+
   def exchangeNearCallMatch(recvd, sent)
-    return " ((" + recvd + "_callID = nm.c1ID and " + sent +
-           "_callID = nm.c2ID) and (" +
-      recvd + "_multiplierID = " + sent + "_multiplierID or " +
-      sent + "_multiplierID is null)) "
+    return " (" + recvd + "_callID = nm.c1ID and " + sent +
+           "_callID = nm.c2ID) "
   end
 
   def exchangeMatch(recvd, sent)
@@ -269,6 +272,13 @@ class CrossMatch
           explainLinkFail(row[0].to_i) if not quiet
         end
         if markDupe and not found
+          traced = ($traceQSOset & [row[0].to_i, row[1].to_i].to_set)
+          if not traced.empty?
+            traced.each { |qso_id|
+              print "Marking the following QSO as a Dupe (I)"
+              @cdb.printQSO($stdout, qso_id)
+            }
+          end
           @db.query("update QSO set matchType = 'Dupe' where matchID is null and matchType = 'None' and id in (?, ?);", [row[0].to_i, row[1].to_i]) { }
           dupeCount += @db.affected_rows
           @db.query("update QSO set judged_multiplierID = recvd_multiplierID where matchID is null and matchType = 'Dupe' and judged_multiplierID is null and id in (?, ?);", [row[0].to_i, row[1].to_i]) { }
@@ -504,8 +514,8 @@ class CrossMatch
 
   def buildNearMatchTable
     logCalls = Hash.new
-    @db.query("select c.id, c.basecall from Callsign as c, Log as l on l.callID = c.id where " +
-              @logs.membertest("l.id") + " order by c.basecall asc;") { |row|
+    @db.query("select c.id, c.basecall, count(*) as unresolved from Callsign as c, Log as l on l.callID = c.id, QSO as q on q.logID = l.id where " +
+              @logs.membertest("l.id") + " and q.matchID is null group by c.id having unresolved > 0 order by c.basecall asc;") { |row|
       logCalls[row[1]] = row[0].to_i
     }
     @db.query("create temporary table NearMatches (c1ID integer not null, c2ID integer not null, mode char(2) not null);")
@@ -522,6 +532,9 @@ class CrossMatch
         end
       }
     }
+    @db.query("select count(*) from NearMatches;") { |row|
+      print "There are #{logCalls.length} callsigns and #{row[0].to_s} pairs of callsigns that are near matches\n"
+    }
   end
     
   def oneNearCallsign(timediff = PERFECT_TIME_MATCH)
@@ -529,12 +542,13 @@ class CrossMatch
     buildNearMatchTable
     print "Staring near callsign perfect match #{modeBandDesc(modeAndBand)}(#{timediff} minute tolerance): #{Time.now.to_s}\n"
     queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 join NearMatches as nm" +
-      " on (" +  exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
-      exchangeNearCallMatch("q2.recvd", "q1.sent") + " and " +
+      " on (" + exchangeNearCallMatch("q2.recvd", "q1.sent") + " and " +
       "q1.fixedMode = nm.mode and q2.fixedMode = nm.mode and " +
       modeBandMatch("q1", "q2", modeAndBand)  +
       "), Log as l1, Log as l2 where " +
       "l1.id = q1.logID and l2.id = q2.logID and " +
+      nearCallMultMatch("q2.recvd", "q1.sent") + " and " +
+      exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
       @logs.membertest("q1.logID") + " and " +
       @logs.membertest("q2.logID") + " and " +
       "q1.logID != q2.logID and "  +
@@ -600,7 +614,7 @@ class CrossMatch
     if not altname
       altname = "judged_" + name
     end
-    "(case when #{table}.#{altname} is null then #{table}.#{name} else #{table}.#{altname} end)"
+    "(coalesce(#{table}.#{altname}, #{table}.#{name}))"
   end
 
   def ignoreDups
@@ -620,6 +634,13 @@ class CrossMatch
     @db.query(queryStr) { |row|
       list << row[0].to_i
     }
+    traced = ($traceQSOset & list.to_set)
+    if not traced.empty?
+      traced.each { |qso_id|
+        print "Marking the following QSO as a Dupe (II)"
+        @cdb.printQSO($stdout, qso_id)
+      }
+    end
     
     @db.query("update QSO set matchType = 'Dupe', judged_multiplierID=recvd_multiplierID, judged_mode=fixedMode, judged_band=band, judged_recvdID=recvd_callID where id in (#{list.join(",")}) and matchType = 'None' and matchID is null;") { }
     return @db.affected_rows
@@ -666,30 +687,71 @@ class CrossMatch
     return notMatch <= 1
   end
 
+  def selectMissingMult(validMults, qsoID)
+    validMults = validMults.to_a
+    result = validMults.to_a[0] # an arbitrary choice
+    validMults = validMults.to_set # now a duplicate of the incoming argument
+    @db.query("select distinct q1.recvd_multiplierID from QSO as q1, QSO as q2 where q1.logID = q2.logID and q1.id != q2.id and q2.id = ? and q1.frequency = q2.frequency and q1.band = q2.band and q1.fixedMode = q2.fixedMode and (abs(#{@db.timediff("MINUTE","q1.time","q2.time")}) <= 1) and q1.sent_serial = q2.sent_serial and q1.sent_callID = q2.sent_callID and q1.sent_multiplierID = q2.sent_multiplierID and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")};", [ qsoID] ) { |row|
+      validMults.delete(row[0].to_i)
+    }
+    if (not validMults.empty?)
+      result = validMults.to_a[0]
+    end
+    result
+  end
+
   def avoidCountylineLoggingNils(unreliableClock, quiet=true)
     count = 0
     unreliableBand, unreliableMode, unreliableSerial = findUnreliable
-    @db.query("select q1.id, q1.matchType, q1.matchID, q2.id from QSO as q1, QSO as q2 where q1.logID = q2.logID and q1.id != q2.id and q1.frequency = q2.frequency and q1.band = q2.band and q1.fixedMode = q2.fixedMode and q1.time = q2.time and q1.sent_serial = q2.sent_serial and q1.sent_callID = q2.sent_callID and q1.sent_multiplierID != q2.sent_multiplierID and q1.matchID is not null and q2.matchID is null and q2.matchType = 'None' and q1.matchType in ('Full', 'Partial') and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc, q2.id asc;") { |row|
+    @db.query("select distinct q1.id, q1.matchType, q1.matchID, q2.id, q2.recvd_multiplierID, q1.recvd_multiplierID from QSO as q1, QSO as q2 where q1.logID = q2.logID and q1.id != q2.id and q1.frequency = q2.frequency and q1.band = q2.band and q1.fixedMode = q2.fixedMode and (abs(#{@db.timediff("MINUTE","q1.time", "q2.time")}) <= 1) and q1.sent_serial = q2.sent_serial and q1.sent_callID = q2.sent_callID and q1.sent_multiplierID != q2.sent_multiplierID and q1.matchID is not null and q2.matchID is null and q2.matchType = 'None' and q1.matchType in ('Full', 'Partial') and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc, q2.id asc;") { |row|
       if not quiet
         @cdb.printQSO($stdout, row[0].to_i)
         print "\tID: #{row[0]}\n"
         print "\tMatch type: #{row[1]}\n"
         print "\tOther QSO: #{row[3]}\n"
       end
-      @db.query("select sent_multiplierID from QSO where id = ?", row[2]) { |qth_row|
-        if (row[1] == "Full")
-          @db.query("update QSO set matchType = 'Bye', judged_multiplierID=? where id = ?;", [qth_row[0].to_i, row[3].to_i ]) { }
-          count += 1
-        else
-          if halfCredit(row[0], row[2], unreliableBand, unreliableMode, unreliableSerial, unreliableClock)
-            @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=? where id = ?;", [qth_row[0].to_i, row[3].to_i] ) { }
-            count += 1
+      # the other station might be a county-line station too
+      validMultipliers = Set.new
+      @db.query("select distinct q1.sent_multiplierID from QSO as q1, QSO as q2 where q2.id = ? and q1.logID = q2.logID and q1.frequency=q2.frequency and q1.band = q2.band and q1.fixedMode = q2.fixedMode and (abs(#{@db.timediff("MINUTE","q1.time","q2.time")}) <= 1) and coalesce(q1.sent_serial,9999) = coalesce(q2.sent_serial,9999) and q1.sent_callID = q2.sent_callID and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")};", [ row[2].to_i ]) { |qth_row|
+        validMultipliers.add(qth_row[0].to_i)
+      }
+      if not quiet
+        print "\tValid multipliers: " + (validMultipliers.map { |id| @cdb.lookupMultiplierByID(id) }.join(" ")) + "\n"
+      end
+      recvdMult = row[4].to_i
+      if (recvdMult and validMultipliers.include?(recvdMult))
+        judgedMult = recvdMult
+      else
+        judgedMult = selectMissingMult(validMultipliers, row[0].to_i)
+      end
+      if not quiet
+        print "\tJudged multiplier: " + @cdb.lookupMultiplierByID(judgedMult).to_s + "\n"
+      end
+      if (row[1] == "Full")
+          if (judgedMult == recvdMult)
+            @db.query("update QSO set matchType = 'Bye', judged_multiplierID=? where id = ? and matchType = 'None';", [judgedMult, row[3].to_i ]) { }
           else
-            @db.query("update QSO set matchType = 'NIL', judged_multiplierID=? where id = ?;", [qth_row[0].to_i, row[3].to_i]) { }
+            @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=? where id = ? and matchType = 'None';", [judgedMult, row[3].to_i] ) { }
+          end
+          count += @db.affected_rows
+      else
+        if halfCredit(row[0], row[2], unreliableBand, unreliableMode, unreliableSerial, unreliableClock)
+          if (judgedMult == recvdMult or row[5].to_i == recvdMult)
+            @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=? where id = ? and matchType='None';", [judgedMult, row[3].to_i] ) { }
+            count += @db.affected_rows
+          else
+            @db.query("update QSO set matchType = 'NIL', judged_multiplierID=? where id = ? and matchType='None';", [judgedMult, row[3].to_i] ) { }
+            if (@db.affected_rows > 0)
+              @db.query("update QSOExtra set comment = 'Related county-line QSO is a D1 and received multiplier is wrong' where id = ? and comment is null;", row[3].to_i) { }
+            end
+          end
+        else
+          @db.query("update QSO set matchType = 'NIL', judged_multiplierID=? where id = ? and matchType='None';", [judgedMult, row[3].to_i]) { }
+          if (@db.affected_rows > 0)
             @db.query("update QSOExtra set comment = 'Related county-line QSO is a D2' where id = ? and comment is null;", row[3]) { }
           end
         end
-      }
+      end
     }
     count
   end

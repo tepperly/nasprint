@@ -4,14 +4,21 @@
 # Code to dump a log from the database in pseudo-Cabrillo format.
 #
 require 'callsign'
+require 'set'
 
 def dumpLogs(db, contestID, translateCA=false)
-  db.query("select id, callsign from Log where contestID = ? order by callsign asc;",
+  alreadySeen = Set.new
+  db.query("select l.id, l.callsign, m.abbrev from Log as l, Multiplier as m where l.contestID = ? and m.id = l.multiplierID order by l.callsign asc, l.multiplierID asc;",
            [contestID]) { |row|
+    filenameStart = row[1].gsub(/[^a-z0-9]/i,'_').to_s.upcase
+    if (alreadySeen.include?(filenameStart))
+      filenameStart = filenameStart + "_" + row[2].upcase
+    end
+    alreadySeen.add(filenameStart)
     if (not Dir.exist?("output"))
       Dir.mkdir("output")
     end
-    open("output/" + row[1].gsub(/[^a-z0-9]/i,'_').to_s.upcase + "_cab.txt", "w:ascii") { |out|
+    open("output/" + filenameStart + "_cab.txt", "w:ascii") { |out|
       if translateCA
         dumpTranslatedLog(out, db, row[0])
       else
@@ -56,13 +63,13 @@ SOAPBOX: equivalent form to make it easier to score.\r\n"
             [row[6].to_i, row[3].to_s, row[1], row[4], row[10].to_s, row[11].to_s, row[12].to_s, row[5], row[2], row[0].to_i, row[7].to_i, row[8].to_i, row[9].to_i, row[6].to_i])
     clockAdj = row[5].to_i
   }
-  db.query("select q.frequency, q.fixedMode, q.time, qe.sent_callsign, q.sent_serial, coalesce(m1.abbrev,qe.sent_location) as sentmult,  qe.recvd_callsign, q.recvd_serial, coalesce(m2.abbrev,qe.recvd_location) as recvdmult, q.matchType, qe.comment, q.score from (QSO as q left join Multiplier as m1 on m1.id = q.sent_multiplierID) left join Multiplier as m2 on m2.id = q.recvd_multiplierID, QSOExtra as qe on q.id = qe.id where q.logID = ? order by q.time asc, q.sent_serial asc;",
+  db.query("select q.frequency, q.fixedMode, q.time, qe.sent_callsign, q.sent_serial, coalesce(m1.abbrev,qe.sent_location) as sentmult,  qe.recvd_callsign, q.recvd_serial, coalesce(m2.abbrev,qe.recvd_location) as recvdmult, q.matchType, qe.comment, q.score, m3.abbrev from (QSO as q left join Multiplier as m1 on m1.id = q.sent_multiplierID) left join Multiplier as m2 on m2.id = q.recvd_multiplierID, Multiplier as m3 on m3.id = coalesce(q.judged_multiplierID,q.recvd_multiplierID), QSOExtra as qe on q.id = qe.id where q.logID = ? order by q.time asc, q.sent_serial asc;",
            [logID]) { |row|
     td = db.toDateTime(row[2]) + clockAdj
-    out << ("QSO: %5d %2s %4d-%02d-%02d %02d%02d %-10s %4d %-4s %-10s %4d %-4s %%{%s: %s}%%\r\n" %
+    out << ("QSO: %5d %2s %4d-%02d-%02d %02d%02d %-10s %4d %-4s %-10s %4d %-4s %%{%s: %s%s}%%\r\n" %
             [row[0], row[1], td.year, td.month, td.mday, td.hour, td.min, row[3], serialNum(row[4]), row[5],
              row[6], serialNum(row[7]), row[8], matchType(row[9], row[11].to_i),
-             row[10].to_s])
+             row[10].to_s, ((row[12] and row[12] != row[8])?( " judged location: " + row[12]):"")])
   }
   out << "END-OF-LOG:\r\n"
 end

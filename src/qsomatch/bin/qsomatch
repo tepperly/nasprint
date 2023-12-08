@@ -23,6 +23,7 @@ require 'errors'
 require 'dumplog'
 require 'json'
 require 'set'
+require 'sqlite3'
 
 
 $year = nil
@@ -43,6 +44,8 @@ $cabcheck = false
 $qrzuser = nil
 $qrzpwd = nil
 $verbose = nil
+$traceQSOset = Set.new # don't trace any QSOs by default
+$traceCallset = Set.new
 ctl = CallsignTools.new
 
 opts = GetoptLong.new(
@@ -66,6 +69,7 @@ opts = GetoptLong.new(
                       [ '--verbose', '-V', GetoptLong::NO_ARGUMENT],
                       [ '--load', '-l', GetoptLong::NO_ARGUMENT],
                       [ '--score', '-s', GetoptLong::NO_ARGUMENT],
+                      [ '--trace', '-t', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--rare', '-r', GetoptLong::NO_ARGUMENT],
                       [ '--fifty-eight', '-5', GetoptLong::NO_ARGUMENT],
                       [ '--report', '-T', GetoptLong::NO_ARGUMENT]
@@ -82,6 +86,10 @@ opts.each { |opt, arg|
     $canadadb = arg
   when '--no-init'
     $readinit = false
+  when '--trace'
+    arg.split(',') { |call|
+      $traceCallset.add(call.strip)
+    }
   when '--fcc'
     $fccdb = arg
   when '--translate-ca'
@@ -462,6 +470,20 @@ def lookupOperatorList(db, callsign, id)
   return callsign
 end
 
+def quoteSet(set)
+  set.map { |str| "'" + SQLite3::Database.quote(str) + "'" }.join(",")
+end
+
+def createQSOSet(db, callsigns)
+  result = Set.new
+  if not callsigns.empty?
+    db.query("select q.id from QSO as q, Callsign as c where c.basecall in (#{quoteSet(callsigns)}) and q.sent_callID = c.id;") { |id|
+      result.add(id)
+    }
+  end
+  result
+end
+
 def checkFill
   AString.new("-", :align => :right)
 end
@@ -703,7 +725,8 @@ CONVERT_OPCLASS = {
   "SINGLE_ASSISTED" => "SINGLE-OP-ASSISTED",
   "SINGLE" => "SINGLE-OP",
   "MULTI_MULTI" => "MULTI-MULTI",
-  "MULTI_SINGLE" => "MULTI-SINGLE"
+  "MULTI_SINGLE" => "MULTI-SINGLE",
+  "MULTI_TWO" => "MULTI-TWO"
 }
 CONVERT_OPCLASS.freeze
 
@@ -720,7 +743,7 @@ def adjustEntityName(name)
 end
 
 def certificateCSV(db, contestID, contestDB)
-  CSV.open("certificate_#{$year}.csv", "wb", :headers => true, :quote_char => "'" ) { |csv|
+  CSV.open("certificate_#{$year}.csv", "wb", :headers => true, :quote_char => "") { |csv|
     csv << quoteStrings([ "Callsign", "Name", "Operator Calls", "Station Callsign", "CW QSOs", "PH QSOs", "Total QSOs", "Multipliers", "Score", "Operator Class", "Power", "QTH", "Type", "Country" ])
     db.query("select l.id, l.callsign, l.name, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.opclass, l.powclass, m.fullname, m.entityID, m.isCA, e.name from Log as l, Scores as s on s.logID = l.id, Multiplier as m on m.id = s.multID, Entity as e on e.id = l.entityID where contestID = ? and l.opclass != 'CHECKLOG' order by l.callsign asc;",
              [ contestID ]) { |row|
@@ -987,6 +1010,7 @@ begin
   when :load, :check, :catcheck
     loadFiles(ARGV, cdb, contestID, ctl, db)
   when :score
+    $traceQSOset = createQSOSet(db, $traceCallset)
     scoreContest(db, contestID, cdb)
     reportContest(db, contestID, cdb)
   when :report

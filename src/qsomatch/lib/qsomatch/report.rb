@@ -18,7 +18,7 @@ TEHA TRIN TULA TUOL VENT YOLO YUBA }).freeze
 IL IN KS KY LA MA MD ME MI MN MO MS MT NC ND NE NH NJ NM NV
 NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
 }).freeze
-  CAN_QTH = Set.new(%w{ AB BC MB MR NT ON QC SK }).freeze
+  CAN_QTH = Set.new(%w{ AB BC MB NB NL NS NT NU ON PE QC SK YT }).freeze
   CA_STATION_CREDITS = (US_QTH + CAN_QTH + Set.new(%w{ CA })).freeze
 
   def qthClass
