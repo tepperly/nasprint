@@ -95,7 +95,7 @@ class CallsignLocator
     @@exceptions = Hash.new
     @@callprefixes = Hash.new
     XZ::StreamReader.open(File.dirname(__FILE__) + "/cty.csv.xz") { |infile|
-      CSV.parse(infile.read(),:col_sep => ',') { |record|
+      CSV.parse(infile.read(), col_sep: ',') { |record|
         ent = Entity.new(record[0], record[1], record[2].to_i,
                          record[3].strip.upcase,
                          record[4].to_i, record[5].to_i,

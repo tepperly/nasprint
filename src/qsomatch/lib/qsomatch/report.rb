@@ -465,7 +465,7 @@ class Report
     csv = CSV.new(out)
     csv << ["Callsign", "Claimed QSOs", "# in other logs", "# Full", "# Partial", "# NIL", "# Removed" ]
     logs.each { |l|
-      @db.query("select count(*), sum(matchType = 'Full'), sum(matchType = 'Partial'), sum(matchType = 'NIL'), sum(matchType = 'Removed') from QSO where recvd_callID = ? group by recvd_callID limit 1;", [ l[1] ]) { |row|
+      @db.query("select count(*), sum(matchType = 'Full'), sum(matchType = 'Partial'), sum(matchType = 'NIL'), sum(matchType = 'Removed') from QSO where coalesce(judged_recvdID,recvd_callID) = ? group by recvd_callID limit 1;", [ l[1] ]) { |row|
         csv << [ l[0], l[2], row[0], row[1], row[2], row[3], row[4] ]
       }
     }

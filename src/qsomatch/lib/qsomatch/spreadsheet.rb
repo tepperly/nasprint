@@ -52,19 +52,19 @@ class Spreadsheet
 
   def addCategories(num = 3)
     @workbook.styles { |s|
-      blue_header = s.add_style :bg_color => "00FFFF", :fg_color => "00", :alignment => {:horizontal => :center }, :b => true
-      plain_header = s.add_style :alignment => {:horizontal => :center }
-      centered = s.add_style :alignment => {:horizontal => :center }
-      right = s.add_style :alignment => {:horiginal => :right }
-      right_warn =s.add_style :alignment => {:horiginal => :right }, :fg_color => "00", :bg_color => "ff0000"
-      callsign = s.add_style :b => true
-      cat_header = { "HIGH" => s.add_style(:bg_color => "00FF00", :fg_color => "00"),
-        "LOW" => s.add_style(:bg_color => "c9daf8", :fg_color => "00"),
-        "QRP" => s.add_style(:bg_color => "fff2cc", :fg_color => "00")}
-      @workbook.add_worksheet(:name => "Top #{num} by Category") { |sheet|
+      blue_header = s.add_style bg_color: "00FFFF", fg_color: "00", alignment: {:horizontal => :center }, b: true
+      plain_header = s.add_style alignment: {:horizontal => :center }
+      centered = s.add_style alignment: {:horizontal => :center }
+      right = s.add_style alignment: {:horiginal => :right }
+      right_warn =s.add_style alignment: {:horiginal => :right }, fg_color:  "00", bg_color: "ff0000"
+      callsign = s.add_style b: true
+      cat_header = { "HIGH" => s.add_style(bg_color: "00FF00", fg_color: "00"),
+        "LOW" => s.add_style(bg_color: "c9daf8", fg_color: "00"),
+        "QRP" => s.add_style(bg_color: "fff2cc", fg_color: "00")}
+      @workbook.add_worksheet(name: "Top #{num} by Category") { |sheet|
         REGIONS.each { |region, constraint|
           sheet.add_row([nil, region, "CALL", "SCORE", " Difference ", " "]*OPCLASSES.length,
-                        :style => [ plain_header, blue_header, blue_header,
+                        style: [ plain_header, blue_header, blue_header,
                           blue_header,blue_header,plain_header ]*OPCLASSES.length)
           POWERS.each { |power|
             rows = Array.new
@@ -83,7 +83,7 @@ class Spreadsheet
                   mstyles[4+i*6] = right_warn
                 end
               }
-              sheet.add_row(l, :style => mstyles)
+              sheet.add_row(l, style: mstyles)
             }
             sheet.add_row
           }
@@ -105,18 +105,18 @@ class Spreadsheet
 
   def addWineWinners(num = 24)
     @workbook.styles { |s|
-      regstyle = { "California" => s.add_style(:b => true, :bg_color => "ffff00", :alignment => { :horizontal => :center}),
-        "Non-California" => s.add_style(:b => true, :bg_color => "ead1dc", :alignment => { :horizontal => :center})
+      regstyle = { "California" => s.add_style(b: true, bg_color: "ffff00", alignment: { :horizontal => :center}),
+        "Non-California" => s.add_style(b: true, bg_color: "ead1dc", alignment: { :horizontal => :center})
       }
-      callsign = s.add_style :b => true
-      index = s.add_style :alignment => {:horizontal => :center}, :edges => [:top, :bottom, :left, :right ]
-      score = s.add_style :b => true, :alignment => {:horizontal => :right}, :edges => [:top, :bottom, :left, :right ]
-      diff_warn = s.add_style :b => true, :alignment => {:horizontal => :right}, :bg_color => "ff0000"
-      @workbook.add_worksheet(:name => "Top #{num} Wine Contenders") { |sheet|
+      callsign = s.add_style b: true
+      index = s.add_style alignment: {:horizontal => :center}, edges: [:top, :bottom, :left, :right ]
+      score = s.add_style b: true, alignment: {:horizontal => :right}, edges: [:top, :bottom, :left, :right ]
+      diff_warn = s.add_style b: true, alignment: {:horizontal => :right}, bg_color: "ff0000"
+      @workbook.add_worksheet(name: "Top #{num} Wine Contenders") { |sheet|
         sheet.add_row
         sheet.add_row([ nil, REGIONS[0][0], "Score", " Difference ", nil,
                         nil, REGIONS[1][0], "Score", " Difference "],
-                      :style => [nil, regstyle[REGIONS[0][0]], regstyle[REGIONS[0][0]], regstyle[REGIONS[0][0]], nil,
+                      style: [nil, regstyle[REGIONS[0][0]], regstyle[REGIONS[0][0]], regstyle[REGIONS[0][0]], nil,
                         nil, regstyle[REGIONS[1][0]], regstyle[REGIONS[1][0]], regstyle[REGIONS[1][0]]])
         lines = Array.new(num)
         num.times { |i| lines[i] = Array.new }
@@ -139,7 +139,7 @@ class Spreadsheet
         }
         lines.each { |line|
           sheet.add_row(line,
-                        :style => [ index, callsign, score,
+                        style: [ index, callsign, score,
                           ((line[3] and line[3] <= LIMIT) ? diff_warn : score), nil,
                           index, callsign, score,
                           ((line[8] and line[8] <= LIMIT) ? diff_warn : score), nil])
@@ -150,13 +150,13 @@ class Spreadsheet
 
   def specialAward(num, sheet, regcon, title, constraint)
     @workbook.styles { |s|
-      header = s.add_style :b => true, :alignment => {:horizontal => :center}
-      index = s.add_style :alignment => {:horizontal => :center}
-      right = s.add_style :alignment => {:horizontal => :right}
-      callsign = s.add_style :alignment => {:horizontal => :left}, :b => true
-      missing = s.add_style :alignment => {:horizontal => :left}, :i => true
-      right_warn = s.add_style :alignment => {:horizontal => :right}, :bg_color => "ff0000"
-      sheet.add_row([nil, title, "Score", "Difference"], :style => [nil, header, header, header])
+      header = s.add_style b: true, alignment: {:horizontal => :center}
+      index = s.add_style alignment: {:horizontal => :center}
+      right = s.add_style alignment: {:horizontal => :right}
+      callsign = s.add_style alignment: {:horizontal => :left}, b: true
+      missing = s.add_style alignment: {:horizontal => :left}, i:  true
+      right_warn = s.add_style alignment: {:horizontal => :right}, bg_color: "ff0000"
+      sheet.add_row([nil, title, "Score", "Difference"], style: [nil, header, header, header])
       i = 1
       prev = nil
       @db.query("select c.basecall, m.abbrev, s.verified_score from Scores as s,Log as l, Multiplier as m, Callsign as c where s.logID = l.id and l.contestID = ? and s.multID = m.id and l.callID = c.id and #{regcon} and #{constraint} order by s.verified_score desc limit ?;",
@@ -164,18 +164,18 @@ class Spreadsheet
         if prev
           diff = prev - row[2].to_i
           sheet.add_row([i, row[0]+"/"+row[1], row[2].to_i, diff],
-                        :style=>[index, callsign, right,
+                        style: [index, callsign, right,
                           ((diff <= LIMIT) ? right_warn : right)])
         else
           sheet.add_row([i, row[0]+"/"+row[1], row[2].to_i],
-                        :style => [ index, callsign, right])
+                        style: [ index, callsign, right])
         end
         prev = row[2].to_i
         i += 1
       }
       if i == 1
         sheet.add_row([nil, "(none)"],
-                      :style => [nil, missing])
+                      style: [nil, missing])
       end
       sheet.add_row
     }
@@ -183,14 +183,14 @@ class Spreadsheet
 
   def qsoAward(num, sheet, regcon, title, column, coldesc, zeroColumn)
     @workbook.styles { |s|
-      header = s.add_style :b => true, :alignment => {:horizontal => :center}
-      index = s.add_style :alignment => {:horizontal => :center}
-      right = s.add_style :alignment => {:horizontal => :right}
-      callsign = s.add_style :alignment => {:horizontal => :left}, :b => true
-      missing = s.add_style :alignment => {:horizontal => :left}, :i => true
-      right_warn = s.add_style :alignment => {:horizontal => :right}, :bg_color => "ff0000"
+      header = s.add_style b: true, alignment: {:horizontal => :center}
+      index = s.add_style alignment: {:horizontal => :center}
+      right = s.add_style alignment: {:horizontal => :right}
+      callsign = s.add_style alignment: {:horizontal => :left}, b: true
+      missing = s.add_style alignment: {:horizontal => :left}, i:  true
+      right_warn = s.add_style alignment:  {:horizontal => :right}, bg_color: "ff0000"
       sheet.add_row([nil, title, coldesc + " QSOs", "Score", "Difference"],
-                    :style=>[nil, header, header, header])
+                    style: [nil, header, header, header])
       prev = nil
       i = 1
       @db.query("select c.basecall, m.abbrev, s.#{column}, s.verified_score from Scores as s,Log as l, Multiplier as m, Callsign as c where s.logID = l.id and l.contestID = ? and s.multID = m.id and l.callID = c.id and #{regcon} and l.opclass in ('SINGLE', 'SINGLE_ASSISTED') and s.#{zeroColumn} = 0 order by s.verified_score desc limit ?;",
@@ -198,18 +198,18 @@ class Spreadsheet
         if prev
           diff = prev - row[3].to_i
           sheet.add_row([i, row[0]+"/"+row[1], row[2].to_i, row[3].to_i, diff],
-                        :style=>[index, callsign, right, right,
+                        style: [index, callsign, right, right,
                           ((diff <= 10) ? right_warn : right)])
         else
           sheet.add_row([i, row[0]+"/"+row[1], row[2].to_i, row[3].to_i],
-                        :style=>[index, callsign, right, right])
+                        style: [index, callsign, right, right])
         end
         prev = row[3].to_i
         i += 1
       }
       if i == 1
         sheet.add_row([nil, "(none)"],
-                      :style => [nil, missing])
+                      style: [nil, missing])
       end
       sheet.add_row
     }
@@ -217,13 +217,13 @@ class Spreadsheet
 
   def firstToAllMults(num, sheet, title, regcon)
     @workbook.styles { |s|
-      header = s.add_style :b => true, :alignment => {:horizontal => :center}
-      index = s.add_style :alignment => {:horizontal => :center}
-      left = s.add_style :alignment => {:horizontal => :left}
-      callsign = s.add_style :alignment => {:horizontal => :left}, :b => true
-      missing = s.add_style :alignment => {:horizontal => :left}, :i => true
+      header = s.add_style b: true, alignment: {:horizontal => :center}
+      index = s.add_style alignment:  {:horizontal => :center}
+      left = s.add_style alignment:  {:horizontal => :left}
+      callsign = s.add_style alignment:  {:horizontal => :left}, b: true
+      missing = s.add_style alignment:  {:horizontal => :left}, i: true
       sheet.add_row([nil, "Callsign", "Time All Mults Worked"],
-                    :style=>[nil, header, header])
+                    style: [nil, header, header])
       r = Report.new(@db, @contestID)
       list = r.firstTo58List(@contestID, regcon)
       if not list.empty?
@@ -231,19 +231,19 @@ class Spreadsheet
         list = list[0,num]  # cap number to report
         list.each { |row|
           sheet.add_row([i, row[0] +"/" + row[1], row[2].to_s],
-                        :style => [ index, callsign, left])
+                        style: [ index, callsign, left])
           i += 1
         }
       else
         sheet.add_row([nil, "(none)"],
-                      :style => [nil, missing])
+                      style: [nil, missing])
       end
       sheet.add_row
     }
   end
 
   def regionSpecialAwards(num, region, constraint)
-    @workbook.add_worksheet(:name => (region + " Special Awards")) { |sheet|
+    @workbook.add_worksheet(name: (region + " Special Awards")) { |sheet|
       specialAward(num, sheet, constraint, region + " Single-OP YL HP", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isYL and powclass='HIGH'")
       specialAward(num, sheet, constraint, region + " Single-OP YL LP", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isYL and powclass ='LOW'")
       specialAward(num, sheet, constraint, region + " Single-OP Youth", "opclass in ('SINGLE', 'SINGLE_ASSISTED') and isYOUTH")
@@ -270,13 +270,13 @@ class Spreadsheet
   def clubStandings(region, size, logsThatCount)
     clubs = [ ]
     @workbook.styles { |s|
-      header = s.add_style(:b => true, :border => {:style => :thin, :color => "000000", :edges => [:bottom]})
-      clubhead = s.add_style(:b => true, :bg_color => "fff0ff", :fg_color => "000000")
-      normalstation = [ nil, s.add_style(:num_fmt => Axlsx::NUM_FMT_PERCENT), nil]
-      overstation = [s.add_style(:bg_color => "b0ffff", :fg_color => "0000"),
-                     s.add_style(:bg_color => "b0ffff", :fg_color => "0000", :num_fmt => Axlsx::NUM_FMT_PERCENT),
-                     s.add_style(:bg_color => "b0ffff", :fg_color => "0000")]
-      @workbook.add_worksheet(:name => (region + " " + size + " Clubs")) { |sheet|
+      header = s.add_style(b: true, border: {:style => :thin, :color => "000000", edges: [:bottom]})
+      clubhead = s.add_style(b: true, bg_color: "fff0ff", fg_color: "000000")
+      normalstation = [ nil, s.add_style(num_fmt: Axlsx::NUM_FMT_PERCENT), nil]
+      overstation = [s.add_style(bg_color: "b0ffff", fg_color: "0000"),
+                     s.add_style(bg_color: "b0ffff", fg_color: "0000", num_fmt: Axlsx::NUM_FMT_PERCENT),
+                     s.add_style(bg_color: "b0ffff", fg_color: "0000")]
+      @workbook.add_worksheet(name: (region + " " + size + " Clubs")) { |sheet|
         @db.query("select distinct c.id, c.fullname from Clubs as c join Operator as o on (o.clubID = c.id) join Log as l on (o.logID = l.id) where l.contestID = ? and l.opclass != 'CHECKLOG' and c.type = ? and #{"California" == region ? "c.isCA" : "not c.isCA"};", [@contestID , size ]) { |clubrow|
           stations = [ ]
           score = 0
@@ -292,10 +292,10 @@ class Spreadsheet
         }
         clubs.sort! { |x,y| y[2] <=> x[2] }
         if clubs.length > 0
-          sheet.add_row(["Club/Station", "Percent", "Score"], :style => [header, header, header ])
+          sheet.add_row(["Club/Station", "Percent", "Score"], style: [header, header, header ])
         end
         clubs.each { |club|
-          r = sheet.add_row([club[1], nil, club[2]], :style => [clubhead, nil, clubhead])
+          r = sheet.add_row([club[1], nil, club[2]], style: [clubhead, nil, clubhead])
           ind = r.index+1
           sheet.merge_cells("A#{ind}:B#{ind}")
           count = 0
@@ -306,7 +306,7 @@ class Spreadsheet
               styleAR = overstation
             end
             sheet.add_row(station,
-                          :style => styleAR)
+                          style: styleAR)
             count = count + 1
           }
         }
@@ -349,8 +349,8 @@ class Spreadsheet
     @workbook.styles { |s|
       font = {:font_name => "Verdana"}
       border = {:border => { :style => :thin, :color => "000000"}}
-      leftborder = s.add_style(:border => { :style => :thin, :color => "000000", :edges => [:left]} )
-      lrborder = s.add_style(:border => { :style => :thin, :color => "000000", :edges => [:left, :right]})
+      leftborder = s.add_style(border: { :style => :thin, :color => "000000", :edges => [:left]} )
+      lrborder = s.add_style(border: { :style => :thin, :color => "000000", :edges => [:left, :right]})
       align = {:alignment => { :horizontal => :center, :vertical => :center }}
       ralign = {:alignment => { :horizontal => :right, :vertical => :center }}
       lalign = {:alignment => { :horizontal => :left, :vertical => :center }}
@@ -362,8 +362,8 @@ class Spreadsheet
       callsign = s.add_style({:b => true}.merge(border).merge(lalign).merge(font))
       qth = s.add_style( align.merge( border).merge(font))
       score = s.add_style( ralign.merge( border).merge(font).merge({:format_code => "#,##0"}))
-      @workbook.add_worksheet(:name => "CQP #{$year} Wine Results",
-                              :page_margins => {
+      @workbook.add_worksheet(name: "CQP #{$year} Wine Results",
+                              page_margins: {
                                 :left => 0.5, :right => 0.5, :top => 0.5, :bottom => 0.5,
                                 :header => 0, :footer => 0}
                               ) { |sheet|
@@ -390,7 +390,7 @@ class Spreadsheet
           if nonCAWinners[i]
             3.times { |j| row[j+6] = nonCAWinners[i][j] }
           end
-          sheet.add_row(row, :style =>
+          sheet.add_row(row, style: 
                         [num, callsign, qth, score, nil,
                           num, callsign, qth, score ])
         }
@@ -448,14 +448,14 @@ class Spreadsheet
       sheet.add_row((ca[i] ? ca[i][0..5] : [ "None"] + [nil]*5) +
                     [ nil ] +
                     (nonca[i] ? nonca[i][0..5] : [ "None"] + [nil]*5) ,
-                    :style => [ callsign, qth, numstyle, numstyle, numstyle, score, nil,
+                    style: [ callsign, qth, numstyle, numstyle, numstyle, score, nil,
                       callsign, qth, numstyle, numstyle, numstyle, score ] )
       caOps = ca[i] ? opsList(ca[i][6]) : nil
       noncaOps = nonca[i] ? opsList(nonca[i][6]) : nil
       if caOps or noncaOps
         sheet.add_row([caOps] + [nil]*6 + 
                         [ noncaOps ] + [ nil ] * 5,
-                      :style => [ opsstyle ] *6 + [ nil ] + [opsstyle]*6)
+                      style: [ opsstyle ] *6 + [ nil ] + [opsstyle]*6)
         sheet.merge_cells(sheet.rows.last.cells[0..5])
         sheet.merge_cells(sheet.rows.last.cells[7..12])
       end
@@ -491,7 +491,7 @@ class Spreadsheet
                     (nonca[i] ? [nonca[i][0], nonca[i][1], nonca[i][column].to_s + " QSOs",
                         nil, nonca[i][5], nil]
                       : [ "None", nil, nil, nil, nil, nil]) ,
-                    :style => [ callsign, qth, num, nil, nil, nil, nil,
+                    style: [ callsign, qth, num, nil, nil, nil, nil,
                       callsign, qth, num, nil, nil, nil ] )
       sheet.merge_cells(sheet.rows.last.cells[(2..3)])
       sheet.merge_cells(sheet.rows.last.cells[(4..5)])
@@ -518,7 +518,7 @@ class Spreadsheet
   def addClubAwards(sheet, namestyle, headstyle, clubstyle, logsstyle, scorestyle)
     sheet.add_row(["Top CA Club Awards", nil, "Size","Logs", "Score", nil, nil,
                     "Top Non-CA Club Awards", nil, "Size", "Logs", "Score", nil],
-                  :style => [namestyle, namestyle, headstyle, headstyle,
+                  style: [namestyle, namestyle, headstyle, headstyle,
                     headstyle, headstyle, nil, namestyle, namestyle, headstyle, headstyle,
                     headstyle, headstyle])
     sheet.merge_cells(sheet.rows.last.cells[0..1])
@@ -531,7 +531,7 @@ class Spreadsheet
       carow = clubRow(caclubs, size)
       noncarow = clubRow(noncaclubs, size)
       sheet.add_row(carow + [ nil ] + noncarow,
-                    :style => [clubstyle, clubstyle,
+                    style: [clubstyle, clubstyle,
                       logsstyle, logsstyle, scorestyle, scorestyle, nil,
                       clubstyle, clubstyle,
                       logsstyle, logsstyle, scorestyle, scorestyle])
@@ -560,7 +560,7 @@ class Spreadsheet
     sheet.add_row(["First To 58 Multipliers", nil, "Time (duration)", nil, nil, nil,
                     nil,
                     "First To 58 Multipliers", nil, "Time (duration)", nil, nil, nil],
-                  :style => [namestyle,  namestyle,
+                  style: [namestyle,  namestyle,
                     headstyle, headstyle, headstyle, headstyle, nil, namestyle,  namestyle,
                     headstyle, headstyle, headstyle, headstyle])
     sheet.merge_cells(sheet.rows.last.cells[0..1])
@@ -583,7 +583,7 @@ class Spreadsheet
       row = row + [callWithOp(top[0],top[3]),cdb.getFullname(top[1]),
         timeDuration(cdb, top[2]), nil, nil, nil]
     end
-    sheet.add_row(row, :style => [callstyle, qthstyle, numstyle, numstyle, numstyle, numstyle,
+    sheet.add_row(row, style: [callstyle, qthstyle, numstyle, numstyle, numstyle, numstyle,
                     nil, callstyle, qthstyle, numstyle, numstyle, numstyle, numstyle])
     sheet.merge_cells(sheet.rows.last.cells[2..5])
     sheet.merge_cells(sheet.rows.last.cells[9..12])
@@ -616,17 +616,17 @@ class Spreadsheet
   def mobileQSOs(sheet, namestyle, callstyle, qthstyle, headstyle,opsstyle)
     sheet.add_row(["Most Mobile QSOs", nil, "Number of QSOs", nil, nil, nil, nil,
                     nil,nil,nil,nil,nil,nil],
-                  :style => [namestyle, namestyle, headstyle, headstyle,
+                  style: [namestyle, namestyle, headstyle, headstyle,
                     headstyle, headstyle] + [ nil ] * 7)
     sheet.merge_cells(sheet.rows.last.cells[0..1])
     sheet.merge_cells(sheet.rows.last.cells[2..5])
     mobile = bestMobile
     sheet.add_row(mobile[0] + [ nil ] *7,
-                  :style => [callstyle] + [ qthstyle ] * 5 +[ nil ] *7)
+                  style: [callstyle] + [ qthstyle ] * 5 +[ nil ] *7)
     sheet.merge_cells(sheet.rows.last.cells[2..5])
     if (mobile.length > 1)
       sheet.add_row(mobile[1] + [ nil ] * 7,
-                    :style => [opsstyle]*6 + [nil ] *7)
+                    style: [opsstyle]*6 + [nil ] *7)
       sheet.merge_cells(sheet.rows.last.cells[0..5])
     end
   end
@@ -635,17 +635,17 @@ class Spreadsheet
                       opsstyle, name, num, powclass, opclass,extracon)
     results = topPlaqCat("m.isCA", powclass, opclass, num, num > 1, extracon)
     sheet.add_row([name, nil, "Mults", "CW", "PH", "Score"] + [nil]*7,
-                  :style => [namestyle]*2 + [headstyle]*4 + [nil]*7)
+                  style: [namestyle]*2 + [headstyle]*4 + [nil]*7)
     sheet.merge_cells(sheet.rows.last.cells[(0..1)])
     results.each { |row|
       sheet.add_row((row ? row[0..5] : [ "None"] + [nil]*5) +
                     [ nil ]*7,
-                    :style => [ callstyle, qth, numstyle, numstyle, numstyle, score] +
+                    style: [ callstyle, qth, numstyle, numstyle, numstyle, score] +
                     [nil]*7)
       ops = row ? opsList(row[6]) : nil
       if ops
         sheet.add_row([ops] + [nil]*12,
-                      :style => [ opsstyle ] *6 + [ nil ]*7)
+                      style: [ opsstyle ] *6 + [ nil ]*7)
         sheet.merge_cells(sheet.rows.last.cells[0..5])
       end
     }
@@ -701,8 +701,8 @@ class Spreadsheet
     @workbook.styles { |s|
       font = {:font_name => "Verdana", :sz => 8}
       border = {:border => { :style => :thin, :color => "000000"}}
-      leftborder = s.add_style(:border => { :style => :thin, :color => "000000", :edges => [:left]} )
-      lrborder = s.add_style(:border => { :style => :thin, :color => "000000", :edges => [:left, :right]})
+      leftborder = s.add_style(border: { :style => :thin, :color => "000000", :edges => [:left]} )
+      lrborder = s.add_style(border: { :style => :thin, :color => "000000", :edges => [:left, :right]})
       align = {:alignment => { :horizontal => :center, :vertical => :center }}
       ralign = {:alignment => { :horizontal => :right, :vertical => :center }}
       lalign = {:alignment => { :horizontal => :left, :vertical => :center }}
@@ -717,8 +717,8 @@ class Spreadsheet
       qth = s.add_style( align.merge( border).merge(font))
       score = s.add_style( ralign.merge( border).merge(font).merge({:format_code => "#,##0"}))
       opsstyle = s.add_style( lalign.merge( border).merge(font))
-      @workbook.add_worksheet(:name => "CQP #{$year} Plaque Awards",
-                              :page_margins => {
+      @workbook.add_worksheet(name: "CQP #{$year} Plaque Awards",
+                              page_margins: {
                                 :left => 0.25, :right => 0.25,
                                 :top => 0.25, :bottom => 0.25,
                                 :header => 0, :footer => 0}) { |sheet|

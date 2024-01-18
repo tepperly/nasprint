@@ -2,6 +2,7 @@
 # -*- encoding: utf-8 -*-
 require 'nokogiri'
 require 'csv'
+require 'humanize'
 require_relative 'dxmap'
 require_relative 'qrzdb'
 require_relative 'logset'
@@ -440,15 +441,19 @@ class Multiplier
     }
   end
 
-  def rareMultReport
+  def rareMultReport(numCA=7, numNonCA=7)
     open("rare_mult_report.csv", "w") { |csvout|
       csv = CSV.new(csvout)
-      topFiveCA = rarestMults(7, true)
-      topFiveNonCA = rarestMults(7, false)
-      csv << [ "Top Seven Rarest CA Multipliers" ]
-      rareMultGroupReport(csv, topFiveCA)
-      csv << [ "Top Seven Rarest non-CA Multipliers" ]
-      rareMultGroupReport(csv, topFiveNonCA)
+      if (numCA > 0)
+        topFiveCA = rarestMults(numCA, true)
+        csv << [ "Top " + numCA.humanize.capitalize + " Rarest CA Multipliers" ]
+        rareMultGroupReport(csv, topFiveCA)
+      end
+      if (numNonCA > 0)
+        topFiveNonCA = rarestMults(numNonCA, false)
+        csv << [ "Top " + numNonCA.humanize.capitalize + " Rarest non-CA Multipliers" ]
+        rareMultGroupReport(csv, topFiveNonCA)
+      end
     }
   end
 end

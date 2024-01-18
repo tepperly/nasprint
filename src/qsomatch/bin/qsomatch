@@ -389,7 +389,7 @@ end
 
 def rareReport(db, contestID, contestDB)
   m = Multiplier.new(db, contestID, contestDB)
-  m.rareMultReport
+  m.rareMultReport(58,0)
 end
 
 def report58(db, contestID, contestDB)
@@ -399,25 +399,27 @@ def report58(db, contestID, contestDB)
 end
 
 def hdrl(str)
-  return AString.new(str.to_s, :style => :bold, :align => :left)
+  return AString.new(str.to_s, style: :bold, align: :left)
 end
 
 def hdr(str)
-  return AString.new(str.to_s, :style => :bold, :align => :center)
+  return AString.new(str.to_s, style: :bold, align: :center)
 end
 
 def n(str)
-  return AString.new(str.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse, :align => :right)
+  return AString.new(str.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse, align: :right)
 end
+
+THINSPACE=" "
 
 def powAbbrev(power, long)
   case power
   when 'QRP'
-    return long ? " QRP" : " Q"
+    return THINSPACE + (long ? "QRP" : "Q")
   when "LOW"
-    return long ? " LP" : " L"
+    return THINSPACE + (long ? "LP" : "L")
   when "HIGH"
-    return long ? " HP" : ""
+    return long ? (THINSPACE+ "HP") : ""
   end
   ""
 end
@@ -425,18 +427,18 @@ end
 def extras(isCCE, isOneDay, isCountyLine, isYL, isMOBILE)
   result = ""
   if isOneDay
-    result += " 1E"
+    result += (THINSPACE + "1E")
   elsif isCCE
-    result += " E"
+    result += (THINSPACE + "E")
   end
   if isCountyLine
-    result += " CL"
+    result += (THINSPACE + "CL")
   end
   if isYL
-    result += " YL"
+    result += (THINSPACE + "YL")
   end
   if isMOBILE
-    result += " M"
+    result += (THINSPACE + "M")
   end
   result
 end
@@ -448,6 +450,8 @@ def abbrevType(opclass, power, isCCE=nil, isOneDay=nil, isCountyLine=nil, isYL=n
     result = "SO" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isOneDay, isCountyLine, isYL, isMOBILE)
   when 'SINGLE_ASSISTED'
     result = "SOA" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isOneDay, isCountyLine, isYL, isMOBILE)
+  when 'MULTI_TWO'
+    result = "M/2" + powAbbrev(power,isCCE.nil?) + extras(isCCE, isOneDay, isCountyLine, isYL, isMOBILE)
   when 'MULTI_SINGLE'
     result = 'M/S' + powAbbrev(power,isCCE.nil?) + extras(isCCE, isOneDay, isCountyLine, isYL, isMOBILE)
   when 'MULTI_MULTI'
@@ -455,7 +459,7 @@ def abbrevType(opclass, power, isCCE=nil, isOneDay=nil, isCountyLine=nil, isYL=n
   when 'CHECKLOG'
     result = 'C'
   end
-  return AString.new(result, :align => :center)
+  return AString.new(result, align: :center)
 end
 
 def lookupOperatorList(db, callsign, id)
@@ -465,7 +469,7 @@ def lookupOperatorList(db, callsign, id)
     oplist << row[0]
   }
   if not oplist.empty?
-    callsign.addAttributes(:ops => oplist)
+    callsign.addAttributes(ops: oplist)
   end
   return callsign
 end
@@ -485,7 +489,7 @@ def createQSOSet(db, callsigns)
 end
 
 def checkFill
-  AString.new("-", :align => :right)
+  AString.new("-", align: :right)
 end
 
 def lookupRecord(recdb, mult, opclass, power)
@@ -498,6 +502,7 @@ def lookupRecord(recdb, mult, opclass, power)
 end
 
 def addRecord(recdb, mult, callsign, year, score, numQSOs, numMults, opclass, powclass)
+#  print "Adding new regional record for #{mult} #{opclass} #{powclass}\n"
   if recdb
     recdb.query("insert into Regional (mult_abbrev, station, year, score, qsos, multipliers, opclass, powclass) values (?, ?, ?, ?, ?, ?, ?, ?);",
                 [ mult, callsign, year, score, numQSOs, numMults, opclass, powclass ])
@@ -506,19 +511,32 @@ end
 
 def markAsRecord(regionName, row, opclass, powclass)
   if not row.empty?
-#    print "New record by #{row[0].to_s} for #{regionName} #{opclass} #{powclass}\n"
+    print "New record by #{row[0].to_s} for #{regionName} #{opclass} #{powclass}\n"
     row.each { |e| e.attributes[:color] = "ff0000" }
     row[0].attributes[:footnote] = "New record for #{abbrevType(opclass, powclass)} #{regionName}"
   end
 end
+
+def calculateStarts(start, widths)
+  result = [ start ]
+  widths.take(widths.size-1).each { |width|
+    start += width
+    result << start
+  }
+  result.freeze
+end
+
+STANDARD_WIDTHS=[235, 46, 46, 46, 31, 60, 90]
+STANDARD_WIDTHS.freeze
+STANDARD_STARTS = calculateStarts(0, STANDARD_WIDTHS)
+
 
 def addDXExtras(db, groups, contestID)
   if groups.length >= 1
     curGroup = groups[0]
   else
     curGroup = Group.new([hdrl(curName),hdr("CW"),hdr("PH"), hdr("Total"), hdr("Mult"), hdr("Score"), hdr("Type")],
-                         [0, 250, 290, 330, 370, 410, 470],
-                         [250, 40, 40, 40, 40, 60, 70])
+                         STANDARD_STARTS, STANDARD_WIDTHS)
     groups << curGroup
   end
   db.query("select distinct c.basecall from Checklog as chk, Callsign as c on chk.callID = c.id, Multiplier as m on m.id = chk.multiplierID where chk.contestID = ? and c.contestID = ? and m.abbrev = 'DX' order by c.basecall asc;",
@@ -541,15 +559,14 @@ def makeGroups(db, contestID, extraCon, recdb)
   groups = [ ]
   curName = nil
   curGroup = nil
-  db.query("select m.fullname, l.callsign, l.opclass, l.powclass, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.isCCE, l.isYL, l.isMOBILE, l.id, m.abbrev, l.isONEDAY, l.isCOUNTYLINE from Multiplier as m left outer join (Log as l join Scores as s on l.id = s.logID and  l.contestID = ?) on s.multID = m.id where #{extraCon} order by m.fullname asc, CASE l.opclass WHEN 'SINGLE' THEN 0 WHEN 'SINGLE_ASSISTED' THEN 0 WHEN 'MULTI_SINGLE' THEN 1 WHEN 'MULTI_MULTI' THEN 2  WHEN 'CHECKLOG' THEN 10 END asc, s.verified_score desc, l.callsign asc;", [contestID]) { |row|
+  db.query("select m.fullname, l.callsign, l.opclass, l.powclass, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.isCCE, l.isYL, l.isMOBILE, l.id, m.abbrev, l.isONEDAY, l.isCOUNTYLINE from Multiplier as m left outer join (Log as l join Scores as s on l.id = s.logID and  l.contestID = ?) on s.multID = m.id where #{extraCon} order by m.fullname asc, CASE l.opclass WHEN 'SINGLE' THEN 0 WHEN 'SINGLE_ASSISTED' THEN 0 WHEN 'MULTI_SINGLE' THEN 1 WHEN 'MULTI_TWO' THEN 2 WHEN 'MULTI_MULTI' THEN 3  WHEN 'CHECKLOG' THEN 10 END asc, s.verified_score desc, l.callsign asc;", [contestID]) { |row|
     if row[0] != curName or row[0].nil?
       if curGroup and curName
         addExtraChecklogs(db, curGroup, curName, contestID)
       end
       curName = row[0].to_s
       curGroup = Group.new([hdrl(curName),hdr("CW"),hdr("PH"), hdr("Total"), hdr("Mult"), hdr("Score"), hdr("Type")],
-                           [0, 250, 290, 330, 370, 410, 470],
-                           [250, 40, 40, 40, 40, 60, 70])
+                         STANDARD_STARTS, STANDARD_WIDTHS)
       groups << curGroup
     end
     if row[1]
@@ -607,7 +624,7 @@ def makeClubGroups(db, contestID, recdb)
           g.rows << [AString.new(c[0]), n(c[1]), n(c[2]) ]
         }
       else
-        g.rows << AString.new("No entries submitted in this category", :style => :italic)
+        g.rows << AString.new("No entries submitted in this category", style: :italic)
       end
       g.rows << AString.new("<color rgb=\"ff0000\"><sup>#{count}</sup>#{CLUB_FOOTNOTES[size]}</color>")
     }
@@ -620,8 +637,10 @@ def opmetric(str)
     return 0
   elsif str.start_with?("M/S")
     return 1
-  elsif str.start_with?("M/M")
+  elsif str.start_with?("M/2")
     return 2
+  elsif str.start_with?("M/M")
+    return 3
   elsif str.start_with?("C")
     return 10
   else
@@ -699,18 +718,18 @@ def makePDFReports(db, contestID, recdb)
   g = makeGroups(db, contestID, "m.isCA",recdb)
   pr.printGroups(g)
   pr.render("test_CA.pdf")
-  pr = ReportPDF.new($year.to_s + " California QSO Party\nUS Stations outside California")
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nUS Stations outside California", ReportPDF::NONCA_LEGEND)
   g = makeGroups(db, contestID, "(not m.isCA) and (m.entityID in (291,6,110)) and m.fullname != 'California'", recdb)
   pr.printGroups(g)
   pr.render("test_US.pdf")
-  pr = ReportPDF.new($year.to_s + " California QSO Party\nCanadian Stations")
+  pr = ReportPDF.new($year.to_s + " California QSO Party\nCanadian Stations", ReportPDF::NONCA_LEGEND)
   g = makeGroups(db, contestID, "(not m.isCA) and (m.entityID = 1)", recdb)
   pr.printGroups(g)
   pr.render("test_VE.pdf")
   g = makeGroups(db, contestID, "m.abbrev = 'DX'", recdb)
   addDXExtras(db, g, contestID)
   if g and not g.empty?
-    pr = ReportPDF.new($year.to_s + " California QSO Party\nDX Results")
+    pr = ReportPDF.new($year.to_s + " California QSO Party\nDX Results", ReportPDF::NONCA_LEGEND)
     g = repackageGroups(g)        # Sub divide DX by region
     pr.printGroups(g)
     pr.render("test_DX.pdf")
@@ -743,7 +762,7 @@ def adjustEntityName(name)
 end
 
 def certificateCSV(db, contestID, contestDB)
-  CSV.open("certificate_#{$year}.csv", "wb", :headers => true, :quote_char => "") { |csv|
+  CSV.open("certificate_#{$year}.csv", "wb", headers: true, quote_char: "") { |csv|
     csv << quoteStrings([ "Callsign", "Name", "Operator Calls", "Station Callsign", "CW QSOs", "PH QSOs", "Total QSOs", "Multipliers", "Score", "Operator Class", "Power", "QTH", "Type", "Country" ])
     db.query("select l.id, l.callsign, l.name, s.verified_cw, s.verified_ph, s.verified_mult, s.verified_score, l.opclass, l.powclass, m.fullname, m.entityID, m.isCA, e.name from Log as l, Scores as s on s.logID = l.id, Multiplier as m on m.id = s.multID, Entity as e on e.id = l.entityID where contestID = ? and l.opclass != 'CHECKLOG' order by l.callsign asc;",
              [ contestID ]) { |row|
@@ -832,7 +851,7 @@ end
 
 def loadCanadianLicenses(filename)
   callsigns=Hash.new
-  CSV.foreach(filename, :headers => true, :col_sep => ";", :encoding => "ISO8859-1", :quote_char => nil) { |row|
+  CSV.foreach(filename, headers: true, col_sep: ";", encoding: "ISO8859-1", quote_char: nil) { |row|
     callsigns[row[0]] = true
   }
   callsigns
@@ -840,7 +859,7 @@ end
 
 def validateCanadianCallsigns(db, contestID, contestDB, canadacsv)
   callsigns=Hash.new
-  CSV.foreach(canadacsv, :headers => true, :col_sep => ";", :encoding => "ISO8859-1", :quote_char => nil) { |row|
+  CSV.foreach(canadacsv, headers: true, col_sep: ";", encoding: "ISO8859-1", quote_char: nil) { |row|
     callsigns[row[0]] = true
   }
   loc = CallsignLocator.new

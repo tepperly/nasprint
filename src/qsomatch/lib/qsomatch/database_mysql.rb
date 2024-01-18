@@ -75,7 +75,7 @@ class DatabaseMysql
   def tables
     results = Array.new
     res = @db.query("show tables;")
-    res.each(:as => :array) { |row|
+    res.each(as: :array) { |row|
       results << row[0]
     }
     results
@@ -86,7 +86,7 @@ class DatabaseMysql
   end
 
   def query(queryStr, values = [ ])
-    res = @db.xquery(queryStr, values, :as => :array)
+    res = @db.xquery(queryStr, values, as: :array)
     if block_given?
       res.each { |row|
         yield row

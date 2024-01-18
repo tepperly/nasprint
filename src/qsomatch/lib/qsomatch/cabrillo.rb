@@ -705,7 +705,7 @@ class Cabrillo
 
   def parse
     @parsestate = 0
-    content = pretreat(File.read(@filename, :encoding => "US-ASCII"))
+    content = pretreat(File.read(@filename, encoding: "US-ASCII"))
     lines = mySplit(content, END_OF_RECORD)
     lines.each { |line|
       msg = processLine(line) 
