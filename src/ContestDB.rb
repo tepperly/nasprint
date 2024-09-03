@@ -85,17 +85,17 @@ class ContestDatabase
 
   def createHomophoneTable
     @db.query("create table if not exists Homophone (id integer primary key auto_increment, name1 varchar(#{CHARS_PER_NAME}), name2 varchar(#{CHARS_PER_NAME}), index n1ind (name1), index n2ind (name2));")
-    CSV.foreach(File.dirname(__FILE__) + "/homophones.csv", "r:ascii") { |row|
+    CSV.foreach(File.dirname(__FILE__) + "/" + "homophones.csv", "r:ascii") { |row|
       row.each { |i|
         row.each { |j|
           begin
             if not alreadyDefined?(@db.escape(i), @db.escape(j))
               @db.query("insert into Homophone (name1, name2) values (\"#{@db.escape(i)}\", \"#{@db.escape(j)}\");")
             end
-          rescue Mysql2::Error => e
-            if e.error_number != 1062 # ignore duplicate entry
-              raise e
-            end
+            rescue Mysql2::Error => e
+              if e.error_number != 1062 # ignore duplicate entry
+                raise e
+              end
           end
         }
       }

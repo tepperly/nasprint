@@ -1,4 +1,4 @@
-#!/usr/local/bin/ruby
+ #!/usr/local/bin/ruby
 # -*- encoding: utf-8 -*-
 # Parse a NA Sprint pseudo-Cabrillo
 # By Tom Epperly
@@ -7,8 +7,8 @@
 require 'csv'
 require 'time'
 
-CONTEST_START=Time.utc(2021,4,4,0,0)
-CONTEST_END=Time.utc(2021,4,4,4,0)
+CONTEST_START=Time.utc(2024,03,24,0,0)
+CONTEST_END=Time.utc(2024,03,24,4,0)
 
 def mySplit(str, pattern)
   result = [ ]
@@ -475,6 +475,12 @@ class Cabrillo
     #   end
     when /\Ax(-[a-z]+)+:.*/i
       @x_lines << line          # ignore and save
+    when /hq-date-received:\s*(.*)/i
+      @x_lines << line          # ignore and save
+    when /hq-confirmation:\s*(.*)/i
+      @x_lines << line          # ignore and save
+    when /grid-locator:\s*(.*)/i
+      @x_lines << line          # ignore and save
     when /\Asoapbox:\s*(.*)/i
       trans(1, 1)
       @soapbox << $1.strip
@@ -792,7 +798,7 @@ NAME: #{@name}
   def processOverlay(str)
     str.split.each { |tok|
       case tok
-      when 'CLASSIC','EXPERT','OVER-50', 'ROOKIE','TB-WIRES', 'GENERAL', 'FIXED', 'STATION'
+      when 'CLASSIC','EXPERT','OVER-50', 'ROOKIE','TB-WIRES', 'GENERAL', 'FIXED', 'STATION', 'YOUTH'
       when 'SINGLE-OP'
         @logCat.numop = :single
       end

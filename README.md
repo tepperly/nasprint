@@ -61,8 +61,9 @@ issues that need to be fixed or more logs arrive.
 7. Once we've got all the logs and you've come to terms with the toxic logs, it's time to load
    in the team information.  Generally, someone from the SSB Sprint committee will be able to send
    you a `team-registration-2017-02-05.csv` file or something
-   similar. It's a 13 column comma separated value file. Column 1 is
-   the team name. Column 2 is the number of members. The next ten
+   similar. It's a 15 column comma separated value file. Column 1 is the manager's
+   call and column c in the manager's email.  Column 3 is
+   the team name. Column 4 is the number of members. The next ten
    columns are two per team member. The first is the team operator's
    callsign, and the second is the callsign used. The last column is
    the date and time the team was registered.  The command to load
