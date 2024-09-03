@@ -52,6 +52,7 @@ def addMember(cdb, cid, name, tid, call1, call2)
   end
 end
 
+errorCalls = [ ]
 if $name and $year
   db = makeDB
   cdb = ContestDatabase.new(db)
@@ -79,8 +80,8 @@ if $name and $year
               begin
                 addMember(cdb, contestID, row[2], tid, call1, call2)
               rescue Mysql2::Error => e
-                print "Exception addding #{call1}/#{call2} to team #{row[2]}\n"
-                raise e
+                print "Trouble addding station #{call1}/#{call2} to team #{row[2]}\n"
+                errorCalls << "#{call1}/#{call2}"
               end
             end
           }
@@ -89,4 +90,9 @@ if $name and $year
       }
     }
   }
+end
+if not errorCalls.empty?
+  STDERR.puts("Teams stations that had errors: " + errorCalls.join(" ") + "\n")
+  STDERR.puts("#{errorCalls.length} errors\n")
+  exit 2
 end
