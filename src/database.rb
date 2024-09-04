@@ -8,6 +8,6 @@ require 'mysql2'
 
 def makeDB
   return Mysql2::Client.new(:host => "localhost",
-                            :username => "userid", :password => "password",
-                            :database => "NASprint")
+                            :username => "nasprint", :password => "NASpRiNtpwd",
+                            :database => "NASprint2")
 end

@@ -34,7 +34,7 @@ class CalcTimeAdj
       numrows = row[0]
     }
     if numrows and numrows > 0
-      open("/tmp/calcadj.py","w") { |out|
+      open("/tmp/calcadjthm.py","w") { |out|
         numrows = numrows + @numvars
         out.write("#!/usr/bin/env python\nimport numpy\nimport numpy.linalg\nA = numpy.zeros((#{numrows}, #{@numvars}))\nb = numpy.zeros((#{numrows},))\n")
         res = @db.query("select q1.logID, q1.time, q2.logID, q2.time from QSO as q1, QSO as q2 where q1.logID in (#{@idtovar.keys.join(", ")}) and q2.logID in (#{@idtovar.keys.join(", ")}) and q1.matchID is not null and q1.matchID = q2.id and q1.id < q2.id;")
@@ -49,12 +49,12 @@ class CalcTimeAdj
           out.write("b[#{rowcount}] = 0\n")
           rowcount = rowcount + 1
         }
-        out.write("adj, residuals, rank, s = numpy.linalg.lstsq(A,b,rcond=None)\n")
-        out.write("for i in xrange(#{@numvars}):\n")
-        out.write("  print adj[i]")
-        out.write("# done")
+        out.write("adj, residuals, rank, s = numpy.linalg.lstsq(A,b)\n")
+        out.write("for i in range(#{@numvars}):\n")
+        out.write("  print (adj[i])")
+        out.write("# done ")
       }
-      IO.popen("python /tmp/calcadj.py") { |res|
+      IO.popen("python3 /tmp/calcadjthm.py") { |res|
         rowcount = 0
         res.each { |line|
           @db.query("update Log set clockadj = #{line.to_f} where id = #{@vartoid[rowcount]} limit 1;")

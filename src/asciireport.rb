@@ -168,7 +168,7 @@ end
 
 def writeCertificateCSV(db, contestID)
   CSV.open("certificate.csv", "w") { |csvout|
-    res = db.query("select *, IF(classRank = 1,'A',IF(MultiplierRank = 1,'B',IF(verifiedscore > 1200,'C',''))) as CertStyle FROM (select email, callsign, trim(name) as name, opclass, 'UNUSED' as Unused, abbrev, DENSE_RANK() OVER (PARTITION BY opclass ORDER BY verifiedscore DESC) as classRank, DENSE_RANK() OVER (PARTITION BY multiplierId, opclass ORDER BY verifiedscore DESC) as MultiplierRank, verifiedQSOs, verifiedMultipliers, verifiedscore FROM (Log left outer join Multiplier on Log.multiplierID = Multiplier.id) where contestID = 8 ORDER by opclass DESC, verifiedscore DESC) xx;")
+    res = db.query("select *, IF(classRank < 11,'A',IF(MultiplierRank = 1,'B',IF(verifiedscore > 1200,'C',''))) as CertStyle, IF(verifiedscore < 1500, 0, RAND()) as DoorPrize FROM (select email, callsign, trim(name) as name, opclass, 'UNUSED' as Unused, abbrev, DENSE_RANK() OVER (PARTITION BY opclass ORDER BY verifiedscore DESC) as classRank, DENSE_RANK() OVER (PARTITION BY multiplierId, opclass ORDER BY verifiedscore DESC) as MultiplierRank, verifiedQSOs, verifiedMultipliers, verifiedscore FROM (Log left outer join Multiplier on Log.multiplierID = Multiplier.id) where contestID = #{contestID} ORDER by opclass DESC, verifiedscore DESC) xx;")
     res.each(:as => :array) { |row|
       csvout << row
     }

@@ -403,7 +403,8 @@ class CrossMatch
       if str == "TimeShiftFull"
         return "Full", num1 + 1, num2
       else
-        return "Partial", num1, num2 + 1
+        return "Full", num1, num2 + 1
+# per KW8N        return "Partial", num1, num2 + 1
       end
   end
   
@@ -418,7 +419,8 @@ class CrossMatch
       @db.query("update QSO set matchType='#{oneType}' where id = #{row[0].to_i} limit 1;")
       @db.query("update QSO set matchType='#{twoType}' where id = #{row[2].to_i} limit 1;")
     }
-    @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and logID in #{logSet};")
+    @db.query("update QSO set matchType='Full' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and logID in #{logSet};")
+    # per KW8N @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and logID in #{logSet};")
     num2 = num2 + @db.affected_rows
     return num1, num2
   end
