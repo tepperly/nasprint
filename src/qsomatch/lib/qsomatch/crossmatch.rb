@@ -520,18 +520,23 @@ class CrossMatch
     }
     @db.query("create temporary table NearMatches (c1ID integer not null, c2ID integer not null, mode char(2) not null);")
     @db.query("create index clind on NearMatches(c1ID, c2ID);")
-    logCalls.keys.each { |call1|
-      logCalls.keys.each { |call2|
-        if call1 != call2
-          if QSO.phJaroWinkler(call1,call2) >= 0.9
-            @db.query("insert into NearMatches (c1ID, c2ID, mode) values (?, ?, 'PH');", [ logCalls[call1], logCalls[call2] ])
+    begin
+      @db.begin_transaction
+      logCalls.keys.each { |call1|
+        logCalls.keys.each { |call2|
+          if call1 != call2
+            if QSO.phJaroWinkler(call1,call2) >= 0.9
+              @db.query("insert into NearMatches (c1ID, c2ID, mode) values (?, ?, 'PH');", [ logCalls[call1], logCalls[call2] ])
+            end
+            if QSO.cwJaroWinkler(call1,call2) >= 0.9
+              @db.query("insert into NearMatches (c1ID, c2ID, mode) values (?, ?, 'CW');", [ logCalls[call1], logCalls[call2] ])
+            end
           end
-          if QSO.cwJaroWinkler(call1,call2) >= 0.9
-            @db.query("insert into NearMatches (c1ID, c2ID, mode) values (?, ?, 'CW');", [ logCalls[call1], logCalls[call2] ])
-          end
-        end
+        }
       }
-    }
+    ensure
+      @db.end_transaction
+    end
     @db.query("select count(*) from NearMatches;") { |row|
       print "There are #{logCalls.length} callsigns and #{row[0].to_s} pairs of callsigns that are near matches\n"
     }
@@ -544,11 +549,10 @@ class CrossMatch
     queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 join NearMatches as nm" +
       " on (" + exchangeNearCallMatch("q2.recvd", "q1.sent") + " and " +
       "q1.fixedMode = nm.mode and q2.fixedMode = nm.mode and " +
-      modeBandMatch("q1", "q2", modeAndBand)  +
+      modeBandMatch("q1", "q2", modeAndBand)  + " and " +  exchangeExactMatch("q1.recvd", "q2.sent") +
       "), Log as l1, Log as l2 where " +
       "l1.id = q1.logID and l2.id = q2.logID and " +
       nearCallMultMatch("q2.recvd", "q1.sent") + " and " +
-      exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
       @logs.membertest("q1.logID") + " and " +
       @logs.membertest("q2.logID") + " and " +
       "q1.logID != q2.logID and "  +

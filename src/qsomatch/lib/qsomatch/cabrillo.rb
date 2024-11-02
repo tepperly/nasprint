@@ -8,8 +8,8 @@ require 'csv'
 require 'time'
 require 'set'
 
-CONTEST_START=Time.utc(2023,10,7,16, 00)
-CONTEST_END=Time.utc(2023,10,8,22,00)
+CONTEST_START=Time.utc(2024,10,5,16, 00)
+CONTEST_END=Time.utc(2024,10,6,22,00)
 
 def mySplit(str, pattern)
   result = [ ]
@@ -53,7 +53,11 @@ class Exchange
       v = value.strip
       @leadingZero = v.start_with?("0")
     end
-    @serial = value.to_i
+    if (value.instance_of?(String) and value.empty?)
+      @serial = nil
+    else
+      @serial = value.to_i
+    end
   end
 end
 
@@ -291,8 +295,8 @@ class Cabrillo
     if MULTIPLIER_ALIASES[tmp]
       return  MULTIPLIER_ALIASES[tmp]
     else
-      @badmults << tmp
-      return tmp
+      @badmults << tmp.to_s
+      return tmp.empty? ? nil : tmp
     end
   end
 
@@ -592,6 +596,30 @@ class Cabrillo
     when /\Asoapbox:\s*(.*)\Z/i
       trans(1, 1)
       @soapbox << $1.strip
+    when /\A\s*(x-)?qso: *\|/i # xcbr line
+      fields = (line+ " ").split("|").map { |str| str.strip.upcase }
+      if ([11,12].include?(fields.length))
+        qso = startQSO(fields[1], fields[2], fields[3], fields[4], fields[5])
+        qso.sentExch.serial = fields[6]
+        qso.sentExch.origqth = fields[7]
+        qso.sentExch.qth = normalizeMult(fields[7])
+        if qso.sentExch.qth and not @logCat.sentQTH
+          @logCat.sentQTH = qso.sentExch.qth
+        end
+        if not qso.sentExch.qth or qso.sentExch.qth == "CA"
+          @badSentMults << qso.sentExch.qth
+        end
+        qso.recdExch.callsign = fields[8]
+        qso.recdExch.serial = fields[9]
+        qso.recdExch.origqth = fields[10]
+        qso.recdExch.qth = normalizeMult(fields[10])
+        if fields.length == 12
+          qso.transceiver = fields[11].to_i
+        end
+        @qsos << qso
+      else
+        return "Wrong number of fields, #{fields.length}, in xcbr file\n"
+      end
     when /\Aqso: +(\d+) +([a-z]{2,3}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+)( +(\d+) *| *)(\{GP(.*)GP\})?$/i
       qso = startQSO($1, $2, $3, $4, $5)
       qso.sentExch.serial = $8

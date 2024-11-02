@@ -134,7 +134,7 @@ class CalcTimeAdj
     if numrows and numrows > 0
       open("/tmp/calcadj.py","w") { |out|
         numrows = numrows + @numvars
-        out.write("#!/usr/bin/env python\nimport numpy\nimport numpy.linalg\nA = numpy.zeros((#{numrows}, #{@numvars}))\nb = numpy.zeros((#{numrows},))\n")
+        out.write("#!/usr/bin/env python3\nimport numpy\nimport numpy.linalg\nA = numpy.zeros((#{numrows}, #{@numvars}))\nb = numpy.zeros((#{numrows},))\n")
         rowcount = 0
         @db.query("select q1.logID, q1.time, q2.logID, q2.time from QSO as q1, QSO as q2 where #{logs.membertest("q1.logID")} and #{logs.membertest("q2.logID")} and q1.matchID is not null and q1.matchID = q2.id and q1.id < q2.id;") { |row|
           out.write("A[#{rowcount},#{@idtovar[row[0]]}] = 1\nA[#{rowcount},#{@idtovar[row[2]]}] = -1\n")
@@ -157,7 +157,7 @@ class CalcTimeAdj
         out.write("  print adj[i]\n")
         out.write("pass\n# done\n")
       }
-      IO.popen("python /tmp/calcadj.py") { |res|
+      IO.popen("python3 /tmp/calcadj.py") { |res|
         rowcount = 0
         begin
           @db.begin_transaction

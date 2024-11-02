@@ -281,6 +281,7 @@ class ContestDatabase
     @db.query("create index if not exists sent_multind on QSO (sent_multiplierID);") { }
     @db.query("create index if not exists recvd_multind on QSO (recvd_multiplierID);") { }
     @db.query("create index if not exists judged_ind on QSO (judged_multiplierID);") { }
+    @db.query("create index if not exists judged_call_ind on QSO (judged_recvdID);") { }
     @db.query("create index if not exists sent_callind on QSO (sent_callID);") { }
     @db.query("create index if not exists recvd_callind on QSO (recvd_callID);") { }
     @db.query("create table if not exists QSOExtra (id integer primary key #{@db.autoincrement}, logID integer not null, mode char(6), transmitterNum integer, comment varchar(256), " +

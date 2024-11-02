@@ -22,8 +22,9 @@ class DatabaseSQLite
     @db = SQLite3::Database.new(opts["filename"])
     @db.busy_timeout(1500)
     @db.execute("PRAGMA journal_mode=WAL;") { }
-    @db.execute("PRAGMA cache_size = -8000;") { }
+    @db.execute("PRAGMA cache_size = -128000;") { }
     @db.execute("PRAGMA synchronous = NORMAL;") { }
+    @db.execute("PRAGMA temp_store = memory;") { }
     if $verbose
       @db.trace { |sql|
         print "SQLite3 Statement #{Time.now.to_s} (#{@in_transaction ? 1 : 0}): #{sql}\n"
