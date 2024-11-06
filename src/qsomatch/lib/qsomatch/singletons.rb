@@ -266,7 +266,7 @@ class ResolveSingletons
       end
       @db.query("update QSO set matchType = 'Dupe', score=0 where id in (" +
                 qsos.map { |i| i[0] }.join(", ") +
-                ");")
+                ");") { }
       ar = @db.affected_rows
       print "Rows affected: #{ar}\n"
       return ar

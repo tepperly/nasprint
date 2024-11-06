@@ -156,7 +156,12 @@ def loadFiles(args, cdb, contestID, ctl, db)
     catout = nil
     if $catcheck
       catout = open("category_check.csv", "w:ascii")
-      catout.write('"Callsign","Cab Power","Cab Class","Web Power","Web Class","Power","Class"' + "\n")
+      catout.write('"Callsign","Cab Power","Cab Class","Cab # Ops","Web Power","Web Class", "3830 Power", "3830 Class","Power","Class"' + "\n")
+      if File.exist?("opclass3830.yml")
+        thirtyEightThirty = YAML.safe_load_file("opclass3830.yml")
+      else
+        thirtyEightThirty = Hash.new
+      end
     end
     args.each { |filename|
       begin
@@ -199,13 +204,17 @@ def loadFiles(args, cdb, contestID, ctl, db)
           end
         end
         if $catcheck
-          if cab.conflicted?
+          outsideInfo = ((thirtyEightThirty and thirtyEightThirty.has_key?(cab.logCall))  ? thirtyEightThirty[cab.logCall] : nil)
+          if cab.conflicted? or (outsideInfo and ((outsideInfo["power"] != cab.logPower) or (outsideInfo["class"] != cab.cqpOpClass)))
             catout.write( '"' + cab.logCall + '","' +
               ((not cab.logCat.power.nil?) ? cab.logCat.power.to_s.upcase :
                cab.dbCat.power.to_s.upcase) + '","' +
               ((not cab.logCat.numop.nil?) ? cab.classFromCat(cab.logCat) :
-               cab.classFromCat(cab.dbCat)) + '","' +
+                 cab.classFromCat(cab.dbCat)) + '",' +
+                          (cab.numOperators ? cab.numOperators.to_s :  "\"empty\"" ) + ',"' +
               cab.logPower + '","' + cab.cqpOpClass + '","' +
+                          (outsideInfo ? outsideInfo["power"] : "") + '","' +
+                          (outsideInfo ? outsideInfo["class"] : "") + '","' +
                           cab.logPower + '","' + cab.cqpOpClass + "\",\"" +
                           cab.logEmail.to_s + "\"\n")
           end
@@ -284,7 +293,7 @@ def checkCallsigns(db, cid, user, pwd)
     if row[1].length > 3 or validOneByOnes.useQRZ?
       if xmldb.has_key?(row[1]) 
         db.query("update Callsign set validcall = ? where id = ?;",
-                 [(xmldb[row[1]] ? 1 : 0), row[0].to_i])
+                 [(xmldb[row[1]] ? 1 : 0), row[0].to_i]) { }
       else
         ent = locator.lookup(row[1])
         if ent
@@ -293,20 +302,20 @@ def checkCallsigns(db, cid, user, pwd)
               if fcc.validHFLicense?(row[1])
                 lookupCall(qrz, xmldb, row[1])
                 db.query("update Callsign set validcall = 1 where id = ?;",
-                         [row[0].to_i])
+                         [row[0].to_i]) { }
               else
                 print "US callsign is not valid: #{row[1]}\n"
-                db.query("update Callsign set validcall = #{db.false}, illegalcall=#{db.true} where id = ?;", [row[0].to_i])
+                db.query("update Callsign set validcall = #{db.false}, illegalcall=#{db.true} where id = ?;", [row[0].to_i]) { }
               end
             else
               # no FCC database available use QRZ
               if lookupCall(qrz, xmldb, row[1])
                 db.query("update Callsign set validcall = 1 where id = ?;",
-                         [row[0].to_i])
+                         [row[0].to_i]) { }
               else
                 print "US callsign is not known to QRZ: #{row[1]}\n"
                 db.query("update Callsign set validcall = 0 where id = ?;",
-                         [row[0].to_i])
+                         [row[0].to_i]) { }
               end
             end
           elsif ent.canadian?
@@ -314,48 +323,48 @@ def checkCallsigns(db, cid, user, pwd)
               if canada.has_key?(row[1])
                 # known Canadian license from file
                 db.query("update Callsign set validcall = 1 where id = ?;",
-                         [row[0].to_i])
+                         [row[0].to_i]) { }
               else
                 print "Canadian callsign #{row[1]} is not licensed\n"
                 db.query("update Callsign set validcall = 0, illegalcall=1 where id = ?;",
-                         [row[0].to_i])
+                         [row[0].to_i]) { }
               end
             else
               if lookupCall(qrz, xmldb, row[1]) or ent.dx?
                 db.query("update Callsign set validcall = 1 where id = ?;",
-                         [row[0].to_i])
+                         [row[0].to_i]) { }
               else
                 print "Callsign #{row[1]} is not known to QRZ\n"
                 db.query("update Callsign set validcall = 0 where id = ?;",
-                         [row[0].to_i])
+                         [row[0].to_i]) { }
               end
             end
           else
             if lookupCall(qrz, xmldb, row[1]) or ent.dx?
               # QRZ is not a reliable authority for DX
               db.query("update Callsign set validcall = 1 where id = ?;",
-                       [row[0].to_i])
+                       [row[0].to_i]) { }
             end
           end   
         else
           if lookupCall(qrz, xmldb, row[1])
             # QRZ is not a reliable authority for DX
             db.query("update Callsign set validcall = 1 where id = ?;",
-                     [row[0].to_i])
+                     [row[0].to_i]) { }
           else
             print "Callsign #{row[1]} is unknown to QRZ and entity can't be determined.\n"
             db.query("update Callsign set validcall = #{db.false}, illegalcall=#{db.true} where id = ?;",
-                     [row[0].to_i])
+                     [row[0].to_i]) { }
           end
         end
       end
     else
       if validOneByOnes.include?(row[1])
         db.query("update Callsign set validcall = 1 where id = ?;",
-                 [row[0].to_i]);
+                 [row[0].to_i]) { }
       else
         db.query("update Callsign set validcall = 0 where id = ?;",
-                 [row[0].to_i]);
+                 [row[0].to_i]) { }
       end
     end
   }
@@ -363,7 +372,7 @@ def checkCallsigns(db, cid, user, pwd)
     list = JSON.parse(File.read("illegalcalls.json"))
     list.each { |callsign|
       db.query("update Callsign set validcall = 0, illegalcall = 1 where basecall= ?;",
-               [ callsign ])
+               [ callsign ]) { }
     }
   else
     $stderr.write("Missing illegalcalls.json\n")
@@ -505,7 +514,7 @@ def addRecord(recdb, mult, callsign, year, score, numQSOs, numMults, opclass, po
 #  print "Adding new regional record for #{mult} #{opclass} #{powclass}\n"
   if recdb
     recdb.query("insert into Regional (mult_abbrev, station, year, score, qsos, multipliers, opclass, powclass) values (?, ?, ?, ?, ?, ?, ?, ?);",
-                [ mult, callsign, year, score, numQSOs, numMults, opclass, powclass ])
+                [ mult, callsign, year, score, numQSOs, numMults, opclass, powclass ]) { }
   end
 end
 

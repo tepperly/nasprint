@@ -153,7 +153,7 @@ class DatabaseSQLite
 
   def query(queryStr, values = [ ])
     if block_given?
-      stmt = @db.prepare(queryStr)
+#      stmt = @db.prepare(queryStr)
       @db.execute(queryStr, values) { |row|
         yield row
       }
@@ -164,7 +164,8 @@ class DatabaseSQLite
   end
 
   def close
-    @db.execute("PRAGMA optimize;") { } unless @db.closed?
+    @db.execute("vacuum;")   unless @db.closed?
+    @db.execute("PRAGMA optimize;") unless @db.closed?
     @db.close
   end
 end

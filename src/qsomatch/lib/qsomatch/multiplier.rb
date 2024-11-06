@@ -345,7 +345,7 @@ class Multiplier
         end
       else
         multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=? and q.recvd_multiplierID=m.id and q.matchType in ('Bye','None') and q.judged_multiplierID is null group by m.id;",
-                            [callID])
+                            [callID]) {}
         if multres.count > 1
           count = count + resolveAmbiguous(callID, multres, baseCallsign)
         else

@@ -150,11 +150,11 @@ class OperatorClass
     return ((@assisted.nil? or other.assisted.nil? or
             (@assisted == other.assisted)) and
             (@numop.nil? or other.numop.nil? or
-              (@numop == other.numop)) and
+             (@numop == other.numop)) and
             (@power.nil? or other.power.nil? or
-              (@power == other.power)) and
+             (@power == other.power)) and
             (@numtrans.nil? or other.numtrans.nil? or
-              (@numtrans == other.numtrans)))
+             (@numtrans == other.numtrans)))
   end
 
   def conflicted?(other)
@@ -286,8 +286,20 @@ class Cabrillo
     return @dbSpecialCategories.include?(str)
   end
 
+  def numOperators
+    ops = self.opList
+    if ops
+      return (ops.select {|callsign|  not callsign.strip.start_with?("@") }).length
+    end
+    return nil
+  end
+
   def conflicted?
-    return @dbCat.conflicted?(@logCat)
+    opCount = self.numOperators
+    isSingleOp = (:single == @dbCat.numop)
+    isMultiOp = (:multi == @dbCat.numop)
+    return (@dbCat.conflicted?(@logCat) or
+            (opCount and ((isSingleOp and (opCount != 1)) or (isMultiOp and (opCount < 2)))))
   end
 
   def normalizeMult(str)

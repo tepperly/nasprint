@@ -251,7 +251,7 @@ class CrossMatch
     if not quiet
       print "linkQSOs #{match1} #{match2}\n"
     end
-    @db.query(queryStr).each { |row|
+    @db.query(queryStr) { |row|
       begin
         @db.begin_transaction
         found = false
@@ -347,7 +347,7 @@ class CrossMatch
       if qsoData.has_key?("judged_mode")
         if ALLOWED_MODES.include?(qsoData["judged_mode"])
           @db.query("update QSO set judged_mode = ? where id = ?;",
-                    [ qsoData["judged_mode"], qID ])
+                    [ qsoData["judged_mode"], qID ]) { }
         else
           print "Override mode is unallowed " + qsoData["judged_mode"] + "\n"
         end
@@ -355,7 +355,7 @@ class CrossMatch
       if qsoData.has_key?("judged_band")
         if ALLOWED_BANDS.include?(qsoData["judged_band"])
           @db.query("update QSO set judged_band = ? where id = ?;",
-                    [ qsoData["judged_band"], qID ])
+                    [ qsoData["judged_band"], qID ]) { }
         else
           print "Override band is unallowed " + qsoData["judged_band"] + "\n"
         end
@@ -461,7 +461,9 @@ class CrossMatch
       exchangeMatch("q2.recvd", "q1.sent") + " and " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
       qsoMatch("q1", "q2", "l1", "l2", timediff) +
-      " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
+               " order by (coalesce(q1.recvd_multiplierID,-1) = q2.sent_multiplierID) desc, " +
+               " (coalesce(q2.recvd_multiplierID,-1) = q1.sent_multiplierID) desc, " +
+      "(abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(" +
       @db.adjtimediff("MINUTE", "q1.time", "l1.clockadj",
                       "q2.time", "l2.clockadj") + ") asc;"
@@ -494,7 +496,9 @@ class CrossMatch
       " q1.logID != q2.logID " +
       " and " + qsoMatch("q1", "q2", "l1", "l2", timediff) + " and " +
       exchangeMatch("q1.recvd", "q2.sent") +
-      " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
+      " order by (coalesce(q1.recvd_multiplierID,-1) = q2.sent_multiplierID) desc, " +
+               " (coalesce(q2.recvd_multiplierID,-1) = q1.sent_multiplierID) desc, " +
+               "(abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(" +
       @db.adjtimediff("MINUTE", "q1.time", "l1.clockadj",
                       "q2.time", "l2.clockadj") + ") asc;"
@@ -518,18 +522,18 @@ class CrossMatch
               @logs.membertest("l.id") + " and q.matchID is null group by c.id having unresolved > 0 order by c.basecall asc;") { |row|
       logCalls[row[1]] = row[0].to_i
     }
-    @db.query("create temporary table NearMatches (c1ID integer not null, c2ID integer not null, mode char(2) not null);")
-    @db.query("create index clind on NearMatches(c1ID, c2ID);")
+    @db.query("create temporary table NearMatches (c1ID integer not null, c2ID integer not null, mode char(2) not null);") { }
+    @db.query("create index clind on NearMatches(c1ID, c2ID);") { }
     begin
       @db.begin_transaction
       logCalls.keys.each { |call1|
         logCalls.keys.each { |call2|
           if call1 != call2
             if QSO.phJaroWinkler(call1,call2) >= 0.9
-              @db.query("insert into NearMatches (c1ID, c2ID, mode) values (?, ?, 'PH');", [ logCalls[call1], logCalls[call2] ])
+              @db.query("insert into NearMatches (c1ID, c2ID, mode) values (?, ?, 'PH');", [ logCalls[call1], logCalls[call2] ]) { }
             end
             if QSO.cwJaroWinkler(call1,call2) >= 0.9
-              @db.query("insert into NearMatches (c1ID, c2ID, mode) values (?, ?, 'CW');", [ logCalls[call1], logCalls[call2] ])
+              @db.query("insert into NearMatches (c1ID, c2ID, mode) values (?, ?, 'CW');", [ logCalls[call1], logCalls[call2] ]) { }
             end
           end
         }
@@ -560,7 +564,9 @@ class CrossMatch
       exchangeMatch("q2.recvd", "q1.sent") + " and " +
       notMatched("q1") + " and " + notMatched("q2") + " and " +
       qsoMatch("q1", "q2", "l1", "l2", timediff) +
-      " order by (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
+      " order by (coalesce(q1.recvd_multiplierID,-1) = q2.sent_multiplierID) desc, " +
+               " (coalesce(q2.recvd_multiplierID,-1) = q1.sent_multiplierID) desc, " +
+               "(abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
       ", abs(" +
       @db.adjtimediff("MINUTE", "q1.time", "l1.clockadj",
                       "q2.time", "l2.clockadj") + ") asc;"
@@ -599,14 +605,14 @@ class CrossMatch
     @db.query(queryStr, [@contestID, @contestID])  { |row|
       oneType, num1, num2 = chooseType(row[1], num1, num2)
       twoType, num1, num2 = chooseType(row[3], num1, num2)
-      @db.query("update QSO set matchType=? where id = ?;", [oneType, row[0].to_i])
-      @db.query("update QSO set matchType=? where id = ?;", [twoType, row[2].to_i])
+      @db.query("update QSO set matchType=? where id = ?;", [oneType, row[0].to_i]) { }
+      @db.query("update QSO set matchType=? where id = ?;", [twoType, row[2].to_i]) { }
     }
     @db.query("select q1.id, q1.matchType, q2.id from QSO as q1, QSO as q2, Log as l1, Log as l2 where q1.matchType = 'TimeShiftFull' and q1.matchID = q2.id and q1.id = q2.matchID and q2.matchType in ('TimeShiftFull', 'TimeShiftPartial') and l1.id = q1.logID and l2.id = q2.logID and l1.contestID = ? and l2.contestID = ? and l1.trustedclock and not l2.trustedclock order by q1.id asc;", [@contestID, @contestID]) { |row|
       oneType, num1, num2 = chooseType(row[1], num1, num2)
       twoType, num1, num2 = chooseType('TimeShiftPartial', num1, num2)
-      @db.query("update QSO set matchType=? where id = ?;", [oneType, row[0].to_i])
-      @db.query("update QSO set matchType=? where id = ?;", [twoType, row[2].to_i])
+      @db.query("update QSO set matchType=? where id = ?;", [oneType, row[0].to_i]) { }
+      @db.query("update QSO set matchType=? where id = ?;", [twoType, row[2].to_i]) { }
     }
     @db.query("update QSO set matchType='Partial' where matchType in ('TimeShiftFull', 'TimeShiftPartial') and " +
               @logs.membertest("logID") + ";") { }
@@ -787,7 +793,9 @@ class CrossMatch
       " and " + qsoMatch("q1", "q2", "l1", "l2", timediff) + " and " +
       modeBandMatch("q1", "q2", modeAndBand) + " and " +
       " q1.sent_callID = q2.recvd_callID and q2.sent_callID = q1.recvd_callID " +
-      " order by abs(" +
+      " order by (coalesce(q1.recvd_multiplierID,-1) = q2.sent_multiplierID) desc, " +
+               " (coalesce(q2.recvd_multiplierID,-1) = q1.sent_multiplierID) desc, " +
+               "abs(" +
       @db.adjtimediff("MINUTE", "q1.time", "l1.clockadj",
                       "q2.time", "l2.clockadj") + ") asc, " +
       " (abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc;"
@@ -1144,7 +1152,7 @@ class CrossMatch
     begin
       @db.begin_transaction
       # every log starts out as trusted
-      @db.query("update Log set trustedclock = #{@db.true} where #{@logs.membertest('id')};")
+      @db.query("update Log set trustedclock = #{@db.true} where #{@logs.membertest('id')};") { }
       done = false
       while (not done)
         done = true
@@ -1259,12 +1267,12 @@ class CrossMatch
         end
         if (notMatch == 0 and row[7] != "Full")
           @db.query("update QSO set matchType='Full' where id = ?;",
-                    [ row[0] ])
+                    [ row[0] ]) { }
         end
         if (notMatch != 0 and row[7] == "Full")
           print "QSO ID #{row[0]} is a #{row[7]} match with #{notMatch} mismatches #{comment}\n"
           @db.query("update QSO set matchType='Partial' where id = ?;",
-                    [ row[0] ])
+                    [ row[0] ]) { }
         end
         case notMatch
         when 0
@@ -1275,12 +1283,12 @@ class CrossMatch
           score = 0
         end
         @db.query("update QSO set score = ? where id = ?;",
-                  [ score, row[0]])
+                  [ score, row[0]]) { }
       }
-      @db.query("update QSO set score = 2 where #{@logs.membertest("logID")} and matchType = 'Bye' and score is null;")
-      @db.query("update QSO set score = 1 where #{@logs.membertest("logID")} and matchType='PartialBye' and score is null;")
-      @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType in ('None', 'Unique', 'Dupe', 'OutsideContest', 'Removed');")
-      @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType = 'NIL';")
+      @db.query("update QSO set score = 2 where #{@logs.membertest("logID")} and matchType = 'Bye' and score is null;") { }
+      @db.query("update QSO set score = 1 where #{@logs.membertest("logID")} and matchType='PartialBye' and score is null;") { }
+      @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType in ('None', 'Unique', 'Dupe', 'OutsideContest', 'Removed');") { }
+      @db.query("update QSO set score = 0 where #{@logs.membertest("logID")} and matchType = 'NIL';") { }
     ensure
       @db.end_transaction
     end
