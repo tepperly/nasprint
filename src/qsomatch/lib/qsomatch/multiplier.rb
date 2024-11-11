@@ -345,7 +345,7 @@ class Multiplier
         end
       else
         multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=? and q.recvd_multiplierID=m.id and q.matchType in ('Bye','None') and q.judged_multiplierID is null group by m.id;",
-                            [callID]) {}
+                            [callID])
         if multres.count > 1
           count = count + resolveAmbiguous(callID, multres, baseCallsign)
         else
@@ -443,7 +443,7 @@ class Multiplier
 
   def rareMultReport(numCA=7, numNonCA=7)
     open("rare_mult_report.csv", "w") { |csvout|
-      csv = CSV.new(csvout)
+      csv = CSV.new(csvout, row_sep:"\n")
       if (numCA > 0)
         topFiveCA = rarestMults(numCA, true)
         csv << [ "Top " + numCA.humanize.capitalize + " Rarest CA Multipliers" ]

@@ -4,6 +4,7 @@
 require 'set'
 require 'csv'
 require 'date'
+require 'humanize'
 require_relative 'logset'
 require_relative 'operatingtime'
 require_relative 'overrides'
@@ -86,7 +87,7 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
   attr_reader :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
     :numOutsideContest, :numClaimed, :numD1, :numD2, :claimedMults,
     :greenPH, :greenCW, :greenChecked,:call,:qth, :clockadj, :id, :multID,
-    :optime
+    :optime,  :opclass
   attr_writer :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
         :numOutsideContest, :numClaimed, :numD1, :numD2, :claimedMults,
         :greenPH, :greenCW, :greenChecked,
@@ -107,6 +108,13 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     [58, @multipliers.size].min
   end
 
+  def totalnummultipliers
+    if @multoverride
+      return @multoverride
+    end
+    @multipliers.size
+  end
+
   def score=(val)
     @scoreoverride = val
   end
@@ -121,11 +129,11 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
   def ls_line
     print "!! #{@call}: numPH != claimedPH - 0.5*d1PH - d2PH : #{numPH} != #{@greenPH[0]} - 0.5*#{@greenPH[2]} - #{@greenPH[1]}\n" if numPH != (@greenPH[0] - @greenPH[1] -0.5* @greenPH[2]).to_i
     print "!! #{@call}: numCW != claimedCW - 0.5*d1CW - d2CW : #{numCW} != #{@greenCW[0]} - 0.5*#{@greenCW[2]} - #{@greenCW[1]}\n" if numCW != (@greenCW[0] - @greenCW[1] - 0.5*@greenCW[2]).to_i
-    "LS,#{@call},,#{@numClaimed},#{@numDupe},#{@claimedMults},#{@greenCW[0]},#{@greenPH[0]},#{(@greenCW[0]*3+2*@greenPH[0])*@claimedMults},#{@greenChecked},#{@greenCW[1]},#{@greenCW[2]},#{@greenPH[1]},#{@greenPH[2]},#{[58,@multipliers.length].min},#{score},#{@qth},#{greenArea},#{@entity}"
+    "LS,#{@call},,#{@numClaimed},#{@numDupe},#{@claimedMults},#{@greenCW[0]},#{@greenPH[0]},#{(@greenCW[0]*3+2*@greenPH[0])*@claimedMults},#{@greenChecked},#{@greenCW[1]},#{@greenCW[2]},#{@greenPH[1]},#{@greenPH[2]},#{self.nummultipliers},#{score},#{@qth},#{greenArea},#{@entity}"
   end
 
   def to_s
-    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isCOUNTYLINE}\",\"#{@isMOBILE}\",\"#{@isONEDAY}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{[58,@multipliers.size].min},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isCOUNTYLINE}\",\"#{@isMOBILE}\",\"#{@isONEDAY}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{self.nummultipliers},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -278,7 +286,7 @@ class Report
     @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev, l.isCCE, l.isYOUTH, l.isYL, l.isNEW, l.isSCHOOL, l.isMOBILE, l.entityID, l.powclass, l.clockadj, l.isCOUNTYLINE, l.isONEDAY from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID  where contestID = ? order by callsign asc;", [contestID]) { |row|
       log = Log.new(row[0], row[1], row[2], row[5], row[13], @db.toBool(row[6]), @db.toBool(row[7]), @db.toBool(row[8]), @db.toBool(row[9]), @db.toBool(row[10]), @db.toBool(row[11]), @db.toBool(row[15]), @db.toBool(row[16]), row[12], row[3].to_i, row[14].to_i, row[4].to_i)
       scoreLog(row[3], row[4], log)
-      log.optime = operatingTime(@db, row[3])
+      log.optime = operatingTime(@db, row[3], row[4])
       logs << log
     }
     return logs
@@ -497,6 +505,28 @@ class Report
     }
   end
 
+  def makeDetailedSweepReport(out = $stdout, contestID)
+    logs = scoredLogs(contestID)
+    csvout = CSV.new(out)
+    58.upto(64) { |numMultsConfirmed|
+      csvout << [ "Stations having #{numMultsConfirmed.humanize} confirmed multipliers (or more)" ]
+      csvout << [ "station callsign", "location", "date/time", "operator class", "last station", "last multiplier" ]
+      logsExceedingTarget = logs.filter { |log| (log.totalnummultipliers >= numMultsConfirmed)  and (log.opclass != "CHECKLOG")}
+      reportLines = logsExceedingTarget.map { |log|
+        time, call, multiplier = timeTo58(log.id, log.multID, "CA" == log.qthClass, numMultsConfirmed)
+        [ log.call, log.qth, time, log.opclass, call, multiplier ]
+      }
+      reportLines.sort! { |x,y|
+        x[2] <=> y[2]
+      }
+      reportLines.each { |line|
+        csvout << line
+      }
+      csvout << [ ]
+    }
+  end
+    
+
 
   def makeReport(out = $stdout, contestID)
     logs = scoredLogs(contestID)
@@ -519,20 +549,19 @@ class Report
   end
 
 
-  def timeTo58(id, multID, isCA)
+  def timeTo58(id, multID, isCA, fiftyEight=58)
     result = nil
     lastMultiplier = nil
-    @db.query("select q.judged_multiplierID, min(q.time) as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA = #{isCA ? @db.false : @db.true} group by q.judged_multiplierID order by ftime desc limit 1;") { |row|
-      result = @db.toDateTime(row[1])
-      lastMultiplier = row[0].to_i
-    }
-    if result and isCA
-      @db.query("select min(q.time), q.judged_multiplierID as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA limit 1;") { |row|
-        newtime = @db.toDateTime(row[0])
-        if newtime > result
-          lastMultiplier = row[1].to_i
-          result = newtime
-        end
+    if isCA
+      # CA stations can have more then 58 worked multipliers
+      @db.query("select q.judged_multiplierID, min(q.time) as ftime, m.abbrev from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier group by (case when m.isCA then \"CA\" else m.abbrev end) order by ftime asc limit #{fiftyEight};") { |row|
+        result = @db.toDateTime(row[1])
+        lastMultiplier = row[0].to_i
+      }
+    else
+      @db.query("select q.judged_multiplierID, min(q.time) as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA = #{isCA ? @db.false : @db.true} group by q.judged_multiplierID order by ftime desc limit 1;") { |row|
+        result = @db.toDateTime(row[1])
+        lastMultiplier = row[0].to_i
       }
     end
     multStr = nil

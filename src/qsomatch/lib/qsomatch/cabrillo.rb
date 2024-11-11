@@ -278,7 +278,7 @@ class Cabrillo
   end
 
   def self.normalMult(str)
-    str = str.strip.upcase.gsub(/\s{2,}/, " ")
+    str = (str ? (str.strip.upcase.gsub(/\s{2,}/, " ")) : "")
     return MULTIPLIER_ALIASES.has_key?(str) ? MULTIPLIER_ALIASES[str] : "????"
   end
 

@@ -355,7 +355,7 @@ class ResolveSingletons
       fixTime(single)
       id = lookupLog(single["station"])
       if (single.has_key?("judged_multiplier"))
-        queryStr = "update QSO set matchType = ?, judged_multiplierID = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\";"
+        queryStr = "update QSO set matchType = ?, judged_multiplierID = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\""
         list =  [ single["match_type"],
                   @cdb.lookupMultiplier(single["judged_multiplier"])[0],
                   id,
@@ -363,11 +363,18 @@ class ResolveSingletons
                   single["serial"],
                   @cdb.lookupMultiplier(single["qth"])[0] ]
       else
-        queryStr = "update QSO set matchType = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\";"
+        queryStr = "update QSO set matchType = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\""
         list =  [ single["match_type"], id,
                   @db.formattime(single["time"]), single["frequency"],
                   single["serial"],
                   @cdb.lookupMultiplier(single["qth"])[0] ]
+      end
+      if single.has_key?("received_qth")
+        # sometimes needed for county line QSOs
+        queryStr += " and recvd_multiplierID = ?;"
+        list << @cdb.lookupMultiplier(single["received_qth"])[0]
+      else
+        queryStr += ";"
       end
       print queryStr  + "\n"
       @db.query(queryStr, list ) { |row|

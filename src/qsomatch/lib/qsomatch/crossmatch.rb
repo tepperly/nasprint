@@ -251,7 +251,7 @@ class CrossMatch
     if not quiet
       print "linkQSOs #{match1} #{match2}\n"
     end
-    @db.query(queryStr) { |row|
+    @db.query(queryStr).each { |row|
       begin
         @db.begin_transaction
         found = false
@@ -550,26 +550,24 @@ class CrossMatch
     modeAndBand=:perfect
     buildNearMatchTable
     print "Staring near callsign perfect match #{modeBandDesc(modeAndBand)}(#{timediff} minute tolerance): #{Time.now.to_s}\n"
-    queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 join NearMatches as nm" +
-      " on (" + exchangeNearCallMatch("q2.recvd", "q1.sent") + " and " +
-      "q1.fixedMode = nm.mode and q2.fixedMode = nm.mode and " +
-      modeBandMatch("q1", "q2", modeAndBand)  + " and " +  exchangeExactMatch("q1.recvd", "q2.sent") +
-      "), Log as l1, Log as l2 where " +
-      "l1.id = q1.logID and l2.id = q2.logID and " +
-      nearCallMultMatch("q2.recvd", "q1.sent") + " and " +
-      @logs.membertest("q1.logID") + " and " +
-      @logs.membertest("q2.logID") + " and " +
-      "q1.logID != q2.logID and "  +
-      exchangeMatch("q1.recvd", "q2.sent") + " and " +
-      exchangeMatch("q2.recvd", "q1.sent") + " and " +
-      notMatched("q1") + " and " + notMatched("q2") + " and " +
-      qsoMatch("q1", "q2", "l1", "l2", timediff) +
-      " order by (coalesce(q1.recvd_multiplierID,-1) = q2.sent_multiplierID) desc, " +
+    queryStr = "select q1.id, q2.id from NearMatches as nm, QSO as q1 on ((q1.sent_callID = nm.c2ID) and (q1.fixedMode = nm.mode)), " +
+               "QSO as q2 on ((q2.recvd_callID = nm.c1ID) and (q2.fixedMode = nm.mode)), " +
+               "Log as l1 on (l1.id =  q1.logID), Log as l2 on (l2.id = q2.logID) where " +
+               modeBandMatch("q1", "q2", modeAndBand) + " and " + exchangeExactMatch("q1.recvd", "q2.sent") + " and " +
+               nearCallMultMatch("q2.recvd", "q1.sent") + " and " +
+               @logs.membertest("q1.logID") + " and " +
+               @logs.membertest("q2.logID") + " and " +
+               "q1.logID != q2.logID and "  +
+               exchangeMatch("q1.recvd", "q2.sent") + " and " +
+               exchangeMatch("q2.recvd", "q1.sent") + " and " +
+               notMatched("q1") + " and " + notMatched("q2") + " and " +
+               qsoMatch("q1", "q2", "l1", "l2", timediff) +
+               " order by (coalesce(q1.recvd_multiplierID,-1) = q2.sent_multiplierID) desc, " +
                " (coalesce(q2.recvd_multiplierID,-1) = q1.sent_multiplierID) desc, " +
                "(abs(q1.recvd_serial - q2.sent_serial) + abs(q2.recvd_serial - q1.sent_serial)) asc" +
-      ", abs(" +
-      @db.adjtimediff("MINUTE", "q1.time", "l1.clockadj",
-                      "q2.time", "l2.clockadj") + ") asc;"
+               ", abs(" +
+               @db.adjtimediff("MINUTE", "q1.time", "l1.clockadj",
+                               "q2.time", "l2.clockadj") + ") asc;"
     print queryStr + "\n"
     if $explain
       @db.query("explain " + queryStr) { |row|

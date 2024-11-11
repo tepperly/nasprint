@@ -403,7 +403,8 @@ end
 
 def report58(db, contestID, contestDB)
   r =Report.new(db, contestID)
-  r.full58List($stdout, contestID)
+  r.makeDetailedSweepReport(open("sweeps.csv","w"), contestID)
+#  r.full58List($stdout, contestID)
 #  r.firstTo58($stdout, contestID)
 end
 
