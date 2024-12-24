@@ -354,21 +354,27 @@ class ResolveSingletons
     overrides.getSingletons.each  { |single|
       fixTime(single)
       id = lookupLog(single["station"])
+      queryStr = "update QSO set matchType = ?"
+      list = [ single["match_type"] ]
       if (single.has_key?("judged_multiplier"))
-        queryStr = "update QSO set matchType = ?, judged_multiplierID = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\""
-        list =  [ single["match_type"],
-                  @cdb.lookupMultiplier(single["judged_multiplier"])[0],
-                  id,
-                  @db.formattime(single["time"]), single["frequency"],
-                  single["serial"],
-                  @cdb.lookupMultiplier(single["qth"])[0] ]
-      else
-        queryStr = "update QSO set matchType = ? where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\""
-        list =  [ single["match_type"], id,
-                  @db.formattime(single["time"]), single["frequency"],
-                  single["serial"],
-                  @cdb.lookupMultiplier(single["qth"])[0] ]
+        queryStr += ", judged_multiplierID = ?"
+        list << @cdb.lookupMultiplier(single["judged_multiplier"])[0]
       end
+      if (single.has_key?("judged_band") and CrossMatch::ALLOWED_BANDS.include?(single["judged_band"]))
+        queryStr += ", judged_band = ?"
+        list << single["judged_band"]
+      end
+      if (single.has_key?("judged_mode") and CrossMatch::ALLOWED_MODES.include?(single["judged_mode"]))
+        queryStr += ", judged_mode = ?"
+        list << single["judged_mode"]
+      end
+      if single.has_key?("score")
+        queryStr += ", score = ?"
+        list << single["score"].to_i
+      end
+      queryStr += " where logID = ? and time = ? and frequency = ? and sent_serial = ? and sent_multiplierID = ? and matchType = \"None\""
+      list = list + [id, @db.formattime(single["time"]), single["frequency"], single["serial"],
+                  @cdb.lookupMultiplier(single["qth"])[0] ]
       if single.has_key?("received_qth")
         # sometimes needed for county line QSOs
         queryStr += " and recvd_multiplierID = ?;"

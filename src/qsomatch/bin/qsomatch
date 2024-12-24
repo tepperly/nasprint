@@ -8,6 +8,7 @@ require 'bandmode'
 require 'contestdb'
 require 'fcc'
 require 'pdfreport'
+require 'latexreport'
 require 'callsign'
 require 'club'
 require 'addlog'
@@ -23,6 +24,7 @@ require 'errors'
 require 'dumplog'
 require 'json'
 require 'set'
+require 'yamldump'
 require 'sqlite3'
 
 
@@ -44,6 +46,7 @@ $cabcheck = false
 $qrzuser = nil
 $qrzpwd = nil
 $verbose = nil
+$yamlfile = nil
 $traceQSOset = Set.new # don't trace any QSOs by default
 $traceCallset = Set.new
 ctl = CallsignTools.new
@@ -72,7 +75,8 @@ opts = GetoptLong.new(
                       [ '--trace', '-t', GetoptLong::REQUIRED_ARGUMENT],
                       [ '--rare', '-r', GetoptLong::NO_ARGUMENT],
                       [ '--fifty-eight', '-5', GetoptLong::NO_ARGUMENT],
-                      [ '--report', '-T', GetoptLong::NO_ARGUMENT]
+                      [ '--report', '-T', GetoptLong::NO_ARGUMENT],
+                      [ '--export-yaml', '-Y', GetoptLong::REQUIRED_ARGUMENT]
                       )
 
 cmddbopts = Hash.new
@@ -133,6 +137,9 @@ opts.each { |opt, arg|
     $name = arg
   when '--year'
     $year = arg.to_i
+  when '--export-yaml'
+    $action =  :export
+    $yamlfile = arg.to_s
   when '--exceptions'
     ctl.addException(arg.split(/[,;:]/))
   end
@@ -726,6 +733,9 @@ def makePDFReports(db, contestID, recdb)
   print "Making PDF reports\n"
   pr = ReportPDF.new($year.to_s + " California QSO Party\nCalifornia Stations")
   g = makeGroups(db, contestID, "m.isCA",recdb)
+  latex = ReportLaTeX.new($year.to_s + " California QSO Party", "California Stations", "latex_CA.tex")
+  latex.printGroups(g)
+  latex.finishFile
   pr.printGroups(g)
   pr.render("test_CA.pdf")
   pr = ReportPDF.new($year.to_s + " California QSO Party\nUS Stations outside California", ReportPDF::NONCA_LEGEND)
@@ -807,6 +817,13 @@ def certificateCSV(db, contestID, contestDB)
       end
       csv << quoteStrings(line)
     }
+  }
+end
+
+def exportYaml(db, contestID, contestDB, yamlfile, year)
+  yamlcontent=makeContestYaml(db, contestID, contestDB, year)
+  open(yamlfile, "w") { |out|
+    out.write(yamlcontent.to_yaml)
   }
 end
 
@@ -1016,7 +1033,7 @@ def scoreContest(db, contestID, contestDB)
 end
 
 begin
-  if $name and $year and [:load, :score, :checkdupes, :rare, :report, :fifty_eight ].include?($action)
+  if $name and $year and [:load, :score, :checkdupes, :rare, :report, :fifty_eight, :export ].include?($action)
     db = makeDB(dbopts)
     cdb = ContestDatabase.new(db, ctl)
     contestID = cdb.addOrLookupContest($name, $year, $create)
@@ -1030,7 +1047,7 @@ begin
   else
     db = nil
     cdb = nil
-    if [:load, :score, :checkdupes, :rare, :report, :fifty_eight ].include?($action)
+    if [:load, :score, :checkdupes, :rare, :report, :fifty_eight, :export ].include?($action)
       print "Load and score action require a database.\n"
       exit 2
     end
@@ -1044,6 +1061,8 @@ begin
     reportContest(db, contestID, cdb)
   when :report
     reportContest(db, contestID, cdb)
+  when :export
+    exportYaml(db, contestID, cdb, $yamlfile, $year)
   when :fifty_eight
     report58(db, contestID, cdb)
   when :rare

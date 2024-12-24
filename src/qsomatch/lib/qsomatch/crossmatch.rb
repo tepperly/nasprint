@@ -392,6 +392,26 @@ class CrossMatch
       q["time"] = Time.parse(q["time"])
     end
   end
+
+  def serialNumCriteria(q, table)
+    if (q.has_key?("serial"))
+      if q["serial"].nil?
+        "( " + table + ".sent_serial is null ) and "
+      else
+        "( " + table + ".sent_serial = " + q["serial"].to_i.to_s + " ) and "
+      end
+    else
+      ""
+    end
+  end
+  
+  def receivedQTHCriteria(q, table)
+    result = ""
+    if (q.has_key?("received_qth"))
+      result = " (" + table + ".recvd_multiplierID = " + @cdb.lookupMultiplier(q["received_qth"])[0].to_s + ") and "
+    end
+    return result
+  end
     
   def overrideMatches
     matchCount = 0
@@ -406,19 +426,22 @@ class CrossMatch
             [ q1, q2 ].each { |q| fixTime(q) }
             logID1 = lookupLog(q1["station"])
             logID2 = lookupLog(q2["station"])
+            extraCriteria1 = receivedQTHCriteria(q1, "q1")
+            extraCriteria2 = receivedQTHCriteria(q2, "q2")
             queryStr = "select q1.id, q2.id from QSO as q1 join QSO as q2 " +
                        " where q1.logID = "  +logID1.to_s + " and " +
                        "q2.logID = " + logID2.to_s + " and " +
                        "q1.frequency = " + q1["frequency"].to_i.to_s + " and "+
                        "q2.frequency = " + q2["frequency"].to_i.to_s + " and "+
-                       "q1.sent_serial = " + q1["serial"].to_i.to_s + " and " +
-                       "q2.sent_serial = " + q2["serial"].to_i.to_s + " and " +
+                       serialNumCriteria(q1, "q1") +
+                       serialNumCriteria(q2, "q2") +
                        "q1.sent_multiplierID = " +
                        @cdb.lookupMultiplier(q1["qth"])[0].to_s + " and " +
                        "q2.sent_multiplierID = " +
                        @cdb.lookupMultiplier(q2["qth"])[0].to_s + " and " +
                        "q1.time = \"" + @db.formattime(q1["time"]) + "\" and " +
                        "q2.time = \"" + @db.formattime(q2["time"]) + "\" and " +
+                       extraCriteria1 + extraCriteria2 +
                        "q1.matchID is null and " +
                        "q2.matchID is null and " +
                        "q1.logID != q2.logID order by " +
@@ -736,32 +759,45 @@ class CrossMatch
         print "\tJudged multiplier: " + @cdb.lookupMultiplierByID(judgedMult).to_s + "\n"
       end
       if (row[1] == "Full")
+          delta = 0
           if (judgedMult == recvdMult)
-            @db.query("update QSO set matchType = 'Bye', judged_multiplierID=? where id = ? and matchType = 'None';", [judgedMult, row[3].to_i ]) { }
+            @db.query("update QSO set matchType = 'Bye', judged_multiplierID=?, score=2 where id = ? and matchType = 'None';", [judgedMult, row[3].to_i ]) { }
           else
-            @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=? where id = ? and matchType = 'None';", [judgedMult, row[3].to_i] ) { }
+            @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=?, score=1 where id = ? and matchType = 'None';", [judgedMult, row[3].to_i] ) { }
+            delta = -1
           end
+          @db.query("insert into CountyLineExtras (matchedQSOID, unmatchedQSOID, scoreDelta) values (?, ?, ?);", [ row[0].to_i, row[3].to_i, delta ]) { }
           count += @db.affected_rows
       else
         if halfCredit(row[0], row[2], unreliableBand, unreliableMode, unreliableSerial, unreliableClock)
+          delta = 0
           if (judgedMult == recvdMult or row[5].to_i == recvdMult)
-            @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=? where id = ? and matchType='None';", [judgedMult, row[3].to_i] ) { }
+            @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=?, score=1 where id = ? and matchType='None';", [judgedMult, row[3].to_i] ) { }
+            @db.query("insert into CountyLineExtras (matchedQSOID, unmatchedQSOID, scoreDelta) values (?, ?, ?);", [ row[0].to_i, row[3].to_i, delta ]) { }
             count += @db.affected_rows
           else
-            @db.query("update QSO set matchType = 'NIL', judged_multiplierID=? where id = ? and matchType='None';", [judgedMult, row[3].to_i] ) { }
+            delta = -1
+            @db.query("update QSO set matchType = 'NIL', judged_multiplierID=?, score=0 where id = ? and matchType='None';", [judgedMult, row[3].to_i] ) { }
             if (@db.affected_rows > 0)
               @db.query("update QSOExtra set comment = 'Related county-line QSO is a D1 and received multiplier is wrong' where id = ? and comment is null;", row[3].to_i) { }
             end
+            @db.query("insert into CountyLineExtras (matchedQSOID, unmatchedQSOID, scoreDelta) values (?, ?, ?);", [ row[0].to_i, row[3].to_i, delta ]) { }
           end
         else
-          @db.query("update QSO set matchType = 'NIL', judged_multiplierID=? where id = ? and matchType='None';", [judgedMult, row[3].to_i]) { }
+          @db.query("update QSO set matchType = 'NIL', judged_multiplierID=?, score=0 where id = ? and matchType='None';", [judgedMult, row[3].to_i]) { }
           if (@db.affected_rows > 0)
             @db.query("update QSOExtra set comment = 'Related county-line QSO is a D2' where id = ? and comment is null;", row[3]) { }
           end
+          @db.query("insert into CountyLineExtras (matchedQSOID, unmatchedQSOID, scoreDelta) values (?, ?, ?);", [row[0].to_i, row[3].to_i, 0]) { }
         end
       end
     }
     count
+  end
+
+  def lastMinuteFixForCountyLineScores
+    @db.query("select q1.id, q2.id, q1.score, q2.score, q2.matchType, c.scoreDelta from CountyLineExtras as c, QSO as q1 on q1.id=c.matchedQSOID, QSO as q2 on q2.id = c.unmatchedQSOID where q1.score != q2.score;") { |row|
+    }
   end
   
   def markNIL

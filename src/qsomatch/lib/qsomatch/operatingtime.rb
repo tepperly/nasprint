@@ -17,21 +17,22 @@ def operatingTime(db, logID, multID)
   db.query("select time from QSO where logID = ? and sent_multiplierID = ? order by time asc;", [ logID, multID ]) { |row|
     qTime = db.toDateTime(row[0])
     if firstQ
-      timeDiffSec = (qTime - (lastQ ? lastQ : firstQ)).to_i
+      timeDiffSec = (qTime - lastQ).to_i
       if (timeDiffSec < REST_THRESHOLD)
-        lastQ = qTime
+        lastQ = qTime+60 # assume that station worked through the whole minute
       else
-        timeDiffSec = lastQ ? (lastQ-firstQ).to_i : 0
+        timeDiffSec = (lastQ - firstQ).to_i
         optime += ([timeDiffSec, MINIMUM_TIME_WINDOW].max/60).to_i
         firstQ = qTime
-        lastQ = nil
+        lastQ = firstQ + 60 # assume that the station worked through the whole minute
       end
     else
       firstQ = qTime
+      lastQ = firstQ + 60 # assume that the station worked through the whole minute
     end
   }
   if firstQ
-    timeDiffSec = lastQ ? (lastQ-firstQ).to_i : 0
+    timeDiffSec = (lastQ - firstQ).to_i
     optime += ([timeDiffSec, MINIMUM_TIME_WINDOW].max/60).to_i
   end
   return optime

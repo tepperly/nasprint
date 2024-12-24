@@ -329,7 +329,7 @@ class Report
 
   def validQSOsByMode(id, multID, mode)
     scores = [0, 0, 0]
-    @db.query("select score, count(*) from QSO where logID = ? and sent_multiplierID = ? and matchType in ('Full', 'Bye', 'Partial', 'PartialBye', 'NIL', 'Removed', 'OutsideContest', 'Unique') and fixedMode in " + modeSet(mode) + " group by score order by score asc;", [id, multID] ) { |row|
+    @db.query("select score, count(*) from QSO where logID = ? and sent_multiplierID = ? and matchType in ('Full', 'Bye', 'Partial', 'PartialBye', 'NIL', 'Removed', 'OutsideContest', 'Unique') and judged_mode in " + modeSet(mode) + " group by score order by score asc;", [id, multID] ) { |row|
       if row[0].to_i >= 0 and row[0].to_i < 3
         scores[row[0].to_i] = row[1].to_i
       end
@@ -359,8 +359,10 @@ class Report
     out << (cwScored[1] + cwScored[2] + phScored[1] + phScored[2]) << "\r\n"
     out << ("  CW QSO's: Full Credit: %4d Half-Credit: %4d No-credit (NIL or Multiple Errors): %d\r\n" %
             [cwScored[2], cwScored[1], cwScored[0]])
+    out << ("  Net CW QSO's: " + log.numCW.to_s + "\r\n")
     out << ("  PH QSO's: Full Credit: %4d Half-Credit: %4d No-credit (NIL or Multiple Errors): %d\r\n" %
             [phScored[2], phScored[1], phScored[0]])
+    out << ("  Net PH QSO's: " + log.numPH.to_s + "\r\n")
     out << "  Checked Mults: " << log.nummultipliers << "\r\n"
     out << "  QSO Points granted: " << (log.numPH*2 + log.numCW*3) << "\r\n"
     out << "  FINAL SCORE: " << log.score << "\r\n"

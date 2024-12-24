@@ -70,6 +70,9 @@ class ContestDatabase
     if not tables.include?("Participant")
       createParticipantTable
     end
+    if not tables.include?("CountyLineExtras")
+      createCountyLineTable
+    end
   end
 
   def createContestTable
@@ -116,6 +119,11 @@ class ContestDatabase
   def createClubsTable
     @db.query("create table if not exists Clubs (id integer primary key, contestID integer not null, fullname varchar(128), type char(6), isCA bool not null default #{@db.false});") { }
     @db.query("create index if not exists nameind on Clubs (fullname);") { }
+  end
+
+  def createCountyLineTable
+    @db.query("create table if not exists CountyLineExtras (id integer primary key, matchedQSOID integer not null, unmatchedQSOID integer not null, scoreDelta integer not null default 0);") { }
+    @db.query("create index if not exists cleind on CountyLineExtras (matchedQSOID);") { }
   end
 
   def createEntityTable
@@ -476,6 +484,14 @@ class ContestDatabase
                 recvdExchange.callsign, recvdExchange.origqth,
                 numOrNull(transNum) ]) { }
     qsoID
+  end
+
+  def opList(logID)
+    result = [ ]
+    @db.query("select callsign from Operator where logID = ? and callsign != 'XX9XXX' order by id asc;", [logID]) { |row|
+      result << row[0]
+    }
+    result
   end
 
   def translateStatus(grStat)
