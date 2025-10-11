@@ -157,6 +157,16 @@ class ResolveSingletons
       @db.query("update QSO set matchType = 'Removed'  where id = ?;", [row[0]]) { }
       @db.query("update QSOExtra set comment='No received serial number or multiplier for this QSO.' where id = ? and comment is null;", [row[0]]) { }
     }
+    bandlist = CrossMatch::ALLOWED_BANDS.map { |band| '"' + band+'"'}.join("," )
+    @db.query("select distinct q.id from QSO as q where q.matchType = 'None' and coalesce(q.judged_band,q.band) not in (#{bandlist});") { |row|
+      @db.query("update QSO set matchType = 'Removed' where id = ?;", [row[0]]) { }
+      @db.query("update QSOExtra set comment='QSO is not on one of the allowed bands.' where id = ? and comment is null;", [row[0]]) {}
+    }
+    modelist = CrossMatch::ALLOWED_MODES.map { |mode| '"' + mode+'"'}.join("," )
+    @db.query("select distinct q.id from QSO as q where q.matchType = 'None' and coalesce(q.judged_mode,q.fixedMode) not in (#{modelist});") { |row|
+      @db.query("update QSO set matchType = 'Removed' where id = ?;", [row[0]]) { }
+      @db.query("update QSOExtra set comment='QSO is not on one of the allowed modes.' where id = ? and comment is null;", [row[0]]) {}
+    }
     @db.query("select q.id, q.recvd_callID, q.recvd_serial, q.fixedMode, q.recvd_multiplierID from QSO as q where " +
                     @logIDs.membertest("q.logID") +
               " and q.matchType = 'None' order by q.id asc;"){ |row|

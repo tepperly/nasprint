@@ -6,19 +6,34 @@
 #
 require 'time'
 
+REST_THRESHOLD=15*60  # fifteen minutes of idle starts as off time
+MINIMUM_TIME_WINDOW = 60 # seconds
+
 # Return the operating time in minutes
-def operatingTime(db, logID)
+def operatingTime(db, logID, multID)
   optime = 0
+  firstQ = nil
   lastQ = nil
-  db.query("select time from QSO where logID = ? order by time asc;", [ logID ]) { |row|
+  db.query("select time from QSO where logID = ? and sent_multiplierID = ? order by time asc;", [ logID, multID ]) { |row|
     qTime = db.toDateTime(row[0])
-    if lastQ
+    if firstQ
       timeDiffSec = (qTime - lastQ).to_i
-      if (timeDiffSec < 15*60  ) # must be more than 15 minutes to count as off time
-        optime = optime + (timeDiffSec/60)
+      if (timeDiffSec < REST_THRESHOLD)
+        lastQ = qTime+60 # assume that station worked through the whole minute
+      else
+        timeDiffSec = (lastQ - firstQ).to_i
+        optime += ([timeDiffSec, MINIMUM_TIME_WINDOW].max/60).to_i
+        firstQ = qTime
+        lastQ = firstQ + 60 # assume that the station worked through the whole minute
       end
+    else
+      firstQ = qTime
+      lastQ = firstQ + 60 # assume that the station worked through the whole minute
     end
-    lastQ = qTime
   }
+  if firstQ
+    timeDiffSec = (lastQ - firstQ).to_i
+    optime += ([timeDiffSec, MINIMUM_TIME_WINDOW].max/60).to_i
+  end
   return optime
 end

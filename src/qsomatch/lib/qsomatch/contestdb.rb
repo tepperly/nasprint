@@ -220,7 +220,7 @@ class ContestDatabase
     @db.query("create table if not exists Checklog (id integer primary key #{@db.autoincrement}, contestID integer not null, callID integer not null, multiplierID integer not null);") { }
     @db.query("create unique index if not exists ccind on Checklog (contestID, multiplierID, callID);") { }
     if @db.has_enum?
-      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass enum('QRP', 'LOW', 'HIGH'), opclass enum('CHECKLOG', 'SINGLE', 'SINGLE_ASSISTED', 'MULTI_SINGLE', 'MULTI_MULTI'), numops int, verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, trustedclock bool not null default #{@db.false}, name varchar(128), club varchar(128), isCCE bool not null default #{@db.false}, isYOUTH bool not null default #{@db.false}, isYL bool not null default #{@db.false}, isNEW bool not null default #{@db.false}, isSCHOOL bool not null default #{@db.false}, isMOBILE bool not null default #{@db.false}, isONEDAY bool not null default #{@db.false}, isCOUNTYLINE bool not null default #{@db.false});") { }
+      @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass enum('QRP', 'LOW', 'HIGH'), opclass enum('CHECKLOG', 'SINGLE', 'SINGLE_ASSISTED', 'MULTI_SINGLE', 'MULTI_TWO', 'MULTI_MULTI'), numops int, verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs integer, verifiedMultipliers integer, clockadj integer not null default 0, trustedclock bool not null default #{@db.false}, name varchar(128), club varchar(128), isCCE bool not null default #{@db.false}, isYOUTH bool not null default #{@db.false}, isYL bool not null default #{@db.false}, isNEW bool not null default #{@db.false}, isSCHOOL bool not null default #{@db.false}, isMOBILE bool not null default #{@db.false}, isONEDAY bool not null default #{@db.false}, isCOUNTYLINE bool not null default #{@db.false});") { }
     else
       @db.query("create table if not exists Log (id integer primary key #{@db.autoincrement}, contestID integer not null, callsign varchar(#{CHARS_PER_CALL}) not null, callID integer not null, email varchar(128), multiplierID integer not null, entityID integer default null, powclass char(7), opclass char(15), numops int, verifiedscore integer, verifiedPHQSOs integer, verifiedCWQSOs, verifiedMultipliers integer, clockadj integer not null default 0, trustedclock bool not null default #{@db.false}, name varchar(128), club varchar(128), isCCE bool not null default #{@db.false}, isYOUTH bool not null default #{@db.false}, isYL bool not null default #{@db.false}, isNEW bool not null default #{@db.false}, isSCHOOL bool not null default #{@db.false}, isMOBILE bool not null default #{@db.false}, isONEDAY bool not null default #{@db.false}, isCOUNTYLINE bool not null default #{@db.false});") { }
     end
@@ -475,6 +475,14 @@ class ContestDatabase
                 recvdExchange.callsign, recvdExchange.origqth,
                 numOrNull(transNum) ]) { }
     qsoID
+  end
+
+  def opList(logID)
+    result = [ ]
+    @db.query("select callsign from Operator where logID = ? and callsign != 'XX9XXX' order by id asc;", [logID]) { |row|
+      result << row[0]
+    }
+    result
   end
 
   def translateStatus(grStat)

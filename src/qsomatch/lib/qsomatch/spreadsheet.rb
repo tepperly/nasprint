@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # -*- encoding: utf-8 -*-
 
-require 'axlsx'                 # Ruby Office Open XML format library (gem)
+require 'caxlsx'                 # Ruby Office Open XML format library (gem)
 require_relative 'report'
 require_relative 'logset'
 require_relative 'callsign'
@@ -25,9 +25,9 @@ class Spreadsheet
   
   POWERS = %w{ HIGH LOW QRP }
   POWERS.freeze
-  OPCLASSES = %w{ SINGLE SINGLE_ASSISTED MULTI_SINGLE MULTI_MULTI }
+  OPCLASSES = %w{ SINGLE SINGLE_ASSISTED MULTI_SINGLE MULTI_TWO MULTI_MULTI }
   OPCLASSES.freeze
-  OPLABELS = { "SINGLE" => "SO", "SINGLE_ASSISTED" => "SO - A", "MULTI_SINGLE" => "M-S",
+  OPLABELS = { "SINGLE" => "SO", "SINGLE_ASSISTED" => "SO - A", "MULTI_SINGLE" => "M-S", "MULTI_TWO" => "M-2",
     "MULTI_MULTI" => "M-M" }
   OPLABELS.freeze
 
@@ -125,7 +125,7 @@ class Spreadsheet
           lines.each_index { |i|
             scoreInd = lines[i].length+2
             lines[i] << (i+1)
-            if tops.length > i
+            if tops.length > i and tops[i]
               lines[i] << tops[i][0]
               lines[i] << tops[i][1]
               lines[i] << ((i > 0) ? (lines[i-1][scoreInd] - tops[i][1]) : nil)
@@ -503,7 +503,7 @@ class Spreadsheet
     }
   end
 
-  ALLOPS = %w{ SINGLE SINGLE_ASSISTED MULTI_SINGLE MULTI_MULTI }
+  ALLOPS = %w{ SINGLE SINGLE_ASSISTED MULTI_SINGLE MULTI_TWO MULTI_MULTI }
   ALLOPS.freeze
 
   def clubRow(list, size)

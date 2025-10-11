@@ -19,6 +19,7 @@ def fixIt(prompt, value, hash)
     ans = nil
     while not ["A", "ACCEPT", "R", "REPLACE"].include? ans
       print prompt + ": " + value + " (accept/replace)?"
+      $stdout.flush
       ans = STDIN.gets.strip.upcase
     end
     case ans
@@ -26,6 +27,7 @@ def fixIt(prompt, value, hash)
       hash[value] = true        # don't ask again
       return value
     when 'R', 'REPLACE'
+      $stdout.flush
       hash[value] = STDIN.gets.strip.upcase
       return hash[value]
     end

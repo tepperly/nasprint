@@ -113,12 +113,11 @@ class Multiplier
       if not entity
         ent = dxlookup.lookup(row[1])
         if ent
-          if ent.dx?
-            entity = ent.entityID
-          end
+          entity = ent.entityID
         end
         if not entity
           print "Please enter entity ID # for #{row[1]}:"
+          $stdout.flush
           entity = STDIN.gets.to_i
         end
       end
@@ -275,6 +274,7 @@ class Multiplier
       return num, @previousDecisions[callsign]
     else
       print "Please enter the ID number: "
+      $stdout.flush
       item = STDIN.gets
       num = item.strip.to_i
       list.each { |item|
@@ -320,14 +320,27 @@ class Multiplier
                     [ multID, callID ] ) { }
         else
           mults = @cdb.lookupMultipliers(mult)
-#          print "Looking up this list: #{mult.join(",")}\n"
-#          print "Yielded list this: #{mults.join(",")}\n" if mults
-#          print "a nil result" if not mults
+          print "Call: " + baseCallsign + "\n"
+          print "Looking up this list: #{mult.join(",")}\n"
+          print "Yielded list this: #{mults.join(",")}\n" if mults
+          print "a nil result\n" if not mults
+          @db.query("select id, judged_multiplierID, matchType from QSO where #{@logs.membertest("logID")} and recvd_callID = ?", [callID]) { |row|
+            @cdb.printQSO($stdout, row[0].to_i)
+            print "Judged mult: " + row[1].to_s + "  Match type: " + row[2].to_s + "\n"
+          }
           @db.query("update QSO set judged_multiplierID = recvd_multiplierID, matchType='Bye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType in ('Bye','None') and recvd_multiplierID in (#{mults.map { |w| w[0] }.join(", ")});",
                     [callID]) { }
+          @db.query("select id, judged_multiplierID, matchType from QSO where #{@logs.membertest("logID")} and recvd_callID = ?", [callID]) { |row|
+            @cdb.printQSO($stdout, row[0].to_i)
+            print "Judged mult: " + row[1].to_s + "  Match type: " + row[2].to_s + "\n"
+          }
           @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType in ('Bye','PartialBye','None');",
                     [mults[0][0], callID]) { }
           count += @db.affected_rows
+          @db.query("select id, judged_multiplierID, matchType from QSO where #{@logs.membertest("logID")} and recvd_callID = ?", [callID]) { |row|
+            @cdb.printQSO($stdout, row[0].to_i)
+            print "Judged mult: " + row[1].to_s + "  Match type: " + row[2].to_s + "\n"
+          }
         end
       else
         multres = @db.query("select m.id, m.abbrev, count(*) from QSO as q, Multiplier as m where q.recvd_callID=? and q.recvd_multiplierID=m.id and q.matchType in ('Bye','None') and q.judged_multiplierID is null group by m.id;",

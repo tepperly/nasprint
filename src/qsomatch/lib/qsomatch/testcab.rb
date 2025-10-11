@@ -56,6 +56,7 @@ if $addToDB
   contestID = contestDB.addOrLookupContest($name, $year, $create)
   if $totallydestroy
     print "Please confirm complete destruction of contest: "
+    $stdout.flush
     ans = STDIN.gets
     if "YES" == ans.upcase.strip
       print "Removing contest\n"
@@ -72,6 +73,7 @@ if $addToDB
   contestDB.contestID = contestID
   if $restart
     print "Please confirm removal of contest logs & QSOs: "
+    $stdout.flush
     ans = STDIN.gets
     if "YES" == ans.upcase.strip
       print "Removing contest logs & QSOs\n"
