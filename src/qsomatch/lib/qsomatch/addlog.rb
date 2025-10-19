@@ -132,7 +132,8 @@ def addLog(db, cID, cab, ct)
                         cab.hasSpecialCategory?("YL"),
                         cab.hasSpecialCategory?("YOUTH"),
                         cab.hasSpecialCategory?("ONE-DAY"),
-                        cab.hasSpecialCategory?("COUNTY-LINE")
+                        cab.hasSpecialCategory?("COUNTY-LINE"),
+                        cab.hasSpecialCategory?("SUNDAY")
                         )
       addQSOs(db, cID, logID, cab.qsos)
       addOperators(db, logID, cab.opList, basecall)

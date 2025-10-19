@@ -45,7 +45,7 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     end
   end
   
-  def initialize(call, email, opclass, qth, power, isCCE, isYOUTH, isYL, isNEW, isSCHOOL,isMOBILE, isCOUNTYLINE, isONEDAY, entity, id, clockadj, multID)
+  def initialize(call, email, opclass, qth, power, isCCE, isYOUTH, isYL, isNEW, isSCHOOL,isMOBILE, isCOUNTYLINE, isSUNDAYONLY, isONEDAY, entity, id, clockadj, multID)
     @id = id
     @clockadj = clockadj
     @call = call
@@ -74,6 +74,7 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     @isNEW = isNEW
     @isSCHOOL = isSCHOOL
     @isCOUNTYLINE = isCOUNTYLINE
+    @isSUNDAYONLY = isSUNDAYONLY
     @isONEDAY = isONEDAY
     @scoreoverride = nil
     @multoverride = nil
@@ -125,7 +126,7 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
   end
 
   def to_s
-    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isCOUNTYLINE}\",\"#{@isMOBILE}\",\"#{@isONEDAY}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{[58,@multipliers.size].min},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isCOUNTYLINE}\",\"#{@isMOBILE}\",\"#{@isONEDAY}\",\"#{@isSUNDAYONLY}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{[58,@multipliers.size].min},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -275,8 +276,8 @@ class Report
 
   def scoredLogs(contestID)
     logs = Array.new
-    @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev, l.isCCE, l.isYOUTH, l.isYL, l.isNEW, l.isSCHOOL, l.isMOBILE, l.entityID, l.powclass, l.clockadj, l.isCOUNTYLINE, l.isONEDAY from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID  where contestID = ? order by callsign asc;", [contestID]) { |row|
-      log = Log.new(row[0], row[1], row[2], row[5], row[13], @db.toBool(row[6]), @db.toBool(row[7]), @db.toBool(row[8]), @db.toBool(row[9]), @db.toBool(row[10]), @db.toBool(row[11]), @db.toBool(row[15]), @db.toBool(row[16]), row[12], row[3].to_i, row[14].to_i, row[4].to_i)
+    @db.query("select distinct l.callsign, l.email, l.opclass, l.id, m.id, m.abbrev, l.isCCE, l.isYOUTH, l.isYL, l.isNEW, l.isSCHOOL, l.isMOBILE, l.entityID, l.powclass, l.clockadj, l.isCOUNTYLINE, l.isSUNDAYONLY, l.isONEDAY from Log as l join QSO as q on l.id = q.logID join Multiplier as m on m.id = q.sent_multiplierID  where contestID = ? order by callsign asc;", [contestID]) { |row|
+      log = Log.new(row[0], row[1], row[2], row[5], row[13], @db.toBool(row[6]), @db.toBool(row[7]), @db.toBool(row[8]), @db.toBool(row[9]), @db.toBool(row[10]), @db.toBool(row[11]), @db.toBool(row[15]), @db.toBool(row[16]), @db.toBool(row[17]), row[12], row[3].to_i, row[14].to_i, row[4].to_i)
       scoreLog(row[3], row[4], log)
       log.optime = operatingTime(@db, row[3], row[4].to_i)
       logs << log

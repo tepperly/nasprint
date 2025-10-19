@@ -781,9 +781,9 @@ def reportContest(db, contestID, contestDB)
   s.saveTo("categories_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".xlsx")
   print "Making reverse logs\n"
   r.makeReverseLogs(dir, contestID)
-  open("green_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".txt", "w:ascii") { |out|
-    r.makeGreenReport(out, contestID)
-  }
+#  open("green_" + $name.gsub(/\s+/,"_") + "_" + $year.to_s + ".txt", "w:ascii") { |out|
+#    r.makeGreenReport(out, contestID)
+#  }
   open("toxic_" + $name.gsub(/\s+/,'_') + "_" + $year.to_s + ".csv", "w:ascii") { |out|
     r.toxicLogReport(out, contestID)
   }

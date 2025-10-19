@@ -207,8 +207,19 @@ end
 
 class Cabrillo
   MULTIPLIER_ALIASES = readMultipliers(File.dirname(__FILE__) + "/multipliers.csv")
-  KNOWN_CATEGORIES = %w{ COUNTY MOBILE NEW_CONTESTER SCHOOL YL YOUTH ONE-DAY COUNTY-LINE}.to_set
+  KNOWN_CATEGORIES = %w{ COUNTY MOBILE NEW_CONTESTER SCHOOL YL YOUTH ONE-DAY COUNTY-LINE SUNDAY}.to_set
   KNOWN_CATEGORIES.freeze
+  SOAPBOX_CATEGORY_LINES = [
+    [ /^\s*EXPEDITION\s*$/i, "COUNTY" ],
+    [ /^\s*COUNTY-LINE\s+EXPEDITION\s*$/i, "COUNTY-LINE" ],
+    [ /^\s*ONE-DAY\s+EXPEDITION\s*$/i, "ONE-DAY" ],
+    [ /^\s*MOBILE\s*$/i, "MOBILE" ],
+    [ /^\s*YL\s*$/i, "YL" ],
+    [ /^\s*YOUTH\s*$/i, "YOUTH" ],
+    [ /^\s*NEW\s+CONTESTER\s*$/i, "NEW_CONTESTER" ]
+  ]
+  SOAPBOX_CATEGORY_LINES.freeze
+  
 
   def initialize(filename)
     @printErrorHeader = true
@@ -591,7 +602,13 @@ class Cabrillo
       @x_lines << line          # ignore and save
     when /\Asoapbox:\s*(.*)\Z/i
       trans(1, 1)
-      @soapbox << $1.strip
+      soaptxt = $1
+      SOAPBOX_CATEGORY_LINES.each { |catpair|
+        if catpair[0].match(soaptxt)
+          @dbSpecialCategories << catpair[1]
+        end
+      }
+      @soapbox << soaptxt.strip
     when /\Aqso: +(\d+) +([a-z]{2,3}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+)( +(\d+) *| *)(\{GP(.*)GP\})?$/i
       qso = startQSO($1, $2, $3, $4, $5)
       qso.sentExch.serial = $8
