@@ -4,6 +4,7 @@
 require 'set'
 require 'csv'
 require 'date'
+require 'humanize'
 require_relative 'logset'
 require_relative 'operatingtime'
 require_relative 'overrides'
@@ -18,7 +19,7 @@ TEHA TRIN TULA TUOL VENT YOLO YUBA }).freeze
 IL IN KS KY LA MA MD ME MI MN MO MS MT NC ND NE NH NJ NM NV
 NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
 }).freeze
-  CAN_QTH = Set.new(%w{ AB BC MB MR NT ON QC SK }).freeze
+  CAN_QTH = Set.new(%w{ AB BC MB NB NL NS NT NU ON PE QC SK YT }).freeze
   CA_STATION_CREDITS = (US_QTH + CAN_QTH + Set.new(%w{ CA })).freeze
 
   def qthClass
@@ -87,7 +88,7 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
   attr_reader :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
     :numOutsideContest, :numClaimed, :numD1, :numD2, :claimedMults,
     :greenPH, :greenCW, :greenChecked,:call,:qth, :clockadj, :id, :multID,
-    :optime
+    :optime,  :opclass
   attr_writer :numPH, :numCW, :numUnique, :numDupe, :numRemoved, :numNIL, 
         :numOutsideContest, :numClaimed, :numD1, :numD2, :claimedMults,
         :greenPH, :greenCW, :greenChecked,
@@ -108,6 +109,13 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     [58, @multipliers.size].min
   end
 
+  def totalnummultipliers
+    if @multoverride
+      return @multoverride
+    end
+    @multipliers.size
+  end
+
   def score=(val)
     @scoreoverride = val
   end
@@ -126,7 +134,7 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
   end
 
   def to_s
-    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isCOUNTYLINE}\",\"#{@isMOBILE}\",\"#{@isONEDAY}\",\"#{@isSUNDAYONLY}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{[58,@multipliers.size].min},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
+    "\"#{@call}\",\"#{@qth}\",#{@email ? ("\"" + @email + "\"") : ""},\"#{@opclass}\",\"#{qthClass}\",\"#{@power}\",#{@optime},\"#{@isCCE}\",\"#{@isYOUTH}\",\"#{@isYL}\",\"#{@isNEW}\",\"#{@isCOUNTYLINE}\",\"#{@isMOBILE}\",\"#{@isONEDAY}\",\"#{@isSUNDAYONLY}\",#{@numClaimed},#{@numPH},#{@numCW},#{@numUnique},#{@numDupe},#{@numRemoved},#{@numNIL},#{@numOutsideContest},#{@numD1},#{@numD2},#{self.nummultipliers},#{score},\"#{@multipliers.to_a.sort.join(", ")}\""
   end
 end
 
@@ -322,7 +330,7 @@ class Report
 
   def validQSOsByMode(id, multID, mode)
     scores = [0, 0, 0]
-    @db.query("select score, count(*) from QSO where logID = ? and sent_multiplierID = ? and matchType in ('Full', 'Bye', 'Partial', 'PartialBye', 'NIL', 'Removed', 'OutsideContest', 'Unique') and fixedMode in " + modeSet(mode) + " group by score order by score asc;", [id, multID] ) { |row|
+    @db.query("select score, count(*) from QSO where logID = ? and sent_multiplierID = ? and matchType in ('Full', 'Bye', 'Partial', 'PartialBye', 'NIL', 'Removed', 'OutsideContest', 'Unique') and judged_mode in " + modeSet(mode) + " group by score order by score asc;", [id, multID] ) { |row|
       if row[0].to_i >= 0 and row[0].to_i < 3
         scores[row[0].to_i] = row[1].to_i
       end
@@ -352,8 +360,10 @@ class Report
     out << (cwScored[1] + cwScored[2] + phScored[1] + phScored[2]) << "\r\n"
     out << ("  CW QSO's: Full Credit: %4d Half-Credit: %4d No-credit (NIL or Multiple Errors): %d\r\n" %
             [cwScored[2], cwScored[1], cwScored[0]])
+    out << ("  Net CW QSO's: " + log.numCW.to_s + "\r\n")
     out << ("  PH QSO's: Full Credit: %4d Half-Credit: %4d No-credit (NIL or Multiple Errors): %d\r\n" %
             [phScored[2], phScored[1], phScored[0]])
+    out << ("  Net PH QSO's: " + log.numPH.to_s + "\r\n")
     out << "  Checked Mults: " << log.nummultipliers << "\r\n"
     out << "  QSO Points granted: " << (log.numPH*2 + log.numCW*3) << "\r\n"
     out << "  FINAL SCORE: " << log.score << "\r\n"
@@ -466,7 +476,7 @@ class Report
     csv = CSV.new(out)
     csv << ["Callsign", "Claimed QSOs", "# in other logs", "# Full", "# Partial", "# NIL", "# Removed" ]
     logs.each { |l|
-      @db.query("select count(*), sum(matchType = 'Full'), sum(matchType = 'Partial'), sum(matchType = 'NIL'), sum(matchType = 'Removed') from QSO where recvd_callID = ? group by recvd_callID limit 1;", [ l[1] ]) { |row|
+      @db.query("select count(*), sum(matchType = 'Full'), sum(matchType = 'Partial'), sum(matchType = 'NIL'), sum(matchType = 'Removed') from QSO where coalesce(judged_recvdID,recvd_callID) = ? group by coalesce(judged_recvdID,recvd_callID) limit 1;", [ l[1] ]) { |row|
         csv << [ l[0], l[2], row[0], row[1], row[2], row[3], row[4] ]
       }
     }
@@ -498,6 +508,28 @@ class Report
     }
   end
 
+  def makeDetailedSweepReport(out = $stdout, contestID)
+    logs = scoredLogs(contestID)
+    csvout = CSV.new(out)
+    58.upto(64) { |numMultsConfirmed|
+      csvout << [ "Stations having #{numMultsConfirmed.humanize} confirmed multipliers (or more)" ]
+      csvout << [ "station callsign", "location", "date/time", "operator class", "last station", "last multiplier" ]
+      logsExceedingTarget = logs.filter { |log| (log.totalnummultipliers >= numMultsConfirmed)  and (log.opclass != "CHECKLOG")}
+      reportLines = logsExceedingTarget.map { |log|
+        time, call, multiplier = timeTo58(log.id, log.multID, "CA" == log.qthClass, numMultsConfirmed)
+        [ log.call, log.qth, time, log.opclass, call, multiplier ]
+      }
+      reportLines.sort! { |x,y|
+        x[2] <=> y[2]
+      }
+      reportLines.each { |line|
+        csvout << line
+      }
+      csvout << [ ]
+    }
+  end
+    
+
 
   def makeReport(out = $stdout, contestID)
     logs = scoredLogs(contestID)
@@ -520,26 +552,38 @@ class Report
   end
 
 
-  def timeTo58(id, multID, isCA)
+  def timeTo58(id, multID, isCA, fiftyEight=58)
     result = nil
-    @db.query("select q.judged_multiplierID, min(q.time) as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA = #{isCA ? @db.false : @db.true} group by q.judged_multiplierID order by ftime desc limit 1;") { |row|
-      result = @db.toDateTime(row[1])
-    }
-    if result and isCA
-      @db.query("select min(q.time) as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchTYpe in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA limit 1;") { |row|
-        newtime = @db.toDateTime(row[0])
-        if newtime > result
-          result = newtime
-        end
+    lastMultiplier = nil
+    if isCA
+      # CA stations can have more then 58 worked multipliers
+      @db.query("select q.judged_multiplierID, min(q.time) as ftime, m.abbrev from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier group by (case when m.isCA then \"CA\" else m.abbrev end) order by ftime asc limit #{fiftyEight};") { |row|
+        result = @db.toDateTime(row[1])
+        lastMultiplier = row[0].to_i
+      }
+    else
+      @db.query("select q.judged_multiplierID, min(q.time) as ftime from QSO as q join Multiplier as m on m.id = q.judged_multiplierID where q.logID = #{id} and q.sent_multiplierID = #{multID} and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') and m.ismultiplier and m.isCA = #{isCA ? @db.false : @db.true} group by q.judged_multiplierID order by ftime desc limit 1;") { |row|
+        result = @db.toDateTime(row[1])
+        lastMultiplier = row[0].to_i
       }
     end
-    return result
+    multStr = nil
+    callStr = nil
+    if result and lastMultiplier
+      @db.query("select c.basecall, m.abbrev from QSO as q, Callsign as c, Multiplier as m where q.sent_multiplierID = ? and q.judged_multiplierID = ? and m.id = q.judged_multiplierID and c.id = q.recvd_callID and q.logID = ? and q.time = ? and q.matchType in ('Full', 'Partial', 'Bye', 'PartialBye', 'Dupe') limit 1;", [multID, lastMultiplier, id, @db.formattime(result)] ) { |row|
+        multStr = row[1].to_s
+        callStr = row[0].to_s
+      }
+    end
+    # return the time, the call the station worked to get the 58th, and the multiplier of the 58th
+    return [result, callStr, multStr]
   end
 
   def firstTo58List(contestID, extracon="")
     results = Array.new
     @db.query("select distinct s.logID, s.multID, m.isCA, m.abbrev, c.basecall from Log as l join Scores as s  on s.logID = l.id join Multiplier as m on m.id = s.multID join Callsign as c on c.id = l.callID where l.contestID = #{contestID} and l.opclass in ('SINGLE','SINGLE_ASSISTED') and s.verified_mult = 58 #{extracon} order by l.id asc;") { |row|
-      results << [row[4], row[3], timeTo58(row[0], row[1], @db.toBool(row[2])), row[0]]
+      time = timeTo58(row[0], row[1], @db.toBool(row[2]))
+      results << [row[4], row[3], time[0], row[0], time[1], time[2]]
     }
     results.sort! { |x,y| x[2] <=> y[2] }
     results
@@ -556,12 +600,13 @@ class Report
   def full58List(out = $stdout, contestID)
     results = Array.new
     @db.query("select distinct s.logID, s.multID, m.isCA, m.abbrev, c.basecall, l.opclass from Log as l join Scores as s  on s.logID = l.id join Multiplier as m on m.id = s.multID join Callsign as c on c.id = l.callID where l.contestID = #{contestID} and l.opclass != 'CHECKLOG' and s.verified_mult = 58 order by l.id asc;") { |row|
-      results << [row[4], row[3], timeTo58(row[0], row[1], @db.toBool(row[2])), row[0], row[5]]
+      time = timeTo58(row[0], row[1], @db.toBool(row[2]))
+      results << [row[4], row[3], time[0], row[0], row[5], time[1], time[2]]
     }
     results.sort! { |x,y| x[2] <=> y[2] }
-    CSV(out, :write_headers => true, :headers => ["station callsign", "location", "time 58th confirmed multiplier", "operator class"]) { |csv_out|
+    CSV(out, write_headers: true, headers: ["station callsign", "location", "time 58th confirmed multiplier", "operator class","last station", "last multiplier"]) { |csv_out|
       results.each { |row|
-        csv_out <<  [ row[0], row[1], row[2].to_s, row[4].to_s ]
+        csv_out <<  [ row[0], row[1], row[2].to_s, row[4].to_s, row[5].to_s, row[6].to_s ]
       }
     }
   end

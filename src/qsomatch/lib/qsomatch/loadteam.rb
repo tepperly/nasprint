@@ -64,7 +64,7 @@ if $name and $year
   ARGV.each { |arg|
     count = 1
     open(arg, "r:bom|utf-8") { |inf|
-      csv = CSV.new(inf, {:quote_char => '"'})
+      csv = CSV.new(inf, quote_char: '"'})
       csv.each { |row|
         if count > 1
           tid = cdb.addTeam(row[2], row[0].upcase.strip, row[1], parseDateTime(row[14]), contestID)

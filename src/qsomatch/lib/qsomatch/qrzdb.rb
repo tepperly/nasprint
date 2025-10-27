@@ -53,7 +53,7 @@ def lookupCall(qrz, db, call)
     str, xml = qrz.lookupCall(call)
     if str and xml
       open("xml_db/#{xmlFilename(call)}", "w:iso-8859-1") { |out|
-        str.encode!(Encoding::ISO_8859_1, :undef => :replace)
+        str.encode!(Encoding::ISO_8859_1, undef: :replace)
         out.write(str)
       }
       return addToDb(db, xml, "xml_db/#{xmlFilename(call)}")

@@ -71,10 +71,10 @@ def checkCallsigns(db, cid, user, pwd)
   db.query("select id, basecall from Callsign where contestID = ? and validcall is null;", [cid.to_i]) { |row|
     if xmldb.has_key?(row[1]) or lookupCall(qrz, xmldb, row[1]) or isDXCall(row[1])
       db.query("update Callsign set validcall = 1 where id = ?;",
-               [row[0].to_i])
+               [row[0].to_i]) { }
     else
       db.query("update Callsign set validcall = 0 where id = ?;",
-               [row[0].to_i]);
+               [row[0].to_i]) { }
       print "Callsign #{row[1]} is unknown to QRZ.\n"
     end
   }

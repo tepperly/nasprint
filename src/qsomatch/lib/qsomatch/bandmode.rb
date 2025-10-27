@@ -373,8 +373,8 @@ class BandModeMismatch
   MODEMAP = { 'PH' => 'PH', 'CW' => 'CW', 'FM' => 'CW' }.freeze
   def resolveSimple
     # for any unmatched QSO the band and mode are taken as authoritative
-    @db.query("update QSO set judged_band = band, judged_mode = fixedMode where #{@logs.membertest("logID")} and judged_band is null and judged_mode is null and matchID is null and fixedMode in ('PH', 'CW');")
-    @db.query("update QSO set judged_band = band, judged_mode = 'PH' where #{@logs.membertest("logID")} and judged_band is null and judged_mode is null and matchID is null and fixedMode = 'FM';")
+    @db.query("update QSO set judged_band = band, judged_mode = fixedMode where #{@logs.membertest("logID")} and judged_band is null and judged_mode is null and matchID is null and fixedMode in ('PH', 'CW');") { }
+    @db.query("update QSO set judged_band = band, judged_mode = 'PH' where #{@logs.membertest("logID")} and judged_band is null and judged_mode is null and matchID is null and fixedMode = 'FM';") { }
     # for matched QSOs where bands agree, the judged_band is the match
     @db.query("select q1.id, q2.id, q1.band from QSO as q1 join QSO as q2 on (q1.id = q2.matchID and q2.id = q1.matchID) where #{@logs.membertest("q1.logID")} and q1.id < q2.id and q1.band = q2.band and (q1.judged_band is null or q2.judged_band is null);") { |row|
       @db.query("update QSO set judged_band = ? where id in (?, ?) and judged_band is null;", [ row[2], row[0], row[1] ]) { }
@@ -465,7 +465,7 @@ class BandModeMismatch
     numChanged = 0
     qsosByBand.each { |band, ids|
       if not ids.empty?
-        @db.query("update QSO set judged_band = ? where id in (#{ids.join(", ")}) and judged_band is null;", [ band ])
+        @db.query("update QSO set judged_band = ? where id in (#{ids.join(", ")}) and judged_band is null;", [ band ]) { }
         numChanged += @db.affected_rows
       end
     }
@@ -474,7 +474,7 @@ class BandModeMismatch
     qsosByMode.each { |mode, ids|
       if not ids.empty?
         print "#{mode} #{ids.join(", ")}\n"
-        @db.query("update QSO set judged_mode = ? where id in (#{ids.join(", ")}) and judged_mode is null;", [ MODEMAP[mode] ])
+        @db.query("update QSO set judged_mode = ? where id in (#{ids.join(", ")}) and judged_mode is null;", [ MODEMAP[mode] ]) { }
         numChanged += @db.affected_rows
       end
     }

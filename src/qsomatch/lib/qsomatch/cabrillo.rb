@@ -53,7 +53,11 @@ class Exchange
       v = value.strip
       @leadingZero = v.start_with?("0")
     end
-    @serial = value.to_i
+    if (value.instance_of?(String) and value.empty?)
+      @serial = nil
+    else
+      @serial = value.to_i
+    end
   end
 end
 
@@ -146,11 +150,11 @@ class OperatorClass
     return ((@assisted.nil? or other.assisted.nil? or
             (@assisted == other.assisted)) and
             (@numop.nil? or other.numop.nil? or
-              (@numop == other.numop)) and
+             (@numop == other.numop)) and
             (@power.nil? or other.power.nil? or
-              (@power == other.power)) and
+             (@power == other.power)) and
             (@numtrans.nil? or other.numtrans.nil? or
-              (@numtrans == other.numtrans)))
+             (@numtrans == other.numtrans)))
   end
 
   def conflicted?(other)
@@ -285,7 +289,7 @@ class Cabrillo
   end
 
   def self.normalMult(str)
-    str = str.strip.upcase.gsub(/\s{2,}/, " ")
+    str = (str ? (str.strip.upcase.gsub(/\s{2,}/, " ")) : "")
     return MULTIPLIER_ALIASES.has_key?(str) ? MULTIPLIER_ALIASES[str] : "????"
   end
 
@@ -293,8 +297,20 @@ class Cabrillo
     return @dbSpecialCategories.include?(str)
   end
 
+  def numOperators
+    ops = self.opList
+    if ops
+      return (ops.select {|callsign|  not callsign.strip.start_with?("@") }).length
+    end
+    return nil
+  end
+
   def conflicted?
-    return @dbCat.conflicted?(@logCat)
+    opCount = self.numOperators
+    isSingleOp = (:single == @dbCat.numop)
+    isMultiOp = (:multi == @dbCat.numop)
+    return (@dbCat.conflicted?(@logCat) or
+            (opCount and ((isSingleOp and (opCount != 1)) or (isMultiOp and (opCount < 2)))))
   end
 
   def normalizeMult(str)
@@ -302,8 +318,8 @@ class Cabrillo
     if MULTIPLIER_ALIASES[tmp]
       return  MULTIPLIER_ALIASES[tmp]
     else
-      @badmults << tmp
-      return tmp
+      @badmults << tmp.to_s
+      return tmp.empty? ? nil : tmp
     end
   end
 
@@ -592,7 +608,7 @@ class Cabrillo
         end
       }
       @x_lines << line
-    when /\Ax-cqp-opclass:\s*(checklog|multi-single|multi-multi|single|single-assisted)\s*\Z/i
+    when /\Ax-cqp-opclass:\s*(checklog|multi-single|multi-two|multi-multi|single|single-assisted)\s*\Z/i
       @x_lines << line
       self.dboptype=$1.downcase
     when /\Ax-cqp-id:\s*(\d+)\s*/i
@@ -609,6 +625,30 @@ class Cabrillo
         end
       }
       @soapbox << soaptxt.strip
+    when /\A\s*(x-)?qso: *\|/i # xcbr line
+      fields = (line+ " ").split("|").map { |str| str.strip.upcase }
+      if ([11,12].include?(fields.length))
+        qso = startQSO(fields[1], fields[2], fields[3], fields[4], fields[5])
+        qso.sentExch.serial = fields[6]
+        qso.sentExch.origqth = fields[7]
+        qso.sentExch.qth = normalizeMult(fields[7])
+        if qso.sentExch.qth and not @logCat.sentQTH
+          @logCat.sentQTH = qso.sentExch.qth
+        end
+        if not qso.sentExch.qth or qso.sentExch.qth == "CA"
+          @badSentMults << qso.sentExch.qth
+        end
+        qso.recdExch.callsign = fields[8]
+        qso.recdExch.serial = fields[9]
+        qso.recdExch.origqth = fields[10]
+        qso.recdExch.qth = normalizeMult(fields[10])
+        if fields.length == 12
+          qso.transceiver = fields[11].to_i
+        end
+        @qsos << qso
+      else
+        return "Wrong number of fields, #{fields.length}, in xcbr file\n"
+      end
     when /\Aqso: +(\d+) +([a-z]{2,3}) +(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}) +(\d{4}) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+) +([a-z0-9]+(\/[a-z0-9]+(\/[a-z0-9]+)?)?) +(\d+) +([a-z0-9]+)( +(\d+) *| *)(\{GP(.*)GP\})?$/i
       qso = startQSO($1, $2, $3, $4, $5)
       qso.sentExch.serial = $8
@@ -722,7 +762,7 @@ class Cabrillo
 
   def parse
     @parsestate = 0
-    content = pretreat(File.read(@filename, :encoding => "US-ASCII"))
+    content = pretreat(File.read(@filename, encoding: "US-ASCII"))
     lines = mySplit(content, END_OF_RECORD)
     lines.each { |line|
       msg = processLine(line) 

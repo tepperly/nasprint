@@ -20,10 +20,11 @@ class DatabaseSQLite
   def initialize(opts)
     @in_transaction = false
     @db = SQLite3::Database.new(opts["filename"])
-    @db.busy_timeout(500)
-    @db.execute("PRAGMA journal_mode=WAL;")
-    @db.execute("PRAGMA cache_size = -8000;")
-    @db.execute("PRAGMA synchronous = NORMAL;")
+    @db.busy_timeout(1500)
+    @db.execute("PRAGMA journal_mode=WAL;") { }
+    @db.execute("PRAGMA cache_size = -128000;") { }
+    @db.execute("PRAGMA synchronous = NORMAL;") { }
+    @db.execute("PRAGMA temp_store = memory;") { }
     if $verbose
       @db.trace { |sql|
         print "SQLite3 Statement #{Time.now.to_s} (#{@in_transaction ? 1 : 0}): #{sql}\n"
@@ -57,20 +58,20 @@ class DatabaseSQLite
   end
 
   def begin_transaction
-    @db.execute("begin transaction;")
+    @db.execute("begin transaction;") { }
     @in_transaction = true
   end
 
   def end_transaction
     if @in_transaction
-      @db.execute("commit transaction;")
+      @db.execute("commit transaction;") { }
       @in_transaction = false
     end
   end
 
   def rollback
     @in_transaction = false
-    @db.execute("rollback transaction;")
+    @db.execute("rollback transaction;") { }
   end
 
   def affected_rows
@@ -163,6 +164,7 @@ class DatabaseSQLite
   end
 
   def close
+    @db.execute("vacuum;")   unless @db.closed?
     @db.execute("PRAGMA optimize;") unless @db.closed?
     @db.close
   end

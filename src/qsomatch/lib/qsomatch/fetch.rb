@@ -21,8 +21,7 @@ class QRZLookup
   
   def startSession
     uri = URI(@loginURI)
-    res = Net::HTTP.post_form(uri, 'username' => @username,
-                              'password' => @password)
+    res = Net::HTTP.post_form(uri, {'username' => @username, 'password' => @password })
     if res.is_a?(Net::HTTPSuccess)
       xml = Nokogiri::XML(res.body)
       @session_key = extractKey(xml)

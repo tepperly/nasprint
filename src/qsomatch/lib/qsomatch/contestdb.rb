@@ -70,6 +70,9 @@ class ContestDatabase
     if not tables.include?("Participant")
       createParticipantTable
     end
+    if not tables.include?("CountyLineExtras")
+      createCountyLineTable
+    end
   end
 
   def createContestTable
@@ -116,6 +119,11 @@ class ContestDatabase
   def createClubsTable
     @db.query("create table if not exists Clubs (id integer primary key, contestID integer not null, fullname varchar(128), type char(6), isCA bool not null default #{@db.false});") { }
     @db.query("create index if not exists nameind on Clubs (fullname);") { }
+  end
+
+  def createCountyLineTable
+    @db.query("create table if not exists CountyLineExtras (id integer primary key, matchedQSOID integer not null, unmatchedQSOID integer not null, scoreDelta integer not null default 0);") { }
+    @db.query("create index if not exists cleind on CountyLineExtras (matchedQSOID);") { }
   end
 
   def createEntityTable
@@ -281,6 +289,7 @@ class ContestDatabase
     @db.query("create index if not exists sent_multind on QSO (sent_multiplierID);") { }
     @db.query("create index if not exists recvd_multind on QSO (recvd_multiplierID);") { }
     @db.query("create index if not exists judged_ind on QSO (judged_multiplierID);") { }
+    @db.query("create index if not exists judged_call_ind on QSO (judged_recvdID);") { }
     @db.query("create index if not exists sent_callind on QSO (sent_callID);") { }
     @db.query("create index if not exists recvd_callind on QSO (recvd_callID);") { }
     @db.query("create table if not exists QSOExtra (id integer primary key #{@db.autoincrement}, logID integer not null, mode char(6), transmitterNum integer, comment varchar(256), " +
@@ -617,12 +626,12 @@ class ContestDatabase
   end
 
   def printQSO(out, id)
-    @db.query("select q.frequency, q.fixedMode, q.time, qe.sent_callsign, q.sent_serial, coalesce(m1.abbrev,qe.sent_location) as sentmult,  qe.recvd_callsign, q.recvd_serial, coalesce(m2.abbrev,qe.recvd_location) as recvdmult, q.matchType, qe.comment, q.score from (QSO as q left join Multiplier as m1 on m1.id = q.sent_multiplierID) left join Multiplier as m2 on m2.id = q.recvd_multiplierID, QSOExtra as qe on q.id = qe.id where q.id = ?;", [id]) { |row|
+    @db.query("select q.frequency, q.fixedMode, q.time, qe.sent_callsign, q.sent_serial, coalesce(m1.abbrev,qe.sent_location) as sentmult,  qe.recvd_callsign, q.recvd_serial, coalesce(m2.abbrev,qe.recvd_location) as recvdmult, q.matchType, qe.comment, q.score, coalesce(m3.abbrev,m2.abbrev,qe.recvd_location) from (QSO as q left join Multiplier as m1 on m1.id = q.sent_multiplierID) left join Multiplier as m2 on m2.id = q.recvd_multiplierID, Multiplier as m3 on m3.id = coalesce(q.judged_multiplierID,q.recvd_multiplierID), QSOExtra as qe on q.id = qe.id where q.id = ?;", [id]) { |row|
     td = @db.toDateTime(row[2])
-    out << ("QSO: %5d %2s %4d-%02d-%02d %02d%02d %-10s %4d %-4s %-10s %4d %-4s %%{%s: %s}%%\r\n" %
+    out << ("QSO: %5d %2s %4d-%02d-%02d %02d%02d %-10s %4d %-4s %-10s %4d %-4s %%{%s: %s judged: %s}%%\r\n" %
             [row[0], row[1], td.year, td.month, td.mday, td.hour, td.min, row[3], serialNum(row[4]), row[5],
              row[6], serialNum(row[7]), row[8], matchType(row[9], row[11].to_i),
-             row[10].to_s])
+             row[10].to_s, row[12].to_s])
     }
   end
 
