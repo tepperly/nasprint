@@ -18,6 +18,7 @@ require 'crossmatch'
 require 'singletons'
 require 'calctimeadj'
 require 'multiplier'
+require 'qsolocations'
 require 'report'
 require 'errors'
 require 'dumplog'
@@ -66,7 +67,8 @@ opts = GetoptLong.new(
                       [ '--score', '-s', GetoptLong::NO_ARGUMENT],
                       [ '--rare', '-r', GetoptLong::NO_ARGUMENT],
                       [ '--fifty-eight', '-5', GetoptLong::NO_ARGUMENT],
-                      [ '--report', '-T', GetoptLong::NO_ARGUMENT]
+                      [ '--report', '-T', GetoptLong::NO_ARGUMENT],
+                      [ '--qso-locations', '-Q', GetoptLong::NO_ARGUMENT]
                       )
 
 cmddbopts = Hash.new
@@ -95,6 +97,8 @@ opts.each { |opt, arg|
     cmddbopts['filename'] = arg
   when '--report'
     $action = :report
+  when '--qso-locations'
+    $action = :qsolocations
   when '--category-check'
     $action = :catcheck
   when '--fifty-eight'
@@ -954,7 +958,7 @@ def scoreContest(db, contestID, contestDB)
 end
 
 begin
-  if $name and $year and [:load, :score, :checkdupes, :rare, :report, :fifty_eight ].include?($action)
+  if $name and $year and [:load, :score, :checkdupes, :rare, :report, :qsolocations, :fifty_eight ].include?($action)
     db = makeDB(dbopts)
     cdb = ContestDatabase.new(db, ctl)
     contestID = cdb.addOrLookupContest($name, $year, $create)
@@ -968,7 +972,7 @@ begin
   else
     db = nil
     cdb = nil
-    if [:load, :score, :checkdupes, :rare, :report, :fifty_eight ].include?($action)
+    if [:load, :score, :checkdupes, :rare, :report, :fifty_eight, :qsolocations ].include?($action)
       print "Load and score action require a database.\n"
       exit 2
     end
@@ -981,6 +985,8 @@ begin
     reportContest(db, contestID, cdb)
   when :report
     reportContest(db, contestID, cdb)
+  when :qsolocations
+    qsolocations(db, contestID)
   when :fifty_eight
     report58(db, contestID, cdb)
   when :rare
