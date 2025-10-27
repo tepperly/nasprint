@@ -614,6 +614,8 @@ class Cabrillo
     when /\Ax-cqp-id:\s*(\d+)\s*/i
       @x_lines << line
       self.dblogID = $1.to_i
+    when /\Ax-cbr:\s*.*/i
+      # nothing needed
     when /\Ax(-[a-z]+)+:.*\Z/i
       @x_lines << line          # ignore and save
     when /\Asoapbox:\s*(.*)\Z/i
