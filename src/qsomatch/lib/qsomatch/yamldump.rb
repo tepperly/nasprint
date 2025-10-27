@@ -52,6 +52,28 @@ def logSpecialCategories(db, values, categories)
   result
 end
 
+def runRates(db, contestID, logID, multID, window=60)
+  result = [ ]
+  num_windows = nil
+  db.query("select #{db.timediff('MINUTE', 'end', 'start')}/#{window} from Contest where id = ?;", [contestID]) { |row|
+    num_windows = row[0].to_i
+  }
+  db.query("select max(0,min((?-1),cast(#{db.adjtimediff('MINUTE','q.time','l.clockadj', 'c.start', '0')}/#{window} as integer))) as timewindow, coalesce(q.judged_band, q.band) as qband, case coalesce(q.judged_mode, q.fixedMode) when 'FM' then 'PH' else coalesce(q.judged_mode, q.fixedMode) end as simpleMode, 0.5*sum(q.score) as qso_total from QSO as q, Contest as c, Log as l where l.id = ? and q.logID = ? and q.score > 0 and c.id = ? and q.sent_multiplierID = ? group by timewindow, qband, simpleMode having qso_total > 0 order by timewindow asc, qband asc, simpleMode asc;", [num_windows, logID, logID, contestID, multID]) { |row|
+    result << { 'window'=> row[0].to_i, 'band'=> row[1].to_s, 'mode'=>  row[2].to_s, 'qsos'=> row[3].to_f }
+  }
+  result
+end
+
+def sumForMode(runrates, mode)
+  result = 0
+  runrates.each { |entry|
+    if entry['mode'] == mode
+      result += entry['qsos']
+    end
+  }
+  result
+end
+
 def makeContestYaml(db, contestID, cdb, year)
   result = [ ]
   db.query("select name, start, end from Contest where id = ?;",[contestID]) {|row|
@@ -77,19 +99,27 @@ def makeContestYaml(db, contestID, cdb, year)
     }
   }
   db.query("select distinct l.id, l.callsign, l.entityID, m.abbrev, l.opclass, l.powclass, m.id " + categoryValues(categories) +
-           "  from Log as l, QSO as q on l.id = q.logID, Multiplier as m on q.sent_multiplierID where l.contestID = ? order by callsign asc, m.abbrev asc;", [contestID]) { |row|
+           "  from Log as l, QSO as q on l.id = q.logID, Multiplier as m on m.id = q.sent_multiplierID where l.contestID = ? order by callsign asc, m.abbrev asc;", [contestID]) { |row|
     specialCategories = logSpecialCategories(db, row[7..-1], categories)
     db.query("select verified_mult, verified_score, verified_cw, verified_ph from Scores where logID = ? and multID = ? limit 1;",
              [row[0].to_i, row[6].to_i]) { |score|
       result.each { |contest|
         fixedOpClass = row[4].gsub("_","-")
         if "CHECKLOG" != fixedOpClass
-          contest["entries"] << { "callsign" => row[1].to_s, "location" => row[3].to_s, "dxcc" => row[2].to_i,
+          newentry = { "callsign" => row[1].to_s, "location" => row[3].to_s, "dxcc" => row[2].to_i,
                                   "opclass" => fixedOpClass, "power" => row[5],
                                   "verified_multipliers" => score[0].to_i, "verified_score" => score[1].to_i,
                                   "qso_per_mode" => { "CW" => score[2].to_i, "PH" => score[3].to_i },
                                   "categories" => specialCategories, "optime" => operatingTime(db, row[0].to_i, row[6].to_i),
+                                  "run_rates" => runRates(db, contestID, row[0].to_i, row[6].to_i),
                                   "operators" => simpleOpList(cdb.opList(row[0].to_i), row[1].to_s)}
+          contest["entries"] << newentry
+          %w{ CW  PH }.each { |mode|
+            if newentry['qso_per_mode'][mode] != sumForMode(newentry['run_rates'], mode).to_i
+              print "Callsign has verified #{mode} QSOs and calculated #{sumForMode(newentry['run_rates'], mode)}\n"
+            end
+          }
+          
         else
           contest["entries"] << { "callsign" => row[1].to_s, "location" => row[3].to_s, "dxcc" => row[2].to_i,
                                   "opclass" => fixedOpClass, "operators" => simpleOpList(cdb.opList(row[0].to_i), row[1].to_s)}
