@@ -268,7 +268,7 @@ class Cabrillo
   end
 
   attr_reader :cleanparse, :logcall, :qsos, :club, :name, :badmults,
-              :badSentMults, :operators, :filename
+              :badSentMults, :operators, :filename, :grid
 
   def reportError(message)
     callsign = logCall
