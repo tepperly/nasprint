@@ -8,8 +8,10 @@ require 'humanize'
 require_relative 'logset'
 require_relative 'operatingtime'
 require_relative 'overrides'
+require_relative 'contestrules'
 
 class Log
+  RULES = ContestRules.new
   CA_QTH = Set.new(%w{ ALAM ALPI AMAD BUTT CALA CCOS COLU DELN ELDO
 FRES GLEN HUMB IMPE INYO KERN KING LAKE LANG LASS MADE MARN MARP MEND
 MERC MODO MONO MONT NAPA NEVA ORAN PLAC PLUM RIVE SACR SBAR SBEN SBER
@@ -124,13 +126,13 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
     if @scoreoverride
       return @scoreoverride
     end
-    return ( numPH*2 + numCW*3) * nummultipliers
+    return ( numPH*RULES.points_per_phone + numCW*RULES.points_per_cw) * nummultipliers
   end
 
   def ls_line
     print "!! #{@call}: numPH != claimedPH - 0.5*d1PH - d2PH : #{numPH} != #{@greenPH[0]} - 0.5*#{@greenPH[2]} - #{@greenPH[1]}\n" if numPH != (@greenPH[0] - @greenPH[1] -0.5* @greenPH[2]).to_i
     print "!! #{@call}: numCW != claimedCW - 0.5*d1CW - d2CW : #{numCW} != #{@greenCW[0]} - 0.5*#{@greenCW[2]} - #{@greenCW[1]}\n" if numCW != (@greenCW[0] - @greenCW[1] - 0.5*@greenCW[2]).to_i
-    "LS,#{@call},,#{@numClaimed},#{@numDupe},#{@claimedMults},#{@greenCW[0]},#{@greenPH[0]},#{(@greenCW[0]*3+2*@greenPH[0])*@claimedMults},#{@greenChecked},#{@greenCW[1]},#{@greenCW[2]},#{@greenPH[1]},#{@greenPH[2]},#{[58,@multipliers.length].min},#{score},#{@qth},#{greenArea},#{@entity}"
+    "LS,#{@call},,#{@numClaimed},#{@numDupe},#{@claimedMults},#{@greenCW[0]},#{@greenPH[0]},#{(@greenCW[0]*RULES.points_per_cw+RULES.points_per_phone*@greenPH[0])*@claimedMults},#{@greenChecked},#{@greenCW[1]},#{@greenCW[2]},#{@greenPH[1]},#{@greenPH[2]},#{[58,@multipliers.length].min},#{score},#{@qth},#{greenArea},#{@entity}"
   end
 
   def to_s
@@ -139,6 +141,8 @@ NY OH OK OR PA RI SC SD TN TX UT VA VT WA WI WV WY
 end
 
 class Report
+  RULES = ContestRules.new
+
   def initialize(db, contestID)
     @db = db
     @contestID = contestID
@@ -352,8 +356,8 @@ class Report
     phScored = validQSOsByMode(log.id, multID, "PH")
     out << ("  Total Raw QSO's: %4d  CW: %4d  PH: %4d\r\n" % [log.numClaimed, claimedCW, claimedPH])
     out << ("  Claimed Mults:   %4d\r\n" % log.claimedMults)
-    out << "  QSO Points Claimed: " << (3*claimedCW + 2*claimedPH) << "\r\n"
-    out << "  Claimed Score: " << log.claimedMults * (3*claimedCW + 2*claimedPH) << "\r\n"
+    out << "  QSO Points Claimed: " << (RULES.points_per_cw*claimedCW + RULES.points_per_phone*claimedPH) << "\r\n"
+    out << "  Claimed Score: " << log.claimedMults * (RULES.points_per_cw*claimedCW + RULES.points_per_phone*claimedPH) << "\r\n"
     out << "After Log Checking:\r\n"
     out << "  Duplicate QSO's: " << log.numDupe << "\r\n"
     out << "  Number of QSO's earning full or partial credit: " 
@@ -365,7 +369,7 @@ class Report
             [phScored[2], phScored[1], phScored[0]])
     out << ("  Net PH QSO's: " + log.numPH.to_s + "\r\n")
     out << "  Checked Mults: " << log.nummultipliers << "\r\n"
-    out << "  QSO Points granted: " << (log.numPH*2 + log.numCW*3) << "\r\n"
+    out << "  QSO Points granted: " << (log.numPH*RULES.points_per_phone + log.numCW*RULES.points_per_cw) << "\r\n"
     out << "  FINAL SCORE: " << log.score << "\r\n"
     out << "\r\n"
   end
