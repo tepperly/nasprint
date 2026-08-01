@@ -290,10 +290,10 @@ class Multiplier
 
   def updateByeQSOs(id, choice, name)
     count = 0
-    @db.query("update QSO set judged_multiplierID = ?, matchType='Bye' where matchType in ('Bye','None') and recvd_callID = ? and recvd_multiplierID = ? and judged_multiplierID is null and #{@logs.membertest("logID")};",
+    @db.query("update QSO set judged_multiplierID = ?, matchType='Bye' where matchType in ('Bye','None') and recvd_callID = ? and recvd_multiplierID = ? and judged_multiplierID is null and recvd_serial is not null and #{@logs.membertest("logID")};",
               [ choice, id, choice ] )  { }
     count += @db.affected_rows
-    @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where matchType in ('Bye','None','PartialBye') and recvd_callID = ? and recvd_multiplierID != ? and judged_multiplierID is null and #{@logs.membertest("logID")};",
+    @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where matchType in ('Bye','None','PartialBye') and recvd_callID = ? and recvd_multiplierID != ? and judged_multiplierID is null and recvd_serial is not null and #{@logs.membertest("logID")};",
                 [choice, id, choice] ) { }
     count += @db.affected_rows
     return count
@@ -317,8 +317,10 @@ class Multiplier
       if mult and not mult.empty? then
         if mult.length == 1 then
           multID, entID = @cdb.lookupMultiplier(mult[0].to_s)
-          @db.query("update QSO set judged_multiplierID = ?, matchType='Bye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType in ('Bye','None');",
+          @db.query("update QSO set judged_multiplierID = ?, matchType='Bye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType = 'Bye';",
                     [ multID, callID ] ) { }
+          @db.query("update QSO set judged_multiplierID = ?, matchType='Bye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and recvd_multiplierID =  ? and recvd_serial is not null and matchType = 'None';",
+                    [ multID, multID, callID ] ) { }
         else
           mults = @cdb.lookupMultipliers(mult)
           print "Call: " + baseCallsign + "\n"
@@ -329,13 +331,15 @@ class Multiplier
             @cdb.printQSO($stdout, row[0].to_i)
             print "Judged mult: " + row[1].to_s + "  Match type: " + row[2].to_s + "\n"
           }
-          @db.query("update QSO set judged_multiplierID = recvd_multiplierID, matchType='Bye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType in ('Bye','None') and recvd_multiplierID in (#{mults.map { |w| w[0] }.join(", ")});",
+          @db.query("update QSO set judged_multiplierID = recvd_multiplierID, matchType='Bye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType in ('Bye','None') and recvd_serial is not null and recvd_multiplierID in (#{mults.map { |w| w[0] }.join(", ")});",
+                    [callID]) { }
+          @db.query("update QSO set judged_multiplierID = recvd_multiplierID, matchType='PartialBye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType in ('Bye','None') and recvd_serial is null and recvd_multiplierID in (#{mults.map { |w| w[0] }.join(", ")});",
                     [callID]) { }
           @db.query("select id, judged_multiplierID, matchType from QSO where #{@logs.membertest("logID")} and recvd_callID = ?", [callID]) { |row|
             @cdb.printQSO($stdout, row[0].to_i)
             print "Judged mult: " + row[1].to_s + "  Match type: " + row[2].to_s + "\n"
           }
-          @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and matchType in ('Bye','PartialBye','None');",
+          @db.query("update QSO set judged_multiplierID = ?, matchType='PartialBye' where #{@logs.membertest("logID")} and recvd_callID = ? and judged_multiplierID is null and recvd_serial is not null and matchType in ('Bye','PartialBye','None');",
                     [mults[0][0], callID]) { }
           count += @db.affected_rows
           @db.query("select id, judged_multiplierID, matchType from QSO where #{@logs.membertest("logID")} and recvd_callID = ?", [callID]) { |row|
@@ -350,7 +354,7 @@ class Multiplier
           count = count + resolveAmbiguous(callID, multres, baseCallsign)
         else
           multres.each { |mrow|
-            @db.query("update QSO set judged_multiplierID = ?, matchType='Bye' where recvd_callID = ? and judged_multiplierID is null and #{@logs.membertest("logID")} and matchType in ('Bye','None');",
+            @db.query("update QSO set judged_multiplierID = ?, matchType='Bye' where recvd_callID = ? and judged_multiplierID is null and #{@logs.membertest("logID")} and matchType in ('Bye','None') and recvd_serial is not null;",
                       [ mrow[0], callID ]) { }
           }
         end

@@ -32,6 +32,10 @@ def serialNum(num)
   num ? num.to_i : 9999
 end
 
+def location(str)
+  str ? str.to_s : "XXXX"
+end
+
 
 FULL_TYPES = Set.new(%w{Full Bye}).freeze
 PARTIAL_TYPES = Set.new(%w{Partial PartialBye}).freeze
@@ -67,8 +71,8 @@ SOAPBOX: equivalent form to make it easier to score.\r\n"
            [logID]) { |row|
     td = db.toDateTime(row[2]) + clockAdj
     out << ("QSO: %5d %2s %4d-%02d-%02d %02d%02d %-10s %4d %-4s %-10s %4d %-4s %%{%s: %s%s}%%\r\n" %
-            [row[0], row[1], td.year, td.month, td.mday, td.hour, td.min, row[3], serialNum(row[4]), row[5],
-             row[6], serialNum(row[7]), row[8], matchType(row[9], row[11].to_i),
+            [row[0], row[1], td.year, td.month, td.mday, td.hour, td.min, row[3], serialNum(row[4]), location(row[5]),
+             row[6], serialNum(row[7]), location(row[8]), matchType(row[9], row[11].to_i),
              row[10].to_s, ((row[12] and row[12] != row[8])?( " judged location: " + row[12]):"")])
   }
   out << "END-OF-LOG:\r\n"

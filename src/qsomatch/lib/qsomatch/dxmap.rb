@@ -94,6 +94,7 @@ class CallsignLocator
   def readRules
     @@exceptions = Hash.new
     @@callprefixes = Hash.new
+    @@lookupByID = Hash.new
     XZ::StreamReader.open(File.dirname(__FILE__) + "/cty.csv.xz") { |infile|
       CSV.parse(infile.read(), col_sep: ',') { |record|
         ent = Entity.new(record[0], record[1], record[2].to_i,
@@ -135,6 +136,7 @@ class CallsignLocator
   end
 
   def addEntity(entity, prefixRules)
+    @@lookupByID[entity.entityID] = entity
     prefixRules.split(/[ \t\r\n\f;]+/).each { |item|
       overrides = readOverrides(item)
       ent = entity.createRelated(overrides)
@@ -148,6 +150,10 @@ class CallsignLocator
         @@callprefixes[item.length][item] = CallPrefix.new(item, ent)
       end
     }
+  end
+
+  def lookupByID(id)
+    @@lookupByID[id]
   end
 
   def lookup(callsign)

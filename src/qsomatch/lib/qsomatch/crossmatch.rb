@@ -681,12 +681,12 @@ class CrossMatch
     notMatch = 0
     # this needs to work before judged quantities have been assigned
     @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q2.sent_multiplierID, q1.recvd_serial, q1.matchType, q1.band, q1.fixedMode, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial, q2.band, q2.fixedMode, q1.sent_multiplierID from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and q1.score is null and q1.id = ? and q2.id = ? order by q1.id asc;", [qid1, qid2]) { |row|
-      row[2] = row[2].to_i
-      log1Adj = logAdj(row[2])
-      row[12] = row[12].to_i
-      log2Adj = logAdj(row[12])
+      logID1 = row[2].to_i
+      log1Adj = logAdj(logID1)
+      logID2 = row[12].to_i
+      log2Adj = logAdj(logID2)
       if ((@db.toDateTime(row[1])+log1Adj) - (@db.toDateTime(row[11])+log2Adj)).abs > PERFECT_TIME_MATCH*60
-        if unrelClock.include?(row[2].to_i) or not unrelClock.include?(row[12])
+        if unrelClock.include?(logID1) or not unrelClock.include?(logID2)
           notMatch += 1
         end
       end
@@ -697,12 +697,12 @@ class CrossMatch
         notMatch += 1
       end
       if row[8].nil? or ((not (row[15].nil?)) and (row[8] != row[15]))
-        if unrelBand.include?(row[2]) or not unrelBand.include?(row[12])
+        if unrelBand.include?(logID1) or not unrelBand.include?(logID2)
           notMatch += 1
         end
       end
       if row[9].nil? or ((not (row[16].nil?)) and (row[9] != row[16]))
-        if unrelMode.include?(row[2]) or not unrelMode.include?(row[12])
+        if unrelMode.include?(logID1) or not unrelMode.include?(logID2)
           notMatch += 1
         end
       end
@@ -710,7 +710,7 @@ class CrossMatch
         # don't ding people who don't have a serial number
         # match with an station known to have an unreliable log
         # w.r.t. to sent serial numbers
-        if not unrelSerial.include?(row[12])
+        if not unrelSerial.include?(logID2)
           notMatch += 1
         end
       end
@@ -756,7 +756,8 @@ class CrossMatch
         judgedMult = selectMissingMult(validMultipliers, row[0].to_i)
       end
       if not quiet
-        print "\tJudged multiplier: " + @cdb.lookupMultiplierByID(judgedMult).to_s + "\n"
+        print "\tReceived multiplier: " + @cdb.lookupMultiplierByID(recvdMult).to_s + " (#{recvdMult})\n"
+        print "\tJudged multiplier: " + @cdb.lookupMultiplierByID(judgedMult).to_s + " (#{judgedMult})\n"
       end
       if (row[1] == "Full")
           delta = 0
@@ -771,18 +772,9 @@ class CrossMatch
       else
         if halfCredit(row[0], row[2], unreliableBand, unreliableMode, unreliableSerial, unreliableClock)
           delta = 0
-          if (judgedMult == recvdMult or row[5].to_i == recvdMult)
-            @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=?, score=1 where id = ? and matchType='None';", [judgedMult, row[3].to_i] ) { }
-            @db.query("insert into CountyLineExtras (matchedQSOID, unmatchedQSOID, scoreDelta) values (?, ?, ?);", [ row[0].to_i, row[3].to_i, delta ]) { }
-            count += @db.affected_rows
-          else
-            delta = -1
-            @db.query("update QSO set matchType = 'NIL', judged_multiplierID=?, score=0 where id = ? and matchType='None';", [judgedMult, row[3].to_i] ) { }
-            if (@db.affected_rows > 0)
-              @db.query("update QSOExtra set comment = 'Related county-line QSO is a D1 and received multiplier is wrong' where id = ? and comment is null;", row[3].to_i) { }
-            end
-            @db.query("insert into CountyLineExtras (matchedQSOID, unmatchedQSOID, scoreDelta) values (?, ?, ?);", [ row[0].to_i, row[3].to_i, delta ]) { }
-          end
+          @db.query("update QSO set matchType = 'PartialBye', judged_multiplierID=?, score=1 where id = ? and matchType='None';", [judgedMult, row[3].to_i] ) { }
+          @db.query("insert into CountyLineExtras (matchedQSOID, unmatchedQSOID, scoreDelta) values (?, ?, ?);", [ row[0].to_i, row[3].to_i, delta ]) { }
+          count += @db.affected_rows
         else
           @db.query("update QSO set matchType = 'NIL', judged_multiplierID=?, score=0 where id = ? and matchType='None';", [judgedMult, row[3].to_i]) { }
           if (@db.affected_rows > 0)
@@ -1257,15 +1249,24 @@ class CrossMatch
       unreliableBand, unreliableMode, unreliableSerial = findUnreliable
       # non-CA working non-CA QSOs get zero score
       @db.query("update QSO set score = 0 where score is null and id in (select q.id from QSO as q join Multiplier as m1 on m1.id = q.sent_multiplierID join Multiplier as m2 on m2.id = q.judged_multiplierID where (not (m1.isCA or m2.isCA)) and #{@logs.membertest("logID")});")  { }
+      # only allowed bands are allowed to score
+      allowedBandList = ALLOWED_BANDS.map { |band| '"' + band + '"'}.join(', ') 
+      @db.query("update QSO set score = 0 where score is null and id in (select q.id from  QSO as q where (not coalesce(q.judged_band, q.band) in (#{allowedBandList})) and #{@logs.membertest("q.logID")} );") {}
+      @db.query("update QSOExtra set comment = 'QSO is not on one of the allowed bands.' where comment is null and id in (select q.id from  QSO as q where (not coalesce(q.judged_band, q.band) in (#{allowedBandList})) and #{@logs.membertest("q.logID")});") { }
+      # only allowed modes are allowed to score
+      allowedModeList = ALLOWED_MODES.map { |band| '"' + band + '"'}.join(', ') 
+      @db.query("update QSO set score = 0 where score is null and id in (select q.id from  QSO as q where (not coalesce(q.judged_mode, q.fixedMode) in (#{allowedModeList})) and #{@logs.membertest("q.logID")} );") {}
+      @db.query("update QSOExtra set comment = 'QSO is not using one of the allowed modes.' where comment is null and id in (select q.id from  QSO as q where (not coalesce(q.judged_mode, q.fixedMode) in (#{allowedModeList})) and #{@logs.membertest("q.logID")});") { }
+      
       @db.query("select q1.id, q1.time, q1.logID, q1.recvd_callID, q1.recvd_multiplierID, q1.judged_multiplierID, q1.recvd_serial, q1.matchType, q1.band, q1.fixedMode, q2.id, q2.time, q2.logID, q2.sent_callID, q2.sent_serial, q1.judged_band, q1.judged_mode, q1.sent_multiplierID from QSO as q1 join QSO as q2 on (q2.matchID = q1.id and q1.matchID = q2.id) where q1.matchID is not null and q2.matchID is not null and q1.score is null and #{@logs.membertest("q1.logID")} and #{@logs.membertest("q2.logID")} order by q1.id asc;") { |row|
-        row[2] = row[2].to_i
+        logID1 = row[2].to_i
         log1Adj = logAdj(row[2])
-        row[12] = row[12].to_i
-        log2Adj = logAdj(row[12])
+        logID2 = row[12].to_i
+        log2Adj = logAdj(logID2)
         comment = ""
         notMatch = 0
         if ((@db.toDateTime(row[1])+log1Adj) - (@db.toDateTime(row[11])+log2Adj)).abs > PERFECT_TIME_MATCH*60
-          if unreliableClock.include?(row[2].to_i) or not unreliableClock.include?(row[12])
+          if unreliableClock.include?(logID1.to_i) or not unreliableClock.include?(logID2)
             notMatch += 1
             comment << " clock"
           end
@@ -1279,13 +1280,13 @@ class CrossMatch
           comment << " multiplier"
         end
         if row[8].nil? or ((not (row[15].nil?)) and (row[8] != row[15]))
-          if unreliableBand.include?(row[2]) or not unreliableBand.include?(row[12])
+          if unreliableBand.include?(logID1) or not unreliableBand.include?(logID2)
             notMatch += 1
             comment << " band"
           end
         end
         if row[9].nil? or ((not (row[16].nil?)) and (row[9] != row[16]))
-          if unreliableMode.include?(row[2]) or not unreliableMode.include?(row[12])
+          if unreliableMode.include?(logID1) or not unreliableMode.include?(logID2)
             notMatch += 1
             comment << " mode"
           end
@@ -1294,7 +1295,7 @@ class CrossMatch
           # don't ding people who don't have a serial number
           # match with an station known to have an unreliable log
           # w.r.t. to sent serial numbers
-          if not unreliableSerial.include?(row[12])
+          if not unreliableSerial.include?(logID2)
             notMatch += 1
             comment << " serial"
           end

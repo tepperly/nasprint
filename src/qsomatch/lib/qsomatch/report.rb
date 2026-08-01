@@ -545,7 +545,7 @@ class Report
     ensure
       @db.end_transaction
     end
-    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"QTH Class\",\"Power\",\"On Time(min)\",\"CCE?\",\"YOUTH?\",\"YL?\",\"NEW?\",\"COUNTY-LINE?\",\"MOBILE?\",\"ONE-DAY?\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
+    out.write("\"Callsign\",\"QTH\",\"Email\",\"Operator Class\",\"QTH Class\",\"Power\",\"On Time(min)\",\"CCE?\",\"YOUTH?\",\"YL?\",\"NEW?\",\"COUNTY-LINE?\",\"MOBILE?\",\"ONE-DAY?\",\"Sunday-Only?\",\"#Claimed QSOs\",\"#Verified PH QSOs\",\"#Verified CW QSOs\",\"# Unique\",\"# Dupe\",\"# Incorrectly copied\",\"# NIL\",\"# Outside contest period\",\"# D1\",\"# D2\",\"# Verified Multipliers\",\"Verified Score\",\"Multipliers\"\r\n")
     logs.each { |log|
       out.write(log.to_s + "\r\n")
     }

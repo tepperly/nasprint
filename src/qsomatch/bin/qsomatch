@@ -233,7 +233,7 @@ def loadFiles(args, cdb, contestID, ctl, db)
       rescue ArgumentError => e
         $stderr.flush
         $stdout.flush
-        print "#{filename} caused an exception #{e}\n"
+        print "#{filename} caused an exception #{e.full_message}\n"
         $stdout.flush
       end
     }
@@ -991,8 +991,8 @@ def scoreContest(db, contestID, contestDB)
   d1 = cm.ignoreDups
   print "Duplicates of matches: #{d1}\n"
   $stdout.flush
-  clcount = cm.avoidCountylineLoggingNils(badClocks, false)
   print "Avoid county-line NILs for incomplete logging: #{clcount}\n"
+  clcount = cm.avoidCountylineLoggingNils(badClocks, false)
   $stdout.flush
   nil1 = cm.markNIL
   print "Not In Log penalties: #{nil1}\n"
@@ -1085,7 +1085,7 @@ begin
 rescue
   print "Exception thrown"
   $stdout.flush
-  $stderr.print "Exception: " + $!.to_s + "\n"
+  $stderr.print "Exception: " + $!.full_message + "\n"
   $stderr.print $!.backtrace.join("\n")
 ensure
   if db 

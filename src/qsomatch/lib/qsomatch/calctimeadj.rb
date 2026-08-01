@@ -154,7 +154,7 @@ class CalcTimeAdj
         }
         out.write("adj, residuals, rank, s = numpy.linalg.lstsq(A,b)\n")
         out.write("for i in xrange(#{@numvars}):\n")
-        out.write("  print adj[i]\n")
+        out.write("  print( adj[i])\n")
         out.write("pass\n# done\n")
       }
       IO.popen("python3 /tmp/calcadj.py") { |res|

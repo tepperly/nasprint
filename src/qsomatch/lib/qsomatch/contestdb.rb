@@ -614,14 +614,19 @@ class ContestDatabase
   FULL_TYPES = Set.new(%w{Full Bye}).freeze
   PARTIAL_TYPES = Set.new(%w{Partial PartialBye}).freeze
   def matchType(qsoType, score)
-    if FULL_TYPES.include?(qsoType)
-      return (score < 2) ? ("%s (D%d)" % [qsoType, (2-score)]) : qsoType
-    elsif PARTIAL_TYPES.include?(qsoType)
-      return "%s (D%d)" % [qsoType, (2-score)]
-    elsif score > 0
-      return "%s (credit %d out of 2)" % [qsoType, score]
+    if score.nil?
+      return "#{qsoType} (unscored)"
     else
-      return qsoType
+      score = score.to_i
+      if FULL_TYPES.include?(qsoType)
+        return (score < 2) ? ("%s (D%d)" % [qsoType, (2-score)]) : qsoType
+      elsif PARTIAL_TYPES.include?(qsoType)
+        return "%s (D%d)" % [qsoType, (2-score)]
+      elsif score > 0
+        return "%s (credit %d out of 2)" % [qsoType, score]
+      else
+        return qsoType
+      end
     end
   end
 
@@ -630,7 +635,7 @@ class ContestDatabase
     td = @db.toDateTime(row[2])
     out << ("QSO: %5d %2s %4d-%02d-%02d %02d%02d %-10s %4d %-4s %-10s %4d %-4s %%{%s: %s judged: %s}%%\r\n" %
             [row[0], row[1], td.year, td.month, td.mday, td.hour, td.min, row[3], serialNum(row[4]), row[5],
-             row[6], serialNum(row[7]), row[8], matchType(row[9], row[11].to_i),
+             row[6], serialNum(row[7]), row[8], matchType(row[9], row[11]),
              row[10].to_s, row[12].to_s])
     }
   end
