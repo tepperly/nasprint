@@ -116,7 +116,7 @@ class ResolveSingletons
     @db.query("select c.id, c.basecall, count(*) as numqsos from Callsign as c, QSO as q on c.id = q.recvd_callID where c.contestID = ? and q.matchType = 'None' and c.validcall and not c.illegalcall and (not c.logrecvd or c.logrecvd is null) group by c.id having numqsos >= 5 order by numqsos desc;", [ @contestID ] ) { |row|
       createParticipant(multChecker, over, row[0].to_i, row[1], row[2].to_i)
     }
-    @db.query("select c.id, count(*) as numqsos from Callsign as c, QSO as q on c.id = q.recvd_callID where c.contestID = ? and q.matchType = 'None' and (not c.validcall or c.validcall is null) and not c.illegalcall and (not c.logrecvd or c.logrecvd is null) group by c.id having numqsos >= 10 order by numqsos desc;", [ @contestID ] ) { |row|
+    @db.query("select c.id, c.basecall, count(*) as numqsos from Callsign as c, QSO as q on c.id = q.recvd_callID where c.contestID = ? and q.matchType = 'None' and (not c.validcall or c.validcall is null) and not c.illegalcall and (not c.logrecvd or c.logrecvd is null) group by c.id having numqsos >= 10 order by numqsos desc;", [ @contestID ] ) { |row|
       createParticipant(multChecker, over, row[0].to_i, row[1], row[2].to_i)
     }
     over.participants { |call, mult|
