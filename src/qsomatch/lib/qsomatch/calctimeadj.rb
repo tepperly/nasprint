@@ -153,7 +153,7 @@ class CalcTimeAdj
           rowcount = rowcount + 1
         }
         out.write("adj, residuals, rank, s = numpy.linalg.lstsq(A,b)\n")
-        out.write("for i in xrange(#{@numvars}):\n")
+        out.write("for i in range(#{@numvars}):\n")
         out.write("  print( adj[i])\n")
         out.write("pass\n# done\n")
       }

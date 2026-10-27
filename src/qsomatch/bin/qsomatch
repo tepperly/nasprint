@@ -831,6 +831,12 @@ def exportYaml(db, contestID, contestDB, yamlfile, year)
   }
 end
 
+def buildRecordDBIfNeeded(db)
+  db.query("CREATE TABLE IF NOT EXISTS Regional (id integer primary key autoincrement, mult_abbrev char(4), station varchar(128), year smallint(6) not null, score int(11) not null, qsos int(11) default null, multipliers smallint(6) default null, opclass varchar(28) default null, powclass char(8) default null);") {}
+  db.query("CREATE INDEX IF NOT EXISTS multind on Regional (mult_abbrev);") {}
+  db.query("CREATE TABLE IF NOT EXISTS Special (id integer primary key autoincrement, name varchar(32) not null, station varchar(32) not null, year smallint(6) not null, score int(11) default null, qsos int(11) default null, multipliers smallint(6) default null, T2_58 time default null, ca bool not null);") {}
+end
+
 def reportContest(db, contestID, contestDB)
   certificateCSV(db, contestID,  contestDB)
   r = Report.new(db, contestID)
@@ -847,6 +853,7 @@ def reportContest(db, contestID, contestDB)
   recdb = nil
   if $recordsdb
     recdb = makeDB({'type' => 'sqlite3', 'filename' => $recordsdb})
+    buildRecordDBIfNeeded(recdb)
   end
   makePDFReports(db, contestID, recdb)
   print "Dumping logs\n"
